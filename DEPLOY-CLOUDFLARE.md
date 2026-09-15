@@ -14,6 +14,10 @@ deploy gagal ("The name 'ASSETS' is reserved in Pages projects") dan sudah dihap
 | Build output directory | `dist` |
 | Root directory | kosongkan |
 
+Script `postbuild` otomatis menghapus konfigurasi Wrangler internal yang
+memakai binding `ASSETS`. Jangan ubah build command menjadi `vite build`
+langsung karena langkah pembersihan tersebut harus ikut berjalan.
+
 Variabel build (opsional): `NODE_VERSION = 22`.
 
 ## 2. Variabel & secret yang harus diisi

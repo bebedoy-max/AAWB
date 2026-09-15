@@ -15,5 +15,13 @@ export default defineConfig({
   // Target Cloudflare Pages (advanced mode) instead of the Workers-oriented
   // cloudflare-module preset; the latter emits a wrangler.json with a reserved
   // ASSETS binding that breaks Pages git deployments.
-  nitro: { preset: "cloudflare-pages" },
+  nitro: {
+    preset: "cloudflare-pages",
+    cloudflare: {
+      nodeCompat: true,
+      // Pages reads the _worker.js directory directly. A nested Wrangler
+      // config is unnecessary and its ASSETS binding is reserved by Pages.
+      deployConfig: false,
+    },
+  },
 });
