@@ -10,8 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "deploy": "vite build && wrangler deploy",
-    "cf:dev": "wrangler dev"
+    "deploy": "vite build && wrangler pages deploy dist"
   },
   "overrides": {
     "rolldown": "1.2.1"
