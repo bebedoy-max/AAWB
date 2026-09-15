@@ -5,6 +5,17 @@ Build sudah otomatis mengenali Cloudflare Pages dan menghasilkan folder `dist`
 konfigurasi tambahan di repo — file `wrangler.toml` sebelumnya justru membuat
 deploy gagal ("The name 'ASSETS' is reserved in Pages projects") dan sudah dihapus.
 
+**Catatan (update):** Nitro (lewat preset `cloudflare-pages`) ternyata tetap
+men-generate ulang `dist/_worker.js/wrangler.json` di setiap build, walau file
+itu sudah dihapus dari repo — dan file hasil generate itu tetap memuat binding
+bernama `ASSETS`, yang bentrok dengan binding `ASSETS` bawaan Cloudflare Pages.
+Karena itu error yang sama bisa muncul lagi meski repo sudah bersih. Untuk
+mengatasinya, ada script `scripts/strip-cf-pages-wrangler-config.mjs` yang
+dijalankan otomatis lewat hook `postbuild` di `package.json` — script ini
+menghapus `wrangler.json` hasil generate itu setelah `vite build` selesai,
+sehingga Cloudflare Pages kembali memakai binding `ASSETS` bawaannya sendiri
+(yang memang sudah sesuai dengan yang dipakai runtime Nitro).
+
 ## 1. Pengaturan build di Cloudflare Pages
 
 | Kolom | Isi |
@@ -13,10 +24,6 @@ deploy gagal ("The name 'ASSETS' is reserved in Pages projects") dan sudah dihap
 | Build command | `npm install && npm run build` |
 | Build output directory | `dist` |
 | Root directory | kosongkan |
-
-Script `postbuild` otomatis menghapus konfigurasi Wrangler internal yang
-memakai binding `ASSETS`. Jangan ubah build command menjadi `vite build`
-langsung karena langkah pembersihan tersebut harus ikut berjalan.
 
 Variabel build (opsional): `NODE_VERSION = 22`.
 
