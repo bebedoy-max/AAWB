@@ -18,6 +18,14 @@ sehingga Cloudflare Pages kembali memakai binding `ASSETS` bawaannya sendiri
 
 ## 1. Pengaturan build di Cloudflare Pages
 
+**Penting:** kalau **Framework preset** TIDAK diset ke `None`, Cloudflare Pages
+akan memakai build command bawaan presetnya sendiri dan **mengabaikan**
+script `build`/`postbuild` di `package.json` — inilah penyebab paling umum
+error "The name 'ASSETS' is reserved..." tetap muncul meski
+`scripts/strip-cf-pages-wrangler-config.mjs` sudah ada di repo. Pastikan
+keempat kolom di bawah ini diisi PERSIS seperti ini di **Settings → Builds &
+deployments**, lalu jalankan **Retry deployment** (bukan cuma save):
+
 | Kolom | Isi |
 | --- | --- |
 | Framework preset | None |
