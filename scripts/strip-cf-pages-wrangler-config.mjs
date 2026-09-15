@@ -24,3 +24,18 @@ for (const path of candidates) {
     console.log(`[postbuild] removed ${path} (avoids Cloudflare Pages reserved ASSETS binding conflict)`);
   }
 }
+
+// When Nitro writes the wrangler.json above, it also drops a small
+// "redirect" file at .wrangler/deploy/config.json that tells Wrangler
+// "the real config lives over there, at dist/_worker.js/wrangler.json".
+// Since we just deleted that target file, this redirect would now point
+// at nothing — and `wrangler pages deploy` fails at deploy time with:
+//   "the redirected configuration path it points to ... does not exist."
+// Remove the stale redirect too, so Wrangler falls back to Cloudflare
+// Pages' own default handling (no user/generated config at all), which is
+// exactly what a plain `_worker.js` deploy needs.
+const deployRedirect = join(".wrangler", "deploy", "config.json");
+if (existsSync(deployRedirect)) {
+  rmSync(deployRedirect);
+  console.log(`[postbuild] removed stale ${deployRedirect} (was pointing at the deleted wrangler.json)`);
+}
