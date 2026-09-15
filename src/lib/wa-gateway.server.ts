@@ -1,13 +1,16 @@
 /**
- * WhatsApp gateway client for the wa-gateway server (github.com/mimamch/wa-gateway).
+ * WhatsApp gateway client for WAHA (github.com/devlikeapro/waha).
  *
- * Contract (all JSON, auth via `key` header):
- *   GET  {BASE}/session                 -> { data: [{ session, status }] }
- *   GET  {BASE}/session/{id}            -> { success, data: { session, status, details, connection } }
- *   POST {BASE}/session/start           -> { qr } | { message: "Session already exist" }
- *   POST {BASE}/session/logout          -> { data: "success" }
- *   POST {BASE}/message/send-text       -> body { session, to, text }
- *   POST {BASE}/message/send-image      -> body { session, to, text, image_url }
+ * Contract (all JSON, auth via `X-Api-Key` header):
+ *   GET    {BASE}/api/sessions/{name}        -> { name, status, me: { id, pushName }, ... }
+ *   POST   {BASE}/api/sessions/              -> body { name }                (create, status STOPPED)
+ *   POST   {BASE}/api/sessions/{name}/start  -> no body                     (STOPPED -> STARTING -> SCAN_QR_CODE/WORKING)
+ *   POST   {BASE}/api/sessions/{name}/logout -> no body
+ *   GET    {BASE}/api/{name}/auth/qr?format=raw -> { value: "<raw pairing string>" } (only while SCAN_QR_CODE)
+ *   POST   {BASE}/api/sendText               -> body { session, chatId, text }
+ *   POST   {BASE}/api/sendImage              -> body { session, chatId, file: { url }, caption }
+ *
+ * Session status values returned by WAHA: STOPPED | STARTING | SCAN_QR_CODE | WORKING | FAILED
  */
 
 import type { WaSessionStatus } from "@/types/wa";
@@ -79,7 +82,6 @@ async function config(): Promise<GatewayConfig> {
   return cfg;
 }
 
-
 interface RawResult {
   status: number;
   body: Record<string, unknown> | string | null;
@@ -89,9 +91,8 @@ async function request(path: string, init?: RequestInit): Promise<RawResult> {
   const { base, key } = await config();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (key) {
-    // wa-gateway authenticates with the `key` header; keep the others for compatibility.
-    headers["key"] = key;
-    headers["x-api-key"] = key;
+    // WAHA authenticates every /api/* request with the X-Api-Key header.
+    headers["X-Api-Key"] = key;
   }
 
   let res: Response;
@@ -144,35 +145,42 @@ async function call(path: string, init?: RequestInit): Promise<Record<string, un
   return (res.body && typeof res.body === "object" ? res.body : {}) as Record<string, unknown>;
 }
 
-function normalizeStatus(value: unknown, connected: boolean, hasQr: boolean): WaSessionStatus {
-  if (connected) return "connected";
-  const s = String(value ?? "").toLowerCase();
-  if (["connected", "open", "authenticated", "ready", "online"].includes(s)) return "connected";
-  if (["connecting", "qr", "pairing", "scan_qr", "starting"].includes(s)) return "connecting";
-  if (hasQr) return "connecting";
-  return "disconnected";
+/** Peta status mentah WAHA (STOPPED/STARTING/SCAN_QR_CODE/WORKING/FAILED) ke status internal WBlast. */
+function normalizeStatus(rawStatus: unknown): WaSessionStatus {
+  const s = String(rawStatus ?? "").toUpperCase();
+  if (s === "WORKING") return "connected";
+  if (s === "STARTING" || s === "SCAN_QR_CODE") return "connecting";
+  return "disconnected"; // STOPPED, FAILED, atau tidak dikenal
 }
 
 function digits(value: unknown): string | null {
   return typeof value === "string" ? value.replace(/\D/g, "").slice(0, 15) || null : null;
 }
 
-/** GET /session/{id} — returns null when the gateway has no such session. */
+/** GET /api/sessions/{id} — returns null when the gateway has no such session. */
 async function findSession(id: string): Promise<GatewaySessionState | null> {
-  const res = await request(`/session/${encodeURIComponent(id)}`);
+  const res = await request(`/api/sessions/${encodeURIComponent(id)}`);
   if (res.status === 404) return null;
   if (res.status < 200 || res.status >= 300) {
     throw new GatewayError(`Kesalahan gateway: ${messageOf(res.body) || `HTTP ${res.status}`}`, 502);
   }
-  const data = ((res.body as Record<string, unknown>)?.["data"] ?? {}) as Record<string, unknown>;
-  const details = (data["details"] ?? {}) as Record<string, unknown>;
-  const connection = (data["connection"] ?? {}) as Record<string, unknown>;
+  const body = (res.body ?? {}) as Record<string, unknown>;
+  const me = (body["me"] ?? {}) as Record<string, unknown>;
   return {
-    status: normalizeStatus(data["status"], connection["isConnected"] === true, false),
-    qr: null,
-    phone: digits(details["phoneNumber"]),
-    battery: null,
+    status: normalizeStatus(body["status"]),
+    qr: null, // WAHA never returns the QR inline; fetch it separately (see fetchQr()).
+    phone: digits(me["id"]),
+    battery: null, // Not exposed by WAHA's session payload.
   };
+}
+
+/** GET /api/{id}/auth/qr?format=raw — only valid while status is SCAN_QR_CODE. */
+async function fetchQr(id: string): Promise<string | null> {
+  const res = await request(`/api/${encodeURIComponent(id)}/auth/qr?format=raw`);
+  if (res.status < 200 || res.status >= 300) return null;
+  const body = res.body as Record<string, unknown> | null;
+  const value = body?.["value"];
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 export const gatewayConfigured = async (): Promise<boolean> => Boolean(await loadConfig());
@@ -180,7 +188,7 @@ export const gatewayConfigured = async (): Promise<boolean> => Boolean(await loa
 /** Cek cepat apakah gateway dapat dihubungi dengan konfigurasi saat ini. */
 export async function pingGateway(): Promise<{ ok: boolean; message: string }> {
   try {
-    const res = await request("/session");
+    const res = await request("/api/sessions/?all=true");
     if (res.status >= 200 && res.status < 300) {
       return { ok: true, message: "Gateway terhubung." };
     }
@@ -190,84 +198,85 @@ export async function pingGateway(): Promise<{ ok: boolean; message: string }> {
   }
 }
 
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function dropSession(id: string): Promise<void> {
-  try {
-    await call("/session/logout", { method: "POST", body: JSON.stringify({ session: id }) });
-  } catch {
-    /* ignore — the session may already be gone */
-  }
-}
-
 /**
- * Ask the gateway for a fresh QR. The gateway only emits the QR string in the
- * response of `POST /session/start`, so a stale pending session is dropped first.
- * Teardown is asynchronous on the gateway, so "Session already exist" is retried.
+ * Ask WAHA for a fresh QR. WAHA only serves the QR while the session's status
+ * is SCAN_QR_CODE, so after creating/starting the session we poll briefly for
+ * that status before fetching it.
  */
 export async function startSession(id: string): Promise<GatewaySessionState> {
   const existing = await findSession(id);
-  if (existing?.status === "connected") return existing;
-  if (existing) await dropSession(id);
 
-  let body: Record<string, unknown> | null = null;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const res = await request("/session/start", {
+  if (existing?.status === "connected") return existing;
+
+  if (!existing) {
+    // Session doesn't exist yet on the gateway: create it (starts STOPPED).
+    const created = await request("/api/sessions/", {
       method: "POST",
-      body: JSON.stringify({ session: id }),
+      body: JSON.stringify({ name: id }),
     });
-    if (res.status >= 200 && res.status < 300) {
-      body = (res.body && typeof res.body === "object" ? res.body : {}) as Record<string, unknown>;
-      break;
+    if (created.status < 200 || (created.status >= 300 && created.status !== 422)) {
+      throw new GatewayError(
+        `Kesalahan gateway: ${messageOf(created.body) || `HTTP ${created.status}`}`,
+        502,
+      );
     }
-    const msg = messageOf(res.body);
-    if (!/already exist/i.test(msg)) {
-      throw new GatewayError(`Kesalahan gateway: ${msg || `HTTP ${res.status}`}`, 502);
+  }
+
+  // (Re)start it — safe to call even if it's already STARTING/WORKING.
+  const started = await request(`/api/sessions/${encodeURIComponent(id)}/start`, {
+    method: "POST",
+  });
+  if (started.status < 200 || started.status >= 300) {
+    const msg = messageOf(started.body);
+    // "already exists"/"already started"-type responses are fine to ignore.
+    if (!/already|working|starting/i.test(msg)) {
+      throw new GatewayError(`Kesalahan gateway: ${msg || `HTTP ${started.status}`}`, 502);
     }
-    // The old session is still lingering: drop it again and retry shortly.
-    await dropSession(id);
+  }
+
+  // Poll for SCAN_QR_CODE (or WORKING, if it reconnects from a saved session).
+  let state: GatewaySessionState | null = null;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    state = await findSession(id);
+    if (state && (state.status === "connected" || state.status === "connecting")) break;
     await sleep(700);
   }
 
-  if (!body) {
-    const after = await findSession(id);
-    if (after) return after;
+  if (!state) {
     throw new GatewayError(
       "Gateway tidak dapat memulai sesi pemasangan baru. Silakan coba lagi sebentar lagi.",
       502,
     );
   }
 
-  const qrValue = body["qr"];
-  const qr = typeof qrValue === "string" && qrValue.length > 0 ? qrValue : null;
-  if (!qr) {
-    const after = await findSession(id);
-    if (after) return after;
-  }
-  return {
-    status: normalizeStatus(body["status"], false, Boolean(qr)),
-    qr,
-    phone: null,
-    battery: null,
-  };
+  if (state.status === "connected") return state;
+
+  const qr = await fetchQr(id);
+  return { ...state, qr };
 }
 
-/** Poll status. The gateway never re-emits the QR, so `qr` stays null here. */
+/** Poll status. Does not fetch the QR (only startSession does, since it's short-lived). */
 export async function sessionStatus(id: string): Promise<GatewaySessionState> {
   const state = await findSession(id);
   return state ?? { status: "disconnected", qr: null, phone: null, battery: null };
 }
 
 export async function logoutSession(id: string): Promise<void> {
-  const res = await request("/session/logout", {
+  const res = await request(`/api/sessions/${encodeURIComponent(id)}/logout`, {
     method: "POST",
-    body: JSON.stringify({ session: id }),
   });
   if (res.status === 400 || res.status === 404) return; // already gone
   if (res.status < 200 || res.status >= 300) {
     throw new GatewayError(`Kesalahan gateway: ${messageOf(res.body) || `HTTP ${res.status}`}`, 502);
   }
+}
+
+/** Ubah nomor lokal (628xxx / 08xxx / dst.) menjadi chatId WhatsApp (WAHA memakai "@c.us"). */
+function toChatId(to: string): string {
+  if (to.includes("@")) return to; // sudah berupa chatId (grup "@g.us", channel "@newsletter", dst.)
+  return `${to.replace(/\D/g, "")}@c.us`;
 }
 
 export async function sendMessage(params: {
@@ -277,18 +286,29 @@ export async function sendMessage(params: {
   mediaUrl?: string | null;
 }): Promise<{ id: string | null }> {
   const isImage = Boolean(params.mediaUrl);
-  const path = isImage ? "/message/send-image" : "/message/send-text";
-  const raw = await call(path, {
-    method: "POST",
-    body: JSON.stringify({
-      session: params.sessionId,
-      to: params.to,
-      text: params.text,
-      ...(params.mediaUrl ? { image_url: params.mediaUrl } : {}),
-    }),
-  });
-  const data = (raw["data"] ?? raw) as Record<string, unknown>;
-  const key = data["key"] as Record<string, unknown> | undefined;
-  const id = (typeof data["id"] === "string" && data["id"]) || (key && typeof key["id"] === "string" ? key["id"] : null);
-  return { id: typeof id === "string" ? id : null };
+  const path = isImage ? "/api/sendImage" : "/api/sendText";
+  const body = isImage
+    ? {
+        session: params.sessionId,
+        chatId: toChatId(params.to),
+        caption: params.text,
+        file: { url: params.mediaUrl },
+      }
+    : {
+        session: params.sessionId,
+        chatId: toChatId(params.to),
+        text: params.text,
+      };
+
+  const raw = await call(path, { method: "POST", body: JSON.stringify(body) });
+
+  // WAHA's message id shape can vary slightly by engine (NOWEB/GOWS/WEBJS);
+  // try the common shapes defensively.
+  const idField = raw["id"];
+  if (typeof idField === "string") return { id: idField };
+  if (idField && typeof idField === "object") {
+    const serialized = (idField as Record<string, unknown>)["_serialized"];
+    if (typeof serialized === "string") return { id: serialized };
+  }
+  return { id: null };
 }
