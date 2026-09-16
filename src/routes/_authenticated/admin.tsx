@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ShieldCheck, PlugZap, KeyRound, Trash2 } from "lucide-react";
+import { ShieldCheck, PlugZap, KeyRound, Trash2, Camera, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,14 +38,19 @@ import {
 import {
   deleteMember,
   getGatewaySettings,
+  getMemberDetail,
   getMyRole,
   listMembers,
   resetMemberPassword,
   saveGatewaySettings,
   setMemberRole,
+  setMemberWaName,
+  setMemberWaPicture,
   testGateway,
   type AppRole,
 } from "@/lib/admin.functions";
+import { AdminRewardSettings, AdminWithdrawals } from "@/components/admin-rewards";
+
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -81,6 +86,8 @@ function AdminPage() {
   const [resetTarget, setResetTarget] = useState<{ id: string; email: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null);
+  const [detailUser, setDetailUser] = useState<string | null>(null);
+
 
   const { data: me, isLoading: roleLoading } = useQuery({
     queryKey: ["my-role"],
@@ -246,6 +253,10 @@ function AdminPage() {
           </CardContent>
         </Card>
 
+        {isSuper ? <AdminRewardSettings /> : null}
+        <AdminWithdrawals />
+
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Pengguna & peran</CardTitle>
@@ -274,7 +285,11 @@ function AdminPage() {
                   </thead>
                   <tbody>
                     {(members ?? []).map((m) => (
-                      <tr key={m.user_id} className="border-b last:border-0">
+                      <tr
+                        key={m.user_id}
+                        className="cursor-pointer border-b last:border-0 hover:bg-accent/40"
+                        onClick={() => setDetailUser(m.user_id)}
+                      >
                         <td className="py-2 pr-4 font-medium">{m.name}</td>
                         <td className="py-2 pr-4">{m.email}</td>
                         <td className="py-2 pr-4 text-muted-foreground">
@@ -285,7 +300,7 @@ function AdminPage() {
                             ? new Date(m.last_sign_in_at).toLocaleDateString("id-ID")
                             : "—"}
                         </td>
-                        <td className="py-2 pr-4">
+                        <td className="py-2 pr-4" onClick={(e) => e.stopPropagation()}>
                           <Select
                             value={m.role}
                             onValueChange={(role) =>
@@ -302,7 +317,8 @@ function AdminPage() {
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="py-2">
+                        <td className="py-2" onClick={(e) => e.stopPropagation()}>
+
                           <div className="flex gap-1">
                             <Button
                               size="sm"
@@ -394,6 +410,162 @@ function AdminPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <MemberDetailDialog userId={detailUser} onClose={() => setDetailUser(null)} />
     </>
   );
 }
+
+function MemberDetailDialog({
+  userId,
+  onClose,
+}: {
+  userId: string | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const fetchDetail = useServerFn(getMemberDetail);
+  const saveWaName = useServerFn(setMemberWaName);
+  const saveWaPicture = useServerFn(setMemberWaPicture);
+  const [waName, setWaName] = useState("");
+
+  const { data: detail, isLoading } = useQuery({
+    queryKey: ["member-detail", userId],
+    enabled: Boolean(userId),
+    queryFn: () => fetchDetail({ data: { userId: userId as string } }),
+  });
+
+  useEffect(() => {
+    setWaName(detail?.wa_name ?? "");
+  }, [detail?.wa_name, userId]);
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["member-detail", userId] });
+
+  const renameWa = useMutation({
+    mutationFn: () => saveWaName({ data: { userId: userId as string, name: waName } }),
+    onSuccess: () => {
+      toast.success("Nama WhatsApp berhasil diubah");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const changePhoto = useMutation({
+    mutationFn: (dataUrl: string) =>
+      saveWaPicture({ data: { userId: userId as string, dataUrl } }),
+    onSuccess: () => {
+      toast.success("Foto profil WhatsApp berhasil diubah");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const pickPhoto = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => changePhoto.mutate(String(reader.result));
+    reader.readAsDataURL(file);
+  };
+
+  const connected = detail?.session_status === "connected";
+
+  return (
+    <Dialog open={Boolean(userId)} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Detail pengguna</DialogTitle>
+          <DialogDescription>
+            Nama dan foto di bawah adalah profil WhatsApp asli pada perangkat pengguna ini.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading || !detail ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Memuat…</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="size-20 shrink-0 overflow-hidden rounded-full bg-muted">
+                {detail.wa_picture ? (
+                  <img
+                    src={detail.wa_picture}
+                    alt={`Foto profil WhatsApp ${detail.name}`}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <div className="flex size-full items-center justify-center text-muted-foreground">
+                    <UserRound className="size-8" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 space-y-1 text-sm">
+                <p className="font-semibold">{detail.name}</p>
+                <p className="text-muted-foreground">{detail.email}</p>
+                <p className="text-muted-foreground">
+                  {detail.wa_phone ? `+${detail.wa_phone}` : "Nomor belum tersedia"}
+                </p>
+                <Badge variant="outline">{ROLE_LABEL[detail.role]}</Badge>
+              </div>
+            </div>
+
+            {detail.wa_error ? (
+              <p className="rounded-lg bg-muted p-2.5 text-xs text-muted-foreground">
+                {detail.wa_error}
+              </p>
+            ) : null}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="wa-name">Nama WhatsApp</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="wa-name"
+                  value={waName}
+                  onChange={(e) => setWaName(e.target.value)}
+                  placeholder="Nama yang tampil di WhatsApp"
+                  disabled={!connected}
+                />
+                <Button
+                  onClick={() => renameWa.mutate()}
+                  disabled={!connected || renameWa.isPending || !waName.trim()}
+                >
+                  Simpan
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Foto profil WhatsApp</Label>
+              <Button variant="outline" asChild disabled={!connected}>
+                <label className="cursor-pointer">
+                  <Camera className="mr-1 size-4" />
+                  {changePhoto.isPending ? "Mengunggah…" : "Ganti foto profil"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    disabled={!connected || changePhoto.isPending}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) pickPhoto(file);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </Button>
+              {!connected ? (
+                <p className="text-xs text-muted-foreground">
+                  Perubahan hanya bisa dilakukan saat perangkat WhatsApp pengguna terhubung.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>
+            Tutup
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

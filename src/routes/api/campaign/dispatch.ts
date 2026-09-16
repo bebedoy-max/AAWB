@@ -61,9 +61,8 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
 
           let query = supabase.from("contacts").select("id,name,phone,metadata_json");
           if (campaign.group_id) query = query.eq("group_id", campaign.group_id);
-          const { data: contacts, error: contactsError } = await query.limit(
-            campaign.batch_limit ?? 500,
-          );
+          const { data: contacts, error: contactsError } = await query.limit(100000);
+
           if (contactsError) return json({ error: contactsError.message }, 400);
           if (!contacts?.length) return json({ error: "Tidak ada kontak dalam daftar penerima ini" }, 400);
 

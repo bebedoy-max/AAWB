@@ -260,3 +260,136 @@ export const deleteMember = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+export interface MemberDetail {
+  user_id: string;
+  name: string;
+  email: string;
+  role: AppRole;
+  session_id: string | null;
+  session_status: string | null;
+  wa_phone: string | null;
+  wa_name: string | null;
+  wa_picture: string | null;
+  wa_error: string | null;
+}
+
+async function memberSession(userId: string): Promise<{ id: string; status: string } | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await (supabaseAdmin as any)
+    .from("wa_sessions")
+    .select("id,status,phone_number,updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+  const rows = (data ?? []) as { id: string; status: string }[];
+  return rows.find((r) => r.status === "connected") ?? rows[0] ?? null;
+}
+
+/** Detail seorang pengguna beserta profil WhatsApp perangkat terhubungnya. */
+export const getMemberDetail = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    return input;
+  })
+  .handler(async ({ data, context }): Promise<MemberDetail> => {
+    await assertAdmin(context, true);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: user, error } = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    if (error) throw new Error(error.message);
+
+    const { data: profile } = await (supabaseAdmin as any)
+      .from("profiles")
+      .select("organization_name")
+      .eq("user_id", data.userId)
+      .maybeSingle();
+    const { data: roleRows } = await (supabaseAdmin as any)
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.userId);
+
+    const session = await memberSession(data.userId);
+    let wa_name: string | null = null;
+    let wa_picture: string | null = null;
+    let wa_phone: string | null = null;
+    let wa_error: string | null = null;
+    if (session) {
+      try {
+        const { getWaProfile } = await import("@/lib/wa-gateway.server");
+        const p = await getWaProfile(session.id);
+        wa_name = p.name;
+        wa_picture = p.picture;
+        wa_phone = p.phone;
+      } catch (err) {
+        wa_error = (err as Error).message;
+      }
+    } else {
+      wa_error = "Pengguna ini belum menautkan perangkat WhatsApp.";
+    }
+
+    return {
+      user_id: data.userId,
+      name:
+        profile?.organization_name ??
+        ((user.user?.user_metadata?.["organization_name"] ??
+          user.user?.user_metadata?.["full_name"]) as string | undefined) ??
+        "—",
+      email: user.user?.email ?? "(tanpa email)",
+      role: highest(((roleRows ?? []) as { role: AppRole }[]).map((r) => r.role)),
+      session_id: session?.id ?? null,
+      session_status: session?.status ?? null,
+      wa_phone,
+      wa_name,
+      wa_picture,
+      wa_error,
+    };
+  });
+
+/** Ubah nama profil WhatsApp asli pada perangkat pengguna. */
+export const setMemberWaName = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string; name: string }) => {
+    const name = (input?.name ?? "").trim();
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    if (name.length < 1 || name.length > 25) throw new Error("Nama WhatsApp 1–25 karakter.");
+    return { userId: input.userId, name };
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    const session = await memberSession(data.userId);
+    if (!session || session.status !== "connected") {
+      throw new Error("Perangkat WhatsApp pengguna ini tidak sedang terhubung.");
+    }
+    const { setWaProfileName } = await import("@/lib/wa-gateway.server");
+    await setWaProfileName(session.id, data.name);
+    return { ok: true };
+  });
+
+/** Ubah foto profil WhatsApp asli pada perangkat pengguna (base64 data URL). */
+export const setMemberWaPicture = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string; dataUrl: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    const match = /^data:(image\/(?:jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(
+      (input.dataUrl ?? "").trim(),
+    );
+    if (!match) throw new Error("Berkas foto harus berupa gambar JPG, PNG, atau WEBP.");
+    const data = match[2]!;
+    if (data.length > 8_000_000) throw new Error("Ukuran foto terlalu besar (maksimal ±6 MB).");
+    return { userId: input.userId, mimetype: match[1]!, data };
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    const session = await memberSession(data.userId);
+    if (!session || session.status !== "connected") {
+      throw new Error("Perangkat WhatsApp pengguna ini tidak sedang terhubung.");
+    }
+    const { setWaProfilePicture } = await import("@/lib/wa-gateway.server");
+    await setWaProfilePicture(session.id, {
+      mimetype: data.mimetype,
+      filename: `profile.${data.mimetype.split("/")[1]}`,
+      data: data.data,
+    });
+    return { ok: true };
+  });

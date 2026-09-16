@@ -66,7 +66,7 @@ function Campaigns() {
     template_id: "",
     min_delay: 4,
     max_delay: 6,
-    batch_limit: 100,
+    
     scheduled_at: "",
   });
 
@@ -149,7 +149,7 @@ function Campaigns() {
           template_id: draft.template_id || null,
           min_delay: draft.min_delay,
           max_delay: draft.max_delay,
-          batch_limit: draft.batch_limit,
+          batch_limit: 100000,
           scheduled_at: draft.scheduled_at ? new Date(draft.scheduled_at).toISOString() : null,
           status: "draft",
         })
@@ -328,8 +328,9 @@ function Campaigns() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Jumlah penerima dibatasi sesuai batas per batch pada langkah keamanan.
+                Semua kontak pada daftar penerima ini akan dikirimi pesan.
               </p>
+
             </div>
           ) : null}
 
@@ -402,16 +403,8 @@ function Campaigns() {
                   ))}
                 </RadioGroup>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cp-batch">Batas per batch</Label>
-                <Input
-                  id="cp-batch"
-                  type="number"
-                  min={1}
-                  value={draft.batch_limit}
-                  onChange={(e) => setDraft({ ...draft, batch_limit: Number(e.target.value) })}
-                />
-              </div>
+
+
               <div className="space-y-1.5">
                 <Label htmlFor="cp-sched">Jadwal mulai (opsional)</Label>
                 <Input

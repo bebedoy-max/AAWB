@@ -126,6 +126,12 @@ export async function processCampaignTick(
           error_log: null,
         })
         .eq("id", item.id);
+      // Kredit reward pengirim + bonus referal upline-nya. Idempoten di database.
+      try {
+        await supabase.rpc("credit_message_reward", { _message_id: item.id });
+      } catch {
+        // Reward gagal dicatat tidak boleh menggagalkan pengiriman.
+      }
       sent += 1;
     } catch (err) {
       const message =

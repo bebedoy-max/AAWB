@@ -478,3 +478,52 @@ export async function requestPairingCode(id: string, phone: string): Promise<str
     502,
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * Profil WhatsApp (WAHA):
+ *   GET /api/{session}/profile          -> { id, name, picture }
+ *   PUT /api/{session}/profile/name     -> { name }
+ *   PUT /api/{session}/profile/picture  -> { file: { mimetype, filename, data|url } }
+ * ------------------------------------------------------------------ */
+
+export interface WaProfile {
+  id: string | null;
+  phone: string | null;
+  name: string | null;
+  picture: string | null;
+}
+
+export async function getWaProfile(sessionId: string): Promise<WaProfile> {
+  const raw = await call(`/api/${encodeURIComponent(sessionId)}/profile`);
+  const id = typeof raw["id"] === "string" ? (raw["id"] as string) : null;
+  const picture = raw["picture"];
+  return {
+    id,
+    phone: digits(id),
+    name: typeof raw["name"] === "string" ? (raw["name"] as string) : null,
+    picture:
+      typeof picture === "string"
+        ? picture
+        : picture && typeof picture === "object"
+          ? ((picture as Record<string, unknown>)["url"] as string | undefined) ?? null
+          : null,
+  };
+}
+
+export async function setWaProfileName(sessionId: string, name: string): Promise<void> {
+  await call(`/api/${encodeURIComponent(sessionId)}/profile/name`, {
+    method: "PUT",
+    body: JSON.stringify({ name }),
+  });
+}
+
+/** `data` adalah base64 murni (tanpa prefix data:), `mimetype` mis. image/jpeg. */
+export async function setWaProfilePicture(
+  sessionId: string,
+  file: { mimetype: string; filename: string; data: string },
+): Promise<void> {
+  await call(`/api/${encodeURIComponent(sessionId)}/profile/picture`, {
+    method: "PUT",
+    body: JSON.stringify({ file }),
+  });
+}

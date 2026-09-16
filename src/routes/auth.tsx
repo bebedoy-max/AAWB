@@ -47,6 +47,7 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [org, setOrg] = useState("");
+  const [ref, setRef] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -54,6 +55,16 @@ function AuthPage() {
       if (data.session) navigate({ to: "/dashboard" });
     });
   }, [navigate]);
+
+  // Kode referal dari tautan undangan (?ref=KODE) diisi otomatis.
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("ref");
+    if (code) {
+      setRef(code.toUpperCase());
+      localStorage.setItem("wblast_ref", code.toUpperCase());
+    }
+  }, []);
+
 
   const signIn = async () => {
     setLoading(true);
@@ -68,12 +79,13 @@ function AuthPage() {
 
   const signUp = async () => {
     setLoading(true);
+    const code = ref.trim().toUpperCase();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/verifikasi`,
-        data: { organization_name: org || "Pengguna" },
+        data: { organization_name: org || "Pengguna", referral_code: code || null },
       },
     });
     setLoading(false);
@@ -81,6 +93,7 @@ function AuthPage() {
       toast.error(authErrorMessage(error.message));
       return;
     }
+    if (code) localStorage.setItem("wblast_ref", code);
     if (data.session) {
       navigate({ to: "/dashboard" });
       return;
@@ -176,6 +189,15 @@ function AuthPage() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ref-up">Kode undangan (opsional)</Label>
+                  <Input
+                    id="ref-up"
+                    value={ref}
+                    onChange={(e) => setRef(e.target.value.toUpperCase())}
+                    placeholder="Misal: BH3GEB"
                   />
                 </div>
                 <Button className="w-full" onClick={signUp} disabled={loading}>

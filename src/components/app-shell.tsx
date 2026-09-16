@@ -18,6 +18,8 @@ import {
   MessageCircle,
   ChevronRight,
   ShieldCheck,
+  Wallet,
+  Gift,
 } from "lucide-react";
 import { getMyRole } from "@/lib/admin.functions";
 
@@ -44,6 +46,8 @@ const NAV = [
   { to: "/templates", label: "Template Pesan", icon: FileText },
   { to: "/campaigns", label: "Kampanye", icon: Send },
   { to: "/queue", label: "Antrean & Log", icon: ListChecks },
+  { to: "/rewards", label: "Saldo & Reward", icon: Wallet },
+  { to: "/referral", label: "Referal", icon: Gift },
   { to: "/settings", label: "Pengaturan", icon: Settings },
 ] as const;
 
