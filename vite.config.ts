@@ -12,8 +12,6 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  // Target Cloudflare Pages (advanced mode) instead of the Workers-oriented
-  // cloudflare-module preset; the latter emits a wrangler.json with a reserved
-  // ASSETS binding that breaks Pages git deployments.
-  nitro: { preset: "cloudflare-pages" },
+  // Deploy target: plain Node.js server (for Coolify/Docker), not Cloudflare Pages.
+  nitro: { preset: "node-server" },
 });

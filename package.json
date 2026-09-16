@@ -5,13 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && node scripts/strip-cf-pages-wrangler-config.mjs",
-    "postbuild": "node scripts/strip-cf-pages-wrangler-config.mjs",
+    "build": "vite build",
+    "start": "node .output/server/index.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write .",
-    "deploy": "npm run build && wrangler pages deploy dist"
+    "format": "prettier --write ."
   },
   "overrides": {
     "rolldown": "1.2.1"
