@@ -72,7 +72,7 @@ function AuthPage() {
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: `${window.location.origin}/verifikasi`,
         data: { organization_name: org || "Organisasi Saya" },
       },
     });
@@ -85,7 +85,10 @@ function AuthPage() {
       navigate({ to: "/dashboard" });
       return;
     }
-    toast.success("Periksa kotak masuk untuk mengonfirmasi alamat email Anda.");
+    toast.success(
+      "Periksa kotak masuk untuk mengonfirmasi email. Jika tautannya error, salin tautan itu dan tempelkan di halaman Verifikasi.",
+    );
+    navigate({ to: "/verifikasi" });
   };
 
   const googleSignIn = async () => {

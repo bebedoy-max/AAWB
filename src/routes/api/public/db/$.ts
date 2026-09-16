@@ -40,14 +40,31 @@ async function proxy({ request, params }: { request: Request; params: { _splat?:
   const body: BodyInit | null =
     method === "GET" || method === "HEAD" ? null : await request.arrayBuffer();
 
-  const upstream = await fetch(target, { method, headers, body, redirect: "manual" });
+  // The database server can briefly drop connections while it restarts, which
+  // surfaced as 502/503/504 in the app. Retry once before giving up.
+  let upstream: Response;
+  try {
+    upstream = await fetch(target, { method, headers, body, redirect: "manual" });
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    try {
+      upstream = await fetch(target, { method, headers, body, redirect: "manual" });
+    } catch {
+      return Response.json(
+        { message: "Database sedang tidak dapat dihubungi. Coba lagi sebentar lagi." },
+        { status: 503 },
+      );
+    }
+  }
 
   const responseHeaders = new Headers();
   upstream.headers.forEach((value, name) => {
     if (!HOP_BY_HOP.has(name.toLowerCase())) responseHeaders.set(name, value);
   });
 
-  return new Response(upstream.body, {
+  // A HEAD response must not carry a body; forwarding one makes the browser
+  // abort the request (PostgREST count queries use HEAD).
+  return new Response(method === "HEAD" ? null : upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: responseHeaders,

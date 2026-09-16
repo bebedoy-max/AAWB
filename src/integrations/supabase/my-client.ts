@@ -3,8 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 import { MY_SUPABASE_URL, MY_SUPABASE_PUBLISHABLE_KEY } from "./my-config";
 
-// In the browser we go through a same-origin proxy: the self-hosted instance is
-// HTTP-only and an HTTPS page cannot call it directly (mixed content).
+// The instance is reachable over HTTPS now, but its CORS allow-list does not
+// include the headers supabase-js sends (x-client-info, accept-profile), so the
+// browser keeps talking to it through the same-origin proxy.
 const SUPABASE_URL =
   typeof window === "undefined" ? MY_SUPABASE_URL : `${window.location.origin}/api/public/db`;
 const SUPABASE_PUBLISHABLE_KEY = MY_SUPABASE_PUBLISHABLE_KEY;
