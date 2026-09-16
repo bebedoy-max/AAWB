@@ -55,6 +55,82 @@ function StatCard({
   );
 }
 
+type SparkPoint = { hari: string; jumlah: number };
+
+function EarningCard({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  data,
+  gradientId,
+}: {
+  icon: typeof Send;
+  label: string;
+  value: string;
+  hint?: string;
+  data: SparkPoint[];
+  gradientId: string;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="relative p-5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <div className="flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <Icon className="size-4" />
+          </div>
+        </div>
+        <p className="mt-3 text-3xl font-semibold tracking-tight">{value}</p>
+        {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+
+        <div className="mt-4 -mx-5 -mb-5">
+          {data.length === 0 ? (
+            <div className="flex h-24 items-end px-5 pb-4">
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
+            </div>
+          ) : (
+            <ChartContainer
+              className="h-24 w-full"
+              config={{ jumlah: { label: "Penghasilan", color: "var(--primary)" } }}
+            >
+              <AreaChart data={data} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-jumlah)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="var(--color-jumlah)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <ChartTooltip
+                  content={({ active, payload, label: l }) =>
+                    active && payload?.length ? (
+                      <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
+                        <p className="text-muted-foreground">{l}</p>
+                        <p className="font-medium text-foreground">
+                          {rupiah(Number(payload[0]?.value ?? 0))}
+                        </p>
+                      </div>
+                    ) : null
+                  }
+                />
+                <Area
+                  type="monotone"
+                  dataKey="jumlah"
+                  stroke="var(--color-jumlah)"
+                  strokeWidth={2}
+                  fill={`url(#${gradientId})`}
+                  dot={false}
+                  activeDot={{ r: 3 }}
+                />
+              </AreaChart>
+            </ChartContainer>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function Dashboard() {
   const queryClient = useQueryClient();
   const fetchRewards = useServerFn(getMyRewards);
@@ -65,8 +141,8 @@ function Dashboard() {
     refetchInterval: 20_000,
   });
 
-  const chartData = useMemo(() => {
-    const ledger = rewards?.ledger ?? [];
+  const buildSeries = (kinds?: string[]): SparkPoint[] => {
+    const ledger = (rewards?.ledger ?? []).filter((l) => !kinds || kinds.includes(l.kind));
     const byDay = new Map<string, number>();
     for (const l of ledger) {
       const day = new Date(l.created_at).toLocaleDateString("id-ID", {
@@ -82,7 +158,10 @@ function Dashboard() {
         total += jumlah;
         return { hari, jumlah: total };
       });
-  }, [rewards?.ledger]);
+  };
+
+  const totalSeries = useMemo(() => buildSeries(), [rewards?.ledger]);
+  const referralSeries = useMemo(() => buildSeries(["referral"]), [rewards?.ledger]);
 
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
@@ -180,86 +259,24 @@ function Dashboard() {
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <StatCard
+        <EarningCard
           icon={TrendingUp}
           label="Total penghasilan"
           value={rupiah(rewards?.total_earned)}
           hint={`Sudah dicairkan ${rupiah(rewards?.total_withdrawn)}`}
+          data={totalSeries}
+          gradientId="sparkTotal"
         />
-        <StatCard
+        <EarningCard
           icon={Users}
           label="Bonus referal"
           value={rupiah(rewards?.from_referral)}
           hint={`Reward pesan ${rupiah(rewards?.from_messages)}`}
+          data={referralSeries}
+          gradientId="sparkReferral"
         />
       </div>
 
-      <Card className="mt-4">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Grafik penghasilan</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {chartData.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Belum ada penghasilan. Grafik akan muncul setelah Anda mendapatkan reward.
-            </p>
-          ) : (
-            <ChartContainer
-              className="h-56 w-full"
-              config={{
-                jumlah: { label: "Penghasilan", color: "var(--primary)" },
-              }}
-            >
-              <AreaChart data={chartData} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gradPenghasilan" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--color-jumlah)" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="var(--color-jumlah)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} strokeDasharray="4 4" className="stroke-border" />
-                <XAxis
-                  dataKey="hari"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  fontSize={11}
-                  className="fill-muted-foreground"
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  width={56}
-                  fontSize={11}
-                  className="fill-muted-foreground"
-                  tickFormatter={(v: number) =>
-                    v >= 1000 ? `${Math.round(v / 1000)}rb` : String(v)
-                  }
-                />
-                <ChartTooltip
-                  content={({ active, payload, label }) =>
-                    active && payload?.length ? (
-                      <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
-                        <p className="text-muted-foreground">{label}</p>
-                        <p className="font-medium text-foreground">
-                          {rupiah(Number(payload[0]?.value ?? 0))}
-                        </p>
-                      </div>
-                    ) : null
-                  }
-                />
-                <Area
-                  type="monotone"
-                  dataKey="jumlah"
-                  stroke="var(--color-jumlah)"
-                  strokeWidth={2}
-                  fill="url(#gradPenghasilan)"
-                />
-              </AreaChart>
-            </ChartContainer>
-          )}
-        </CardContent>
-      </Card>
 
       <Card className="mt-4">
         <CardHeader className="pb-2">

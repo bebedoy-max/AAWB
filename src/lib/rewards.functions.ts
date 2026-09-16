@@ -49,6 +49,16 @@ export interface PayoutAccount {
   name: string | null;
 }
 
+/** Satu rekening/e-wallet tujuan pencairan milik pengguna. */
+export interface PayoutAccountRow {
+  id: string;
+  method: string;
+  provider: string;
+  number: string;
+  name: string;
+  is_default: boolean;
+}
+
 export interface MyRewards {
   balance: number;
   total_earned: number;
@@ -59,6 +69,8 @@ export interface MyRewards {
   messages_sent: number;
   settings: RewardSettings;
   payout: PayoutAccount;
+  accounts: PayoutAccountRow[];
+  accounts_table_ready: boolean;
   ledger: LedgerEntry[];
 }
 
@@ -175,6 +187,24 @@ export const saveRewardSettings = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Ambil semua rekening pencairan milik pengguna. Kalau tabel payout_accounts
+ * belum ada di database, kembalikan ready:false supaya UI jatuh ke mode lama.
+ */
+async function loadAccounts(
+  admin: any,
+  uid: string,
+): Promise<{ rows: PayoutAccountRow[]; ready: boolean }> {
+  const { data, error } = await admin
+    .from("payout_accounts")
+    .select("id,method,provider,number,name,is_default")
+    .eq("user_id", uid)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: true });
+  if (error) return { rows: [], ready: false };
+  return { rows: (data ?? []) as PayoutAccountRow[], ready: true };
+}
+
 /** Saldo, riwayat reward, dan data rekening pengguna yang sedang masuk. */
 export const getMyRewards = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -227,6 +257,8 @@ export const getMyRewards = createServerFn({ method: "GET" })
       .filter((w) => w.status === "pending")
       .reduce((s, w) => s + Number(w.amount), 0);
 
+    const { rows: accounts, ready: accounts_table_ready } = await loadAccounts(supabaseAdmin, uid);
+
     return {
       balance: total_earned - total_withdrawn - pending_withdrawal,
       total_earned,
@@ -242,8 +274,170 @@ export const getMyRewards = createServerFn({ method: "GET" })
         number: profileRes.data?.payout_number ?? null,
         name: profileRes.data?.payout_name ?? null,
       },
+      accounts,
+      accounts_table_ready,
       ledger: (ledgerRes.data ?? []) as LedgerEntry[],
     };
+  });
+
+function validateAccount(input: {
+  method?: string;
+  provider?: string;
+  number?: string;
+  name?: string;
+}) {
+  const method = (input?.method ?? "").trim();
+  const provider = (input?.provider ?? "").trim();
+  const number = (input?.number ?? "").trim();
+  const name = (input?.name ?? "").trim();
+  if (!["bank", "ewallet"].includes(method)) throw new Error("Pilih metode bank atau e-wallet.");
+  if (!provider) throw new Error("Nama bank atau e-wallet wajib diisi.");
+  if (!/^[0-9+\-\s]{6,25}$/.test(number)) throw new Error("Nomor rekening/e-wallet tidak valid.");
+  if (name.length < 2) throw new Error("Nama pemilik rekening wajib diisi.");
+  return { method, provider, number, name };
+}
+
+/** Tambah rekening baru tanpa menghapus rekening yang sudah tersimpan. */
+export const addPayoutAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(validateAccount)
+  .handler(async ({ data, context }): Promise<{ ok: boolean; error?: string }> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const uid = context.userId;
+    const existing = await loadAccounts(supabaseAdmin, uid);
+    if (!existing.ready) {
+      return {
+        ok: false,
+        error:
+          "Tabel daftar rekening belum dibuat di database. Jalankan skrip SQL payout_accounts terlebih dahulu.",
+      };
+    }
+    if (existing.rows.length >= 4) {
+      return {
+        ok: false,
+        error: "Maksimal 4 rekening. Hapus salah satu rekening sebelum menambah yang baru.",
+      };
+    }
+    const isFirst = existing.rows.length === 0;
+    const { error } = await (supabaseAdmin as any).from("payout_accounts").insert({
+      user_id: uid,
+      method: data.method,
+      provider: data.provider,
+      number: data.number,
+      name: data.name,
+      is_default: isFirst,
+    });
+    if (error) {
+      if ((error.code ?? "") === "23505") return { ok: false, error: "Rekening ini sudah ada." };
+      return { ok: false, error: error.message };
+    }
+    if (isFirst) {
+      await (supabaseAdmin as any).from("profiles").upsert(
+        {
+          user_id: uid,
+          payout_method: data.method,
+          payout_provider: data.provider,
+          payout_number: data.number,
+          payout_name: data.name,
+        },
+        { onConflict: "user_id" },
+      );
+    }
+    return { ok: true };
+  });
+
+/** Jadikan satu rekening sebagai tujuan utama pencairan. */
+export const setDefaultPayoutAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string }) => {
+    if (!input?.id) throw new Error("Rekening tidak valid.");
+    return { id: input.id };
+  })
+  .handler(async ({ data, context }): Promise<{ ok: boolean; error?: string }> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const uid = context.userId;
+    const { data: row, error: readErr } = await (supabaseAdmin as any)
+      .from("payout_accounts")
+      .select("id,method,provider,number,name")
+      .eq("id", data.id)
+      .eq("user_id", uid)
+      .maybeSingle();
+    if (readErr) return { ok: false, error: readErr.message };
+    if (!row) return { ok: false, error: "Rekening tidak ditemukan." };
+
+    await (supabaseAdmin as any)
+      .from("payout_accounts")
+      .update({ is_default: false })
+      .eq("user_id", uid);
+    const { error } = await (supabaseAdmin as any)
+      .from("payout_accounts")
+      .update({ is_default: true })
+      .eq("id", data.id)
+      .eq("user_id", uid);
+    if (error) return { ok: false, error: error.message };
+
+    await (supabaseAdmin as any).from("profiles").upsert(
+      {
+        user_id: uid,
+        payout_method: row.method,
+        payout_provider: row.provider,
+        payout_number: row.number,
+        payout_name: row.name,
+      },
+      { onConflict: "user_id" },
+    );
+    return { ok: true };
+  });
+
+/** Hapus satu rekening dari daftar. */
+export const deletePayoutAccount = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string }) => {
+    if (!input?.id) throw new Error("Rekening tidak valid.");
+    return { id: input.id };
+  })
+  .handler(async ({ data, context }): Promise<{ ok: boolean; error?: string }> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const uid = context.userId;
+    const { error } = await (supabaseAdmin as any)
+      .from("payout_accounts")
+      .delete()
+      .eq("id", data.id)
+      .eq("user_id", uid);
+    if (error) return { ok: false, error: error.message };
+
+    const { rows } = await loadAccounts(supabaseAdmin, uid);
+    if (rows.length === 0) {
+      await (supabaseAdmin as any).from("profiles").upsert(
+        {
+          user_id: uid,
+          payout_method: null,
+          payout_provider: null,
+          payout_number: null,
+          payout_name: null,
+        },
+        { onConflict: "user_id" },
+      );
+      return { ok: true };
+    }
+    if (!rows.some((r) => r.is_default)) {
+      const first = rows[0]!;
+      await (supabaseAdmin as any)
+        .from("payout_accounts")
+        .update({ is_default: true })
+        .eq("id", first.id);
+      await (supabaseAdmin as any).from("profiles").upsert(
+        {
+          user_id: uid,
+          payout_method: first.method,
+          payout_provider: first.provider,
+          payout_number: first.number,
+          payout_name: first.name,
+        },
+        { onConflict: "user_id" },
+      );
+    }
+    return { ok: true };
   });
 
 /** Simpan metode pencairan saldo pengguna. */
@@ -279,44 +473,81 @@ export const savePayoutAccount = createServerFn({ method: "POST" })
 /** Ajukan penarikan saldo; menunggu persetujuan admin. */
 export const requestWithdrawal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { amount: number }) => {
+  .inputValidator((input: { amount: number; account_id?: string }) => {
     const amount = Number(input?.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Jumlah penarikan tidak valid.");
-    return { amount };
+    return { amount, account_id: (input?.account_id ?? "").trim() || null };
   })
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data, context }): Promise<{ ok: boolean; error?: string }> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const settings = await readSettings();
     const uid = context.userId;
 
-    const { data: profile } = await (supabaseAdmin as any)
-      .from("profiles")
-      .select("payout_method,payout_provider,payout_number,payout_name")
-      .eq("user_id", uid)
-      .maybeSingle();
-    if (!profile?.payout_number) {
-      throw new Error("Lengkapi data rekening pencairan terlebih dahulu.");
+    let target: { method: string; provider: string; number: string; name: string } | null = null;
+
+    if (data.account_id) {
+      const { data: acc } = await (supabaseAdmin as any)
+        .from("payout_accounts")
+        .select("method,provider,number,name")
+        .eq("id", data.account_id)
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (!acc) return { ok: false, error: "Rekening tujuan tidak ditemukan." };
+      target = acc;
+    } else {
+      const { rows } = await loadAccounts(supabaseAdmin, uid);
+      const pick = rows.find((r) => r.is_default) ?? rows[0];
+      if (pick) {
+        target = {
+          method: pick.method,
+          provider: pick.provider,
+          number: pick.number,
+          name: pick.name,
+        };
+      } else {
+        const { data: profile } = await (supabaseAdmin as any)
+          .from("profiles")
+          .select("payout_method,payout_provider,payout_number,payout_name")
+          .eq("user_id", uid)
+          .maybeSingle();
+        if (profile?.payout_number) {
+          target = {
+            method: profile.payout_method,
+            provider: profile.payout_provider,
+            number: profile.payout_number,
+            name: profile.payout_name,
+          };
+        }
+      }
     }
+
+    if (!target) return { ok: false, error: "Lengkapi data rekening pencairan terlebih dahulu." };
 
     const { data: bal } = await (supabaseAdmin as any).rpc("reward_balance", { _user_id: uid });
     const balance = Number(bal ?? 0);
     if (data.amount < settings.min_withdrawal) {
-      throw new Error(`Minimum penarikan Rp ${settings.min_withdrawal.toLocaleString("id-ID")}.`);
+      return {
+        ok: false,
+        error: `Minimum penarikan Rp ${settings.min_withdrawal.toLocaleString("id-ID")}.`,
+      };
     }
-    if (data.amount > balance) throw new Error("Jumlah penarikan melebihi saldo tersedia.");
+    if (data.amount > balance) {
+      return { ok: false, error: "Jumlah penarikan melebihi saldo tersedia." };
+    }
 
     const { error } = await (supabaseAdmin as any).from("withdrawals").insert({
       user_id: uid,
       amount: data.amount,
-      method: profile.payout_method,
-      provider: profile.payout_provider,
-      account_number: profile.payout_number,
-      account_name: profile.payout_name,
+      method: target.method,
+      provider: target.provider,
+      account_number: target.number,
+      account_name: target.name,
       status: "pending",
     });
-    if (error) throw new Error(error.message);
+    if (error) return { ok: false, error: error.message };
     return { ok: true };
   });
+
 
 /** Riwayat penarikan pengguna yang sedang masuk. */
 export const listMyWithdrawals = createServerFn({ method: "GET" })

@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Wallet, TrendingUp, Users, Send } from "lucide-react";
+import { Wallet, TrendingUp, Users, Send, Trash2, Plus } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +24,9 @@ import {
   listMyWithdrawals,
   requestWithdrawal,
   savePayoutAccount,
+  addPayoutAccount,
+  deletePayoutAccount,
+  setDefaultPayoutAccount,
 } from "@/lib/rewards.functions";
 
 export const Route = createFileRoute("/_authenticated/rewards")({
@@ -85,6 +88,9 @@ function RewardsPage() {
   const fetchRewards = useServerFn(getMyRewards);
   const fetchWithdrawals = useServerFn(listMyWithdrawals);
   const savePayout = useServerFn(savePayoutAccount);
+  const addAccount = useServerFn(addPayoutAccount);
+  const removeAccount = useServerFn(deletePayoutAccount);
+  const makeDefault = useServerFn(setDefaultPayoutAccount);
   const ajukan = useServerFn(requestWithdrawal);
 
   const { data } = useQuery({
@@ -97,32 +103,116 @@ function RewardsPage() {
     queryFn: () => fetchWithdrawals(),
   });
 
+  const [showForm, setShowForm] = useState(false);
   const [method, setMethod] = useState("bank");
   const [provider, setProvider] = useState("");
   const [number, setNumber] = useState("");
   const [holder, setHolder] = useState("");
   const [amount, setAmount] = useState("");
+  const [targetId, setTargetId] = useState("");
+
+  const multi = Boolean(data?.accounts_table_ready);
+  const accounts = data?.accounts ?? [];
+  const legacyAccount = data?.payout.number
+    ? [
+        {
+          id: "legacy",
+          method: data.payout.method ?? "bank",
+          provider: data.payout.provider ?? "",
+          number: data.payout.number ?? "",
+          name: data.payout.name ?? "",
+          is_default: true,
+        },
+      ]
+    : [];
+  const list = multi ? accounts : legacyAccount;
+  const hasAccount = list.length > 0;
 
   useEffect(() => {
-    if (!data?.payout) return;
+    if (!hasAccount) return;
+    if (targetId && list.some((a) => a.id === targetId)) return;
+    setTargetId((list.find((a) => a.is_default) ?? list[0]!).id);
+  }, [hasAccount, list, targetId]);
+
+  useEffect(() => {
+    if (multi || !data?.payout) return;
     setMethod(data.payout.method ?? "bank");
     setProvider(data.payout.provider ?? "");
     setNumber(data.payout.number ?? "");
     setHolder(data.payout.name ?? "");
-  }, [data?.payout]);
+  }, [multi, data?.payout]);
+
+  const resetForm = () => {
+    setProvider("");
+    setNumber("");
+    setHolder("");
+  };
 
   const doSavePayout = useMutation({
-    mutationFn: () => savePayout({ data: { method, provider, number, name: holder } }),
-    onSuccess: () => {
-      toast.success("Data rekening tersimpan");
+    mutationFn: async () => {
+      if (multi)
+        return (await addAccount({
+          data: { method, provider, number, name: holder },
+        })) as { ok: boolean; error?: string };
+      await savePayout({ data: { method, provider, number, name: holder } });
+      return { ok: true } as { ok: boolean; error?: string };
+    },
+    onSuccess: (res) => {
+      if (res && res.ok === false) {
+        toast.error(res.error ?? "Rekening tidak dapat disimpan.");
+        return;
+      }
+      toast.success(multi ? "Rekening baru ditambahkan" : "Data rekening tersimpan");
+      if (multi) {
+        resetForm();
+        setShowForm(false);
+      }
+      queryClient.invalidateQueries({ queryKey: ["my-rewards"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const doDelete = useMutation({
+    mutationFn: (id: string) =>
+      removeAccount({ data: { id } }) as Promise<{ ok: boolean; error?: string }>,
+    onSuccess: (res) => {
+      if (res && res.ok === false) {
+        toast.error(res.error ?? "Rekening tidak dapat dihapus.");
+        return;
+      }
+      toast.success("Rekening dihapus");
+      queryClient.invalidateQueries({ queryKey: ["my-rewards"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const doDefault = useMutation({
+    mutationFn: (id: string) =>
+      makeDefault({ data: { id } }) as Promise<{ ok: boolean; error?: string }>,
+    onSuccess: (res) => {
+      if (res && res.ok === false) {
+        toast.error(res.error ?? "Rekening utama tidak dapat diubah.");
+        return;
+      }
+      toast.success("Rekening utama diperbarui");
       queryClient.invalidateQueries({ queryKey: ["my-rewards"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const doWithdraw = useMutation({
-    mutationFn: () => ajukan({ data: { amount: Number(amount) } }),
-    onSuccess: () => {
+    mutationFn: () =>
+      ajukan({
+        data:
+          multi && targetId && targetId !== "legacy"
+            ? { amount: Number(amount), account_id: targetId }
+            : { amount: Number(amount) },
+      }),
+    onSuccess: (res) => {
+      if (!res?.ok) {
+        toast.error(res?.error ?? "Penarikan tidak dapat diproses.");
+        return;
+      }
       toast.success("Pengajuan penarikan terkirim dan menunggu persetujuan admin");
       setAmount("");
       queryClient.invalidateQueries({ queryKey: ["my-rewards"] });
@@ -134,7 +224,8 @@ function RewardsPage() {
   const min = data?.settings.min_withdrawal ?? 0;
   const balance = data?.balance ?? 0;
   const progress = min > 0 ? Math.min((balance / min) * 100, 100) : 100;
-  const hasAccount = Boolean(data?.payout.number);
+  const labelOf = (a: { method: string; provider: string; number: string; name: string }) =>
+    `${a.method === "bank" ? "Bank" : "E-wallet"} ${a.provider} · ${a.number} · a.n. ${a.name}`;
 
   return (
     <>
@@ -174,9 +265,7 @@ function RewardsPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Ajukan penarikan</CardTitle>
-            <CardDescription>
-              Penarikan diproses setelah disetujui admin. Saldo yang diajukan ditahan sementara.
-            </CardDescription>
+            <CardDescription>Penarikan diproses setelah disetujui admin.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -189,9 +278,26 @@ function RewardsPage() {
             </div>
             {!hasAccount ? (
               <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                Lengkapi data rekening pencairan di samping sebelum mengajukan penarikan.
+                Tambahkan rekening pencairan di samping sebelum mengajukan penarikan.
               </p>
-            ) : null}
+            ) : (
+              <div className="space-y-1.5">
+                <Label>Tujuan pencairan</Label>
+                <Select value={targetId} onValueChange={setTargetId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih rekening" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {list.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {labelOf(a)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="amount">Jumlah penarikan</Label>
               <Input
@@ -214,10 +320,98 @@ function RewardsPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Rekening pencairan</CardTitle>
-            <CardDescription>Bank atau e-wallet tujuan pencairan saldo Anda.</CardDescription>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">Rekening pencairan</CardTitle>
+                <CardDescription>
+                  {multi && showForm
+                    ? "Isi data rekening baru, lalu simpan."
+                    : multi
+                      ? "Simpan beberapa bank atau e-wallet dan pilih salah satu sebagai tujuan utama."
+                      : "Bank atau e-wallet tujuan pencairan saldo Anda."}
+                </CardDescription>
+              </div>
+              {multi ? (
+                showForm ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      resetForm();
+                      setShowForm(false);
+                    }}
+                  >
+                    Batal
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={list.length >= 4}
+                    onClick={() => setShowForm(true)}
+                  >
+                    <Plus className="mr-1 size-4" /> Tambah
+                  </Button>
+                )
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
+            {!multi ? (
+              <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                Daftar banyak rekening belum aktif karena tabel rekening belum dibuat di database.
+                Untuk sementara hanya satu rekening yang tersimpan.
+              </p>
+            ) : null}
+
+            {!(multi && showForm) && list.length ? (
+              <div className="space-y-2">
+                {list.map((a) => (
+                  <div key={a.id} className="rounded-lg border bg-accent/30 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {a.method === "bank" ? "Bank" : "E-wallet"} {a.provider} · {a.number}
+                        </p>
+                        <p className="text-xs text-muted-foreground">a.n. {a.name}</p>
+                      </div>
+                      {a.is_default ? <Badge variant="outline">Utama</Badge> : null}
+                    </div>
+                    {multi ? (
+                      <div className="mt-2 flex gap-2">
+                        {!a.is_default ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={doDefault.isPending}
+                            onClick={() => doDefault.mutate(a.id)}
+                          >
+                            Jadikan utama
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={doDelete.isPending}
+                          onClick={() => doDelete.mutate(a.id)}
+                        >
+                          <Trash2 className="mr-1 size-3.5" /> Hapus
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {multi && !showForm && list.length >= 4 ? (
+              <p className="text-xs text-muted-foreground">
+                Maksimal 4 rekening sudah tercapai. Hapus salah satu untuk menambah rekening baru.
+              </p>
+            ) : null}
+
+            {!multi || showForm ? (
+            <>
             <div className="space-y-1.5">
               <Label>Metode</Label>
               <Select value={method} onValueChange={setMethod}>
@@ -253,8 +447,11 @@ function RewardsPage() {
               disabled={doSavePayout.isPending}
               onClick={() => doSavePayout.mutate()}
             >
-              Simpan rekening
+              <Plus className="mr-1 size-4" />
+              {multi ? "Tambah rekening" : "Simpan rekening"}
             </Button>
+            </>
+            ) : null}
           </CardContent>
         </Card>
       </div>

@@ -7,6 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { rupiah } from "@/lib/currency";
 import {
@@ -105,7 +112,24 @@ export function AdminRewardSettings() {
         <div className="grid gap-3 sm:grid-cols-2">
           {numberField("reward_per_message", "Reward per pesan sukses (Rp)")}
           {numberField("min_withdrawal", "Minimum penarikan (Rp)")}
-          {numberField("referral_levels", "Jumlah tingkat referal (0–3)")}
+          <div className="space-y-1.5">
+            <Label htmlFor="referral_levels">Jumlah tingkat referal</Label>
+            <Select
+              value={String(form.referral_levels || 1)}
+              onValueChange={(v) => setForm({ ...form, referral_levels: Number(v) })}
+            >
+              <SelectTrigger id="referral_levels">
+                <SelectValue placeholder="Pilih tingkat" />
+              </SelectTrigger>
+              <SelectContent>
+                {[1, 2, 3].map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n} tingkat
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {numberField("referral_rate_l1", "Bonus referal tingkat 1 (Rp/pesan)", undefined, form.referral_levels < 1)}
           {numberField("referral_rate_l2", "Bonus referal tingkat 2 (Rp/pesan)", undefined, form.referral_levels < 2)}
           {numberField("referral_rate_l3", "Bonus referal tingkat 3 (Rp/pesan)", undefined, form.referral_levels < 3)}

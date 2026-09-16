@@ -13,11 +13,21 @@ import {
   Smartphone,
   KeyRound,
   Copy,
+  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/integrations/supabase/my-client";
-import { getSessionState, requestPairingCode, sessionAction } from "@/lib/api-client";
+import {
+  confirmPasskey,
+  getSessionState,
+  requestPairingCode,
+  requestPasskeyChallenge,
+  requestPasskeyConfirmation,
+  sessionAction,
+  submitPasskeyAssertion,
+} from "@/lib/api-client";
 import { PageHeader } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -35,7 +45,7 @@ import {
 import { PhoneInput } from "@/components/phone-input";
 import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
-import type { WaSession } from "@/types/wa";
+import type { SessionGatewayResponse, WaSession } from "@/types/wa";
 
 export const Route = createFileRoute("/_authenticated/devices")({
   head: () => ({
@@ -76,6 +86,10 @@ function Devices() {
   const [codeCountry, setCodeCountry] = useState(DEFAULT_COUNTRY_ISO);
   const [codePhone, setCodePhone] = useState("");
   const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingRequestedAt, setPairingRequestedAt] = useState<number | null>(null);
+  const [pairingBlockedUntil, setPairingBlockedUntil] = useState<number | null>(null);
+  const [authStep, setAuthStep] = useState<SessionGatewayResponse["auth_step"]>(null);
+  const [confirmationCode, setConfirmationCode] = useState<string | null>(null);
 
   const { data: sessions } = useQuery({
     queryKey: ["wa-sessions"],
@@ -99,19 +113,37 @@ function Devices() {
     const timer = setInterval(async () => {
       try {
         const state = await getSessionState(watchedId);
+        setAuthStep(state.auth_step ?? null);
+        if (state.auth_step === "confirmation") {
+          const result = await requestPasskeyConfirmation(watchedId);
+          setConfirmationCode(result.code);
+        }
         queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
         if (state.status === "connected") {
           toast.success("Perangkat berhasil dipasangkan");
           setQrSessionId(null);
           setCodeSessionId(null);
           setPairingCode(null);
+          setAuthStep(null);
+          setConfirmationCode(null);
+        } else if (
+          pairingCode &&
+          pairingRequestedAt &&
+          Date.now() - pairingRequestedAt > 120_000 &&
+          state.status === "disconnected"
+        ) {
+          toast.error("Kode pemasangan sudah kedaluwarsa. Tunggu sebentar sebelum meminta kode baru.");
+          setPairingCode(null);
+          setPairingRequestedAt(null);
+          setAuthStep(null);
+          setConfirmationCode(null);
         }
       } catch {
         /* keep polling */
       }
     }, 2500);
     return () => clearInterval(timer);
-  }, [qrSessionId, codeSessionId, queryClient]);
+  }, [qrSessionId, codeSessionId, pairingCode, pairingRequestedAt, queryClient]);
 
   const checkGateway = useServerFn(isGatewayConfigured);
   const { data: gateway } = useQuery({
@@ -143,6 +175,17 @@ function Devices() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  useEffect(() => {
+    if (!pairingBlockedUntil) return;
+    const remaining = pairingBlockedUntil - Date.now();
+    if (remaining <= 0) {
+      setPairingBlockedUntil(null);
+      return;
+    }
+    const timer = window.setTimeout(() => setPairingBlockedUntil(null), remaining);
+    return () => window.clearTimeout(timer);
+  }, [pairingBlockedUntil]);
+
   const startPairing = useMutation({
     mutationFn: (id: string) => sessionAction(id, "start"),
     onSuccess: (state) => {
@@ -161,17 +204,64 @@ function Devices() {
     },
     onSuccess: (res) => {
       setPairingCode(res.code);
+      setPairingRequestedAt(Date.now());
       queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error & { status?: number }) => {
+      if (e.status === 429) {
+        setPairingBlockedUntil(Date.now() + 60 * 60 * 1000);
+      }
+      toast.error(e.message);
+    },
   });
 
   const openCodeDialog = (sessionId: string, phone: string | null) => {
     setCodeSessionId(sessionId);
     setPairingCode(null);
+    setPairingRequestedAt(null);
+    setAuthStep(null);
+    setConfirmationCode(null);
     setCodePhone(phone ?? "");
     setCodeCountry(DEFAULT_COUNTRY_ISO);
   };
+
+  const finishPasskey = useMutation({
+    mutationFn: async () => {
+      if (!codeSessionId) throw new Error("Perangkat belum dipilih");
+      const { challenge } = await requestPasskeyChallenge(codeSessionId);
+      const chromeApi = (window as unknown as {
+        chrome?: { runtime?: { sendMessage?: (...args: unknown[]) => void; lastError?: { message?: string } } };
+      }).chrome;
+      if (!chromeApi?.runtime?.sendMessage) {
+        throw new Error("Pasang ekstensi WhatsApp Browser Extension, lalu muat ulang halaman ini.");
+      }
+      const assertion = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error("Verifikasi passkey melewati batas waktu.")), 180_000);
+        chromeApi.runtime?.sendMessage?.(
+          "ghpdcgnjffaaekflfpcgkgpbafmjldcp",
+          { type: "waha-passkey-sign", challenge },
+          (response: unknown) => {
+            window.clearTimeout(timer);
+            const result = response as { ok?: boolean; assertion?: Record<string, unknown>; error?: string } | undefined;
+            if (!result?.ok || !result.assertion) reject(new Error(result?.error || "Verifikasi passkey gagal."));
+            else resolve(result.assertion);
+          },
+        );
+      });
+      await submitPasskeyAssertion(codeSessionId, assertion);
+    },
+    onSuccess: () => toast.success("Passkey terverifikasi, menyelesaikan koneksi…"),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const approveConfirmation = useMutation({
+    mutationFn: async () => {
+      if (!codeSessionId) throw new Error("Perangkat belum dipilih");
+      return confirmPasskey(codeSessionId);
+    },
+    onSuccess: () => toast.success("Konfirmasi diterima, menyelesaikan koneksi…"),
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const disconnect = useMutation({
     mutationFn: (id: string) => sessionAction(id, "disconnect"),
@@ -362,6 +452,9 @@ function Devices() {
           if (!o) {
             setCodeSessionId(null);
             setPairingCode(null);
+            setPairingRequestedAt(null);
+            setAuthStep(null);
+            setConfirmationCode(null);
           }
         }}
       >
@@ -399,14 +492,62 @@ function Devices() {
                 <Copy className="mr-1 size-3.5" /> Salin kode
               </Button>
               <p className="text-xs text-muted-foreground">
-                Kode berlaku beberapa menit. Status diperbarui otomatis.
+                Masukkan kode segera. Jangan meminta kode baru selama kode ini masih berlaku.
               </p>
             </div>
           ) : null}
 
+          {pairingBlockedUntil && pairingBlockedUntil > Date.now() ? (
+            <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+              WhatsApp sedang membatasi kode. Coba lagi setelah pukul{" "}
+              {new Date(pairingBlockedUntil).toLocaleTimeString("id-ID", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              , atau gunakan QR.
+            </p>
+          ) : null}
+
+          {authStep === "passkey" ? (
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 size-5 text-primary" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Verifikasi passkey diperlukan</p>
+                  <p className="text-xs text-muted-foreground">WhatsApp meminta konfirmasi keamanan tambahan untuk menyelesaikan koneksi.</p>
+                </div>
+              </div>
+              <Button className="w-full" onClick={() => finishPasskey.mutate()} disabled={finishPasskey.isPending}>
+                <ShieldCheck className="mr-1 size-4" /> Lanjutkan verifikasi
+              </Button>
+              <Button asChild variant="outline" className="w-full">
+                <a href="https://chromewebstore.google.com/detail/ghpdcgnjffaaekflfpcgkgpbafmjldcp" target="_blank" rel="noreferrer">
+                  <ExternalLink className="mr-1 size-4" /> Pasang ekstensi verifikasi
+                </a>
+              </Button>
+            </div>
+          ) : null}
+
+          {authStep === "confirmation" && confirmationCode ? (
+            <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-4 text-center">
+              <p className="text-xs text-muted-foreground">Pastikan kode ini sama dengan yang tampil di WhatsApp</p>
+              <p className="font-mono text-3xl font-semibold">{confirmationCode}</p>
+              <Button onClick={() => approveConfirmation.mutate()} disabled={approveConfirmation.isPending}>
+                Kode sama, konfirmasi
+              </Button>
+            </div>
+          ) : null}
+
           <DialogFooter>
-            <Button onClick={() => pairWithCode.mutate()} disabled={pairWithCode.isPending}>
-              {pairingCode ? "Minta kode baru" : "Minta kode"}
+            <Button
+              onClick={() => pairWithCode.mutate()}
+              disabled={
+                pairWithCode.isPending ||
+                Boolean(pairingCode) ||
+                Boolean(pairingBlockedUntil && pairingBlockedUntil > Date.now())
+              }
+            >
+              {pairingCode ? "Menunggu pemasangan" : "Minta kode"}
             </Button>
           </DialogFooter>
         </DialogContent>

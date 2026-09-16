@@ -23,6 +23,7 @@ import {
 
 export interface GatewaySessionState {
   status: WaSessionStatus;
+  authStep: "pairing" | "passkey" | "confirmation" | null;
   qr: string | null;
   phone: string | null;
   battery: number | null;
@@ -140,6 +141,12 @@ function messageOf(body: RawResult["body"]): string {
       const v = (body as Record<string, unknown>)[k];
       if (typeof v === "string") return v;
     }
+    // WAHA membungkus error internal di dalam "exception".
+    const exception = (body as Record<string, unknown>)["exception"];
+    if (exception && typeof exception === "object") {
+      const v = (exception as Record<string, unknown>)["message"];
+      if (typeof v === "string") return v;
+    }
   }
   return typeof body === "string" ? body.slice(0, 200) : "";
 }
@@ -186,6 +193,14 @@ async function findSession(id: string): Promise<InternalGatewaySessionState | nu
   const rawStatus = String(body["status"] ?? "").toUpperCase();
   return {
     status: normalizeStatus(rawStatus),
+    authStep:
+      rawStatus === "PASSKEY_REQUIRED"
+        ? "passkey"
+        : rawStatus === "PASSKEY_CONFIRMATION_REQUIRED"
+          ? "confirmation"
+          : rawStatus === "SCAN_QR_CODE"
+            ? "pairing"
+            : null,
     qr: null, // WAHA never returns the QR inline; fetch it separately (see fetchQr()).
     phone: digits(me["id"]),
     battery: null, // Not exposed by WAHA's session payload.
@@ -218,6 +233,8 @@ export async function pingGateway(): Promise<{ ok: boolean; message: string }> {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const pairingCooldowns = new Map<string, number>();
+const PAIRING_COOLDOWN_MS = 60 * 60 * 1000;
 
 /**
  * Ask WAHA for a fresh QR. WAHA only serves the QR while the session's status
@@ -229,20 +246,29 @@ export async function startSession(id: string): Promise<GatewaySessionState> {
 
   if (existing?.status === "connected") return existing;
 
-  // Preserve the stored WhatsApp credentials when a session crashes. A clean
-  // stop lets WAHA reset the engine without deleting the paired session.
+  // A FAILED unpaired session can stay poisoned even after stop/start (notably
+  // on GOWS). Recreate it so WAHA can return to SCAN_QR_CODE and issue a code.
   if (existing?.rawStatus === "FAILED") {
     const stopped = await request(`/api/sessions/${encodeURIComponent(id)}/stop`, {
       method: "POST",
     });
-    if (stopped.status >= 200 && stopped.status < 300) {
-      existing = await findSession(id);
-    } else {
+    if (stopped.status < 200 || (stopped.status >= 300 && stopped.status !== 404)) {
       throw new GatewayError(
         `Sesi WhatsApp gagal dipulihkan: ${messageOf(stopped.body) || `HTTP ${stopped.status}`}`,
         stopped.status >= 400 && stopped.status < 600 ? stopped.status : 502,
       );
     }
+
+    const removed = await request(`/api/sessions/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (removed.status < 200 || (removed.status >= 300 && removed.status !== 404)) {
+      throw new GatewayError(
+        `Sesi WhatsApp gagal dibuat ulang: ${messageOf(removed.body) || `HTTP ${removed.status}`}`,
+        removed.status >= 400 && removed.status < 600 ? removed.status : 502,
+      );
+    }
+    existing = null;
   }
 
   if (!existing) {
@@ -290,7 +316,7 @@ export async function startSession(id: string): Promise<GatewaySessionState> {
     }
     if (state?.rawStatus === "FAILED") {
       throw new GatewayError(
-        "Sesi WhatsApp gagal dimulai oleh gateway. Sesi sudah dibuat ulang; silakan coba sekali lagi.",
+        "Sesi WhatsApp gagal dimulai oleh gateway setelah dibuat ulang. Periksa kondisi gateway lalu coba lagi.",
         502,
       );
     }
@@ -313,7 +339,34 @@ export async function startSession(id: string): Promise<GatewaySessionState> {
 /** Poll status. Does not fetch the QR (only startSession does, since it's short-lived). */
 export async function sessionStatus(id: string): Promise<GatewaySessionState> {
   const state = await findSession(id);
-  return state ?? { status: "disconnected", qr: null, phone: null, battery: null };
+  return state ?? { status: "disconnected", authStep: null, qr: null, phone: null, battery: null };
+}
+
+export async function getPasskeyChallenge(id: string): Promise<Record<string, unknown>> {
+  return call(`/api/${encodeURIComponent(id)}/auth/passkey/challenge`);
+}
+
+export async function submitPasskeyAssertion(
+  id: string,
+  assertion: Record<string, unknown>,
+): Promise<void> {
+  await call(`/api/${encodeURIComponent(id)}/auth/passkey`, {
+    method: "POST",
+    body: JSON.stringify(assertion),
+  });
+}
+
+export async function getPasskeyConfirmation(id: string): Promise<string> {
+  const raw = await call(`/api/${encodeURIComponent(id)}/auth/passkey/confirmation`);
+  const code = raw["code"];
+  if (typeof code !== "string" || !code.trim()) {
+    throw new GatewayError("Gateway tidak mengembalikan kode konfirmasi passkey.", 502);
+  }
+  return code.trim();
+}
+
+export async function confirmPasskey(id: string): Promise<void> {
+  await call(`/api/${encodeURIComponent(id)}/auth/passkey/confirm`, { method: "POST" });
 }
 
 export async function logoutSession(id: string): Promise<void> {
@@ -457,21 +510,79 @@ export async function requestPairingCode(id: string, phone: string): Promise<str
     throw new GatewayError("Nomor telepon tidak valid untuk pemasangan dengan kode.", 400);
   }
 
-  // The session must be running (SCAN_QR_CODE) before a code can be issued.
-  await startSession(id);
+  const cooldownKey = `${id}:${digits}`;
+  const blockedUntil = pairingCooldowns.get(cooldownKey) ?? 0;
+  if (blockedUntil > Date.now()) {
+    const minutes = Math.max(1, Math.ceil((blockedUntil - Date.now()) / 60_000));
+    throw new GatewayError(
+      `Permintaan kode masih dibatasi WhatsApp. Coba lagi sekitar ${minutes} menit lagi atau gunakan QR.`,
+      429,
+    );
+  }
 
-  const raw = await call(`/api/${encodeURIComponent(id)}/auth/request-code`, {
-    method: "POST",
-    // Mengosongkan method meminta kode pairing web yang ditampilkan di aplikasi.
-    // Nilai "sms"/"voice" adalah alur registrasi OTP yang berbeda.
-    body: JSON.stringify({ phoneNumber: digits }),
-  });
+  // Keep a healthy SCAN_QR_CODE session alive. Recreating it for every click
+  // burns WhatsApp's request-code quota and quickly causes rate-overlimit.
+  // Only FAILED sessions need to be discarded before starting again.
+  const existing = await findSession(id);
+  if (existing?.status === "connected") {
+    throw new GatewayError("Perangkat ini sudah terhubung. Putuskan terlebih dahulu untuk memasangkan ulang.", 409);
+  }
+  if (existing?.rawStatus === "FAILED") {
+    const stopped = await request(`/api/sessions/${encodeURIComponent(id)}/stop`, { method: "POST" });
+    if (stopped.status < 200 || (stopped.status >= 300 && stopped.status !== 404)) {
+      throw new GatewayError(
+        `Sesi pairing lama gagal dihentikan: ${messageOf(stopped.body) || `HTTP ${stopped.status}`}`,
+        stopped.status >= 400 && stopped.status < 600 ? stopped.status : 502,
+      );
+    }
+    const removed = await request(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (removed.status < 200 || (removed.status >= 300 && removed.status !== 404)) {
+      throw new GatewayError(
+        `Sesi pairing lama gagal direset: ${messageOf(removed.body) || `HTTP ${removed.status}`}`,
+        removed.status >= 400 && removed.status < 600 ? removed.status : 502,
+      );
+    }
+  }
+
+  // A stopped/new session must reach SCAN_QR_CODE before a code can be issued.
+  // startSession is idempotent and returns immediately for a ready session.
+  const ready = await startSession(id);
+  if (ready.status === "connected") {
+    throw new GatewayError("Perangkat ini sudah terhubung.", 409);
+  }
+
+  let raw: Record<string, unknown>;
+  try {
+    raw = await call(`/api/${encodeURIComponent(id)}/auth/request-code`, {
+      method: "POST",
+      // Mengosongkan method meminta kode pairing web yang ditampilkan di aplikasi.
+      // Nilai "sms"/"voice" adalah alur registrasi OTP yang berbeda.
+      body: JSON.stringify({ phoneNumber: digits }),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // WhatsApp membatasi jumlah permintaan kode per nomor dalam waktu singkat.
+    if (/rate-overlimit|429/i.test(message)) {
+      pairingCooldowns.set(cooldownKey, Date.now() + PAIRING_COOLDOWN_MS);
+      throw new GatewayError(
+        "WhatsApp sementara memblokir permintaan kode karena terlalu sering dicoba. Jangan minta kode berulang; tunggu setidaknya 60 menit sejak percobaan terakhir, lalu coba sekali lagi atau gunakan QR.",
+        429,
+      );
+    }
+    throw err;
+  }
 
   const code = raw["code"] ?? raw["pairingCode"] ?? raw["data"];
-  if (typeof code === "string" && code.trim()) return code.trim();
+  if (typeof code === "string" && code.trim()) {
+    pairingCooldowns.delete(cooldownKey);
+    return code.trim();
+  }
   if (code && typeof code === "object") {
     const nested = (code as Record<string, unknown>)["code"];
-    if (typeof nested === "string" && nested.trim()) return nested.trim();
+    if (typeof nested === "string" && nested.trim()) {
+      pairingCooldowns.delete(cooldownKey);
+      return nested.trim();
+    }
   }
   throw new GatewayError(
     "Gateway tidak mengembalikan kode pemasangan. Pastikan gateway mendukung pairing dengan kode.",

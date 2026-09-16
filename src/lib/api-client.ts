@@ -3,6 +3,8 @@ import type {
   DispatchPayload,
   DispatchResult,
   PairingCodeResponse,
+  PasskeyChallengeResponse,
+  PasskeyConfirmationResponse,
   SessionGatewayResponse,
 } from "@/types/wa";
 
@@ -27,12 +29,14 @@ async function authFetch<T>(url: string, init?: RequestInit): Promise<T> {
     json = null;
   }
   if (!res.ok) {
-    throw new Error(
+    const error = new Error(
       json?.error ??
         (res.status === 502 || res.status === 503
           ? "Gateway WhatsApp tidak dapat dihubungi. Periksa alamat gateway di menu Admin."
           : `Permintaan gagal (${res.status})`),
     );
+    Object.assign(error, { status: res.status });
+    throw error;
   }
   if (!json) throw new Error("Server memberi balasan yang tidak dikenali.");
   return json;
@@ -55,6 +59,24 @@ export const requestPairingCode = (id: string, phone: string) =>
     method: "POST",
     body: JSON.stringify({ action: "pair-code", phone }),
   });
+
+const pairingStep = <T>(id: string, body: Record<string, unknown>) =>
+  authFetch<T>(`/api/session/${id}`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+
+export const requestPasskeyChallenge = (id: string) =>
+  pairingStep<PasskeyChallengeResponse>(id, { action: "passkey-challenge" });
+
+export const submitPasskeyAssertion = (id: string, assertion: Record<string, unknown>) =>
+  pairingStep<{ ok: boolean }>(id, { action: "passkey-submit", assertion });
+
+export const requestPasskeyConfirmation = (id: string) =>
+  pairingStep<PasskeyConfirmationResponse>(id, { action: "passkey-confirmation" });
+
+export const confirmPasskey = (id: string) =>
+  pairingStep<{ ok: boolean }>(id, { action: "passkey-confirm" });
 
 /** Enqueue / process / control a campaign. */
 export const dispatchCampaign = (payload: DispatchPayload) =>

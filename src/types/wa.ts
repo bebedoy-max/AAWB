@@ -129,8 +129,17 @@ export interface PairingCodeResponse {
 export interface SessionGatewayResponse {
   id: string;
   status: WaSessionStatus;
+  auth_step?: "pairing" | "passkey" | "confirmation" | null;
   qr_string: string | null;
   phone_number: string | null;
   battery_level: number | null;
   last_ping: string | null;
+}
+
+export interface PasskeyChallengeResponse {
+  challenge: Record<string, unknown>;
+}
+
+export interface PasskeyConfirmationResponse {
+  code: string;
 }
