@@ -75,12 +75,12 @@ function Settings() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Ruang kerja</CardTitle>
-            <CardDescription>Ditampilkan di seluruh dasbor broadcast Anda.</CardDescription>
+            <CardTitle className="text-base">Akun</CardTitle>
+            <CardDescription>Nama Anda yang ditampilkan di aplikasi.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="org">Nama organisasi</Label>
+              <Label htmlFor="org">Nama</Label>
               <Input id="org" value={org} onChange={(e) => setOrg(e.target.value)} />
             </div>
             <div className="space-y-1.5">
@@ -107,30 +107,6 @@ function Settings() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Gateway WhatsApp</CardTitle>
-            <CardDescription>
-              Perangkat, pemasangan QR, dan semua broadcast dijalankan melalui server Baileys Anda.
-              Alamat dan kuncinya disimpan dengan aman.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p className="text-muted-foreground">
-              Server Baileys Anda harus menyediakan alamat berikut:
-            </p>
-            <p className="rounded-lg border bg-muted/40 p-3 font-mono text-xs">
-              POST /sessions/:id/start · GET /sessions/:id/status · POST /sessions/:id/logout
-            </p>
-            <p className="rounded-lg border bg-muted/40 p-3 font-mono text-xs">
-              POST /sessions/:id/messages — {"{ to, text, mediaUrl? }"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Antrean diproses otomatis setiap menit, sehingga kampanye terjadwal tetap dikirim
-              setelah halaman ini ditutup.
-            </p>
-          </CardContent>
-        </Card>
       </div>
     </>
   );

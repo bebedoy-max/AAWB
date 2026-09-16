@@ -9,6 +9,7 @@ export type AppRole = "super_admin" | "admin" | "member";
 
 export interface MemberRow {
   user_id: string;
+  name: string;
   email: string;
   role: AppRole;
   created_at: string;
@@ -154,6 +155,13 @@ export const listMembers = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
 
     const { data: roleRows } = await (supabaseAdmin as any).from("user_roles").select("user_id,role");
+    const { data: profileRows } = await (supabaseAdmin as any)
+      .from("profiles")
+      .select("user_id,organization_name");
+    const nameMap = new Map<string, string>();
+    for (const p of (profileRows ?? []) as { user_id: string; organization_name: string | null }[]) {
+      if (p.organization_name) nameMap.set(p.user_id, p.organization_name);
+    }
     const roleMap = new Map<string, AppRole[]>();
     for (const r of (roleRows ?? []) as { user_id: string; role: AppRole }[]) {
       roleMap.set(r.user_id, [...(roleMap.get(r.user_id) ?? []), r.role]);
@@ -162,6 +170,12 @@ export const listMembers = createServerFn({ method: "GET" })
     return users.users
       .map((u) => ({
         user_id: u.id,
+        name:
+          nameMap.get(u.id) ??
+          ((u.user_metadata?.["organization_name"] ??
+            u.user_metadata?.["full_name"] ??
+            u.user_metadata?.["name"]) as string | undefined) ??
+          "—",
         email: u.email ?? "(tanpa email)",
         role: highest(roleMap.get(u.id) ?? []),
         created_at: u.created_at,
@@ -207,4 +221,42 @@ export const isGatewayConfigured = createServerFn({ method: "GET" })
       .eq("id", "global")
       .maybeSingle();
     return { configured: Boolean(data?.wa_gateway_url) };
+  });
+
+/** Setel ulang kata sandi seorang anggota (super admin). */
+export const resetMemberPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string; password: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    const password = (input.password ?? "").trim();
+    if (password.length < 8) throw new Error("Kata sandi baru minimal 8 karakter.");
+    return { userId: input.userId, password };
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
+      password: data.password,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Hapus akun seorang anggota beserta perannya (super admin). */
+export const deleteMember = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    return input;
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    if (data.userId === context.userId) {
+      throw new Error("Anda tidak dapat menghapus akun Anda sendiri.");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await (supabaseAdmin as any).from("user_roles").delete().eq("user_id", data.userId);
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
   });

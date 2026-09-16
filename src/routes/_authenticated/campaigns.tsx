@@ -11,8 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Progress } from "@/components/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -47,6 +47,14 @@ export const Route = createFileRoute("/_authenticated/campaigns")({
 
 const STEPS = ["Pengirim", "Penerima", "Pesan", "Keamanan"] as const;
 
+const SPEED_OPTIONS = [
+  { value: "kilat", label: "Kilat", description: "Real-time, hampir tanpa jeda (tercepat)", min: 1, max: 1 },
+  { value: "brutal", label: "Brutal", description: "1–3 detik", min: 1, max: 3 },
+  { value: "santai", label: "Santai", description: "4–6 detik", min: 4, max: 6 },
+  { value: "slow", label: "Slow", description: "15–20 detik", min: 15, max: 20 },
+  { value: "siput", label: "Siput", description: "30–50 detik", min: 30, max: 50 },
+] as const;
+
 function Campaigns() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -56,8 +64,8 @@ function Campaigns() {
     session_id: "",
     group_id: "all",
     template_id: "",
-    min_delay: 5,
-    max_delay: 15,
+    min_delay: 4,
+    max_delay: 6,
     batch_limit: 100,
     scheduled_at: "",
   });
@@ -171,6 +179,10 @@ function Campaigns() {
   });
 
   const selectedTemplate = templates?.find((t) => t.id === draft.template_id);
+  const selectedSpeed =
+    SPEED_OPTIONS.find(
+      (option) => option.min === draft.min_delay && option.max === draft.max_delay,
+    )?.value ?? "santai";
 
   return (
     <>
@@ -362,26 +374,33 @@ function Campaigns() {
 
           {step === 3 ? (
             <div className="space-y-5">
-              <div>
-                <div className="flex items-center justify-between">
-                  <Label>Jeda acak antar pesan</Label>
-                  <span className="text-sm text-muted-foreground">
-                    {draft.min_delay}–{draft.max_delay}s
-                  </span>
-                </div>
-                <Slider
-                  className="mt-3"
-                  min={1}
-                  max={60}
-                  step={1}
-                  value={[draft.min_delay, draft.max_delay]}
-                  onValueChange={([min, max]) =>
-                    setDraft({ ...draft, min_delay: min ?? 5, max_delay: max ?? 15 })
-                  }
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Rentang yang lebih lebar terlihat lebih alami dan mengurangi risiko pemblokiran.
-                </p>
+              <div className="space-y-2.5">
+                <Label>Pilih kecepatan blast</Label>
+                <RadioGroup
+                  value={selectedSpeed}
+                  onValueChange={(value) => {
+                    const option = SPEED_OPTIONS.find((item) => item.value === value);
+                    if (!option) return;
+                    setDraft({ ...draft, min_delay: option.min, max_delay: option.max });
+                  }}
+                  className="gap-2"
+                >
+                  {SPEED_OPTIONS.map((option) => (
+                    <Label
+                      key={option.value}
+                      htmlFor={`speed-${option.value}`}
+                      className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2.5 transition-colors hover:bg-accent/50 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                    >
+                      <RadioGroupItem id={`speed-${option.value}`} value={option.value} />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold leading-5">{option.label}</span>
+                        <span className="block text-xs font-normal leading-5 text-muted-foreground">
+                          {option.description}
+                        </span>
+                      </span>
+                    </Label>
+                  ))}
+                </RadioGroup>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cp-batch">Batas per batch</Label>

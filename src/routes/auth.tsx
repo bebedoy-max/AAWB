@@ -73,7 +73,7 @@ function AuthPage() {
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/verifikasi`,
-        data: { organization_name: org || "Organisasi Saya" },
+        data: { organization_name: org || "Pengguna" },
       },
     });
     setLoading(false);
@@ -152,12 +152,12 @@ function AuthPage() {
 
               <TabsContent value="signup" className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="org">Organisasi</Label>
+                  <Label htmlFor="org">Nama</Label>
                   <Input
                     id="org"
                     value={org}
                     onChange={(e) => setOrg(e.target.value)}
-                    placeholder="Nama organisasi"
+                    placeholder="Nama lengkap Anda"
                   />
                 </div>
                 <div className="space-y-1.5">

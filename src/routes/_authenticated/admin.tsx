@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { ShieldCheck, PlugZap } from "lucide-react";
+import { ShieldCheck, PlugZap, KeyRound, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,9 +18,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  deleteMember,
   getGatewaySettings,
   getMyRole,
   listMembers,
+  resetMemberPassword,
   saveGatewaySettings,
   setMemberRole,
   testGateway,
@@ -55,6 +75,12 @@ function AdminPage() {
   const runTest = useServerFn(testGateway);
   const fetchMembers = useServerFn(listMembers);
   const changeRole = useServerFn(setMemberRole);
+  const resetPassword = useServerFn(resetMemberPassword);
+  const removeMember = useServerFn(deleteMember);
+
+  const [resetTarget, setResetTarget] = useState<{ id: string; email: string } | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null);
 
   const { data: me, isLoading: roleLoading } = useQuery({
     queryKey: ["my-role"],
@@ -105,6 +131,26 @@ function AdminPage() {
     mutationFn: (vars: { userId: string; role: AppRole }) => changeRole({ data: vars }),
     onSuccess: () => {
       toast.success("Peran pengguna diperbarui");
+      queryClient.invalidateQueries({ queryKey: ["members"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const doReset = useMutation({
+    mutationFn: (vars: { userId: string; password: string }) => resetPassword({ data: vars }),
+    onSuccess: () => {
+      toast.success("Kata sandi pengguna berhasil disetel ulang");
+      setResetTarget(null);
+      setNewPassword("");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const doDelete = useMutation({
+    mutationFn: (userId: string) => removeMember({ data: { userId } }),
+    onSuccess: () => {
+      toast.success("Pengguna berhasil dihapus");
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["members"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -218,15 +264,18 @@ function AdminPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Nama</th>
                       <th className="py-2 pr-4 font-medium">Email</th>
                       <th className="py-2 pr-4 font-medium">Terdaftar</th>
                       <th className="py-2 pr-4 font-medium">Terakhir masuk</th>
-                      <th className="py-2 font-medium">Peran</th>
+                      <th className="py-2 pr-4 font-medium">Peran</th>
+                      <th className="py-2 font-medium">Tindakan</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(members ?? []).map((m) => (
                       <tr key={m.user_id} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-medium">{m.name}</td>
                         <td className="py-2 pr-4">{m.email}</td>
                         <td className="py-2 pr-4 text-muted-foreground">
                           {new Date(m.created_at).toLocaleDateString("id-ID")}
@@ -236,7 +285,7 @@ function AdminPage() {
                             ? new Date(m.last_sign_in_at).toLocaleDateString("id-ID")
                             : "—"}
                         </td>
-                        <td className="py-2">
+                        <td className="py-2 pr-4">
                           <Select
                             value={m.role}
                             onValueChange={(role) =>
@@ -253,11 +302,33 @@ function AdminPage() {
                             </SelectContent>
                           </Select>
                         </td>
+                        <td className="py-2">
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setNewPassword("");
+                                setResetTarget({ id: m.user_id, email: m.email });
+                              }}
+                            >
+                              <KeyRound className="mr-1 size-3.5" /> Reset sandi
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => setDeleteTarget({ id: m.user_id, email: m.email })}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                     {members && members.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                        <td colSpan={6} className="py-6 text-center text-muted-foreground">
                           Belum ada pengguna.
                         </td>
                       </tr>
@@ -269,6 +340,60 @@ function AdminPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={Boolean(resetTarget)} onOpenChange={(o) => !o && setResetTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Setel ulang kata sandi</DialogTitle>
+            <DialogDescription>
+              Tentukan kata sandi baru untuk {resetTarget?.email}. Beri tahu penggunanya agar
+              segera menggantinya.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="new-pass">Kata sandi baru</Label>
+            <Input
+              id="new-pass"
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Minimal 8 karakter"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setResetTarget(null)}>
+              Batal
+            </Button>
+            <Button
+              disabled={doReset.isPending}
+              onClick={() =>
+                resetTarget && doReset.mutate({ userId: resetTarget.id, password: newPassword })
+              }
+            >
+              Simpan kata sandi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus pengguna ini?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Akun {deleteTarget?.email} akan dihapus permanen beserta perannya.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && doDelete.mutate(deleteTarget.id)}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

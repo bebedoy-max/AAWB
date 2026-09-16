@@ -24,6 +24,11 @@ export function sanitizePhone(input: string, countryCode = "62"): string {
   if (digits.startsWith("0")) return cc + digits.replace(/^0+/, "");
   if (digits.startsWith(cc)) return digits;
 
+  // Indonesian mobile numbers are commonly entered without the leading zero
+  // (812..., 823...). Treat those as national numbers before trying to infer
+  // another country's calling code such as South Korea's 82.
+  if (cc === "62" && digits.startsWith("8")) return cc + digits;
+
   // Already international for another country (e.g. 4479..., 15551234567).
   const guessed = countryFromNumber(digits);
   if (guessed && digits.length >= guessed.dial.length + 7) return digits;
@@ -134,6 +139,63 @@ export function renderTemplate(content: string, vars: Record<string, string>): s
 export function buildMessageBody(content: string, vars: Record<string, string>): string {
   return resolveSpintax(renderTemplate(content, vars)).trim();
 }
+
+/* ------------------------------------------------------------------ *
+ * Tombol klik yang ditulis langsung di dalam kolom pesan.
+ * Format token: [[tombol:Teks|https://tujuan]]
+ * ------------------------------------------------------------------ */
+
+export const BUTTON_TOKEN_PATTERN = /\[\[tombol:([^|\]]+)\|([^\]]+)\]\]/gi;
+
+export function buttonToken(text: string, url: string): string {
+  return `[[tombol:${text}|${url}]]`;
+}
+
+export type MessagePart =
+  | { kind: "text"; text: string }
+  | { kind: "button"; text: string; url: string };
+
+/** Memecah isi pesan menjadi potongan teks dan tombol sesuai urutan penulisan. */
+export function parseMessageParts(content: string): MessagePart[] {
+  const parts: MessagePart[] = [];
+  const source = content ?? "";
+  const re = new RegExp(BUTTON_TOKEN_PATTERN.source, "gi");
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source))) {
+    if (m.index > last) parts.push({ kind: "text", text: source.slice(last, m.index) });
+    parts.push({ kind: "button", text: (m[1] ?? "").trim(), url: (m[2] ?? "").trim() });
+    last = m.index + m[0].length;
+  }
+  if (last < source.length) parts.push({ kind: "text", text: source.slice(last) });
+  return parts;
+}
+
+/** Tombol yang ditulis di dalam pesan, berurutan sesuai posisinya. */
+export function extractInlineButtons(content: string): Array<{ text: string; url: string }> {
+  return parseMessageParts(content)
+    .filter((p): p is { kind: "button"; text: string; url: string } => p.kind === "button")
+    .filter((p) => p.text && p.url);
+}
+
+/** Isi pesan tanpa token tombol (dipakai saat tombol dikirim secara native). */
+export function stripButtonTokens(content: string): string {
+  return (content ?? "")
+    .replace(new RegExp(BUTTON_TOKEN_PATTERN.source, "gi"), "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Isi pesan dengan token diganti tautan di posisi aslinya (mode cadangan). */
+export function inlineButtonsAsText(content: string): string {
+  return (content ?? "")
+    .replace(new RegExp(BUTTON_TOKEN_PATTERN.source, "gi"), (_m, t: string, u: string) =>
+      `\u{1F449} ${t.trim()}: ${u.trim()}`,
+    )
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 
 /** Random anti-ban delay, in seconds, between min and max. */
 export function randomDelay(min: number, max: number): number {

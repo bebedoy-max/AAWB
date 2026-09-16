@@ -14,6 +14,12 @@
  */
 
 import type { MediaType, TemplateButton, WaSessionStatus } from "@/types/wa";
+import {
+  extractInlineButtons,
+  inlineButtonsAsText,
+  stripButtonTokens,
+} from "@/lib/whatsapp";
+
 
 export interface GatewaySessionState {
   status: WaSessionStatus;
@@ -187,17 +193,6 @@ async function findSession(id: string): Promise<InternalGatewaySessionState | nu
   };
 }
 
-async function deleteSession(id: string): Promise<void> {
-  const res = await request(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
-  if (res.status === 404) return;
-  if (res.status < 200 || res.status >= 300) {
-    throw new GatewayError(
-      `Sesi gagal tidak dapat dibuat ulang: ${messageOf(res.body) || `HTTP ${res.status}`}`,
-      res.status >= 400 && res.status < 600 ? res.status : 502,
-    );
-  }
-}
-
 /** GET /api/{id}/auth/qr?format=raw — only valid while status is SCAN_QR_CODE. */
 async function fetchQr(id: string): Promise<string | null> {
   const res = await request(`/api/${encodeURIComponent(id)}/auth/qr?format=raw`);
@@ -234,12 +229,20 @@ export async function startSession(id: string): Promise<GatewaySessionState> {
 
   if (existing?.status === "connected") return existing;
 
-  // WAHA tidak dapat memulai ulang sesi berstatus FAILED. Hapus hanya sesi
-  // gateway yang rusak lalu buat ulang dengan id yang sama; baris aplikasi
-  // dan nama perangkat tetap dipertahankan.
+  // Preserve the stored WhatsApp credentials when a session crashes. A clean
+  // stop lets WAHA reset the engine without deleting the paired session.
   if (existing?.rawStatus === "FAILED") {
-    await deleteSession(id);
-    existing = null;
+    const stopped = await request(`/api/sessions/${encodeURIComponent(id)}/stop`, {
+      method: "POST",
+    });
+    if (stopped.status >= 200 && stopped.status < 300) {
+      existing = await findSession(id);
+    } else {
+      throw new GatewayError(
+        `Sesi WhatsApp gagal dipulihkan: ${messageOf(stopped.body) || `HTTP ${stopped.status}`}`,
+        stopped.status >= 400 && stopped.status < 600 ? stopped.status : 502,
+      );
+    }
   }
 
   if (!existing) {
@@ -340,20 +343,28 @@ export async function sendMessage(params: {
   buttons?: TemplateButton[] | null;
 }): Promise<{ id: string | null }> {
   const chatId = toChatId(params.to);
-  const buttons = (params.buttons ?? []).filter((b) => b.text && b.url).slice(0, 3);
+  const inline = extractInlineButtons(params.text);
+  const buttons = [...(params.buttons ?? []), ...inline]
+    .filter((b) => b.text && b.url)
+    .slice(0, 3) as TemplateButton[];
+  // Teks tanpa token tombol (saat tombol dikirim native) dan versi cadangan
+  // yang menaruh tautan persis di posisi token.
+  const cleanText = inline.length ? stripButtonTokens(params.text) : params.text;
+  const fallbackText = inline.length ? inlineButtonsAsText(params.text) : params.text;
   const mediaUrl = params.mediaUrl?.trim() || null;
   const mediaType: MediaType = params.mediaType ?? (mediaUrl ? "image" : "text");
 
   // Attachment + buttons: send the media (with its caption) first, then the
   // interactive message carrying the buttons.
   if (buttons.length && mediaUrl && mediaType !== "text") {
-    await sendMessage({ ...params, buttons: null });
+    await sendMessage({ ...params, text: fallbackText, buttons: null });
     return sendMessage({
       ...params,
       mediaUrl: null,
       mediaType: "text",
       text: params.footerText?.trim() || "Pilih tombol di bawah 👇",
       footerText: null,
+      buttons,
     });
   }
 
@@ -366,17 +377,18 @@ export async function sendMessage(params: {
           session: params.sessionId,
           chatId,
           header: "",
-          body: params.text,
+          body: cleanText,
           footer: params.footerText ?? "",
           buttons: buttons.map((b) => ({ type: "url", text: b.text, url: b.url })),
         }),
       });
       return { id: readMessageId(raw) };
     } catch {
-      // Engine without button support: fall back to plain text with the links.
+      // Engine without button support: fall back to plain text with the links
+      // kept at the position the user wrote them.
       const appended = [
-        params.text,
-        ...buttons.map((b) => `\u{1F449} ${b.text}: ${b.url}`),
+        fallbackText,
+        ...(inline.length ? [] : buttons.map((b) => `\u{1F449} ${b.text}: ${b.url}`)),
         params.footerText ?? "",
       ]
         .filter(Boolean)
@@ -389,7 +401,8 @@ export async function sendMessage(params: {
     }
   }
 
-  const caption = [params.text, params.footerText ?? ""].filter(Boolean).join("\n\n");
+  const caption = [fallbackText, params.footerText ?? ""].filter(Boolean).join("\n\n");
+
 
   if (!mediaUrl || mediaType === "text") {
     const raw = await call("/api/sendText", {
