@@ -13,13 +13,17 @@
  * Session status values returned by WAHA: STOPPED | STARTING | SCAN_QR_CODE | WORKING | FAILED
  */
 
-import type { WaSessionStatus } from "@/types/wa";
+import type { MediaType, TemplateButton, WaSessionStatus } from "@/types/wa";
 
 export interface GatewaySessionState {
   status: WaSessionStatus;
   qr: string | null;
   phone: string | null;
   battery: number | null;
+}
+
+interface InternalGatewaySessionState extends GatewaySessionState {
+  rawStatus: string;
 }
 
 export class GatewayError extends Error {
@@ -139,7 +143,7 @@ async function call(path: string, init?: RequestInit): Promise<Record<string, un
   if (res.status < 200 || res.status >= 300) {
     throw new GatewayError(
       `Kesalahan gateway: ${messageOf(res.body) || `HTTP ${res.status}`}`,
-      res.status === 404 ? 404 : 502,
+      res.status >= 400 && res.status < 600 ? res.status : 502,
     );
   }
   return (res.body && typeof res.body === "object" ? res.body : {}) as Record<string, unknown>;
@@ -149,7 +153,14 @@ async function call(path: string, init?: RequestInit): Promise<Record<string, un
 function normalizeStatus(rawStatus: unknown): WaSessionStatus {
   const s = String(rawStatus ?? "").toUpperCase();
   if (s === "WORKING") return "connected";
-  if (s === "STARTING" || s === "SCAN_QR_CODE") return "connecting";
+  if (
+    s === "STARTING" ||
+    s === "SCAN_QR_CODE" ||
+    s === "PASSKEY_REQUIRED" ||
+    s === "PASSKEY_CONFIRMATION_REQUIRED"
+  ) {
+    return "connecting";
+  }
   return "disconnected"; // STOPPED, FAILED, atau tidak dikenal
 }
 
@@ -158,7 +169,7 @@ function digits(value: unknown): string | null {
 }
 
 /** GET /api/sessions/{id} — returns null when the gateway has no such session. */
-async function findSession(id: string): Promise<GatewaySessionState | null> {
+async function findSession(id: string): Promise<InternalGatewaySessionState | null> {
   const res = await request(`/api/sessions/${encodeURIComponent(id)}`);
   if (res.status === 404) return null;
   if (res.status < 200 || res.status >= 300) {
@@ -166,12 +177,25 @@ async function findSession(id: string): Promise<GatewaySessionState | null> {
   }
   const body = (res.body ?? {}) as Record<string, unknown>;
   const me = (body["me"] ?? {}) as Record<string, unknown>;
+  const rawStatus = String(body["status"] ?? "").toUpperCase();
   return {
-    status: normalizeStatus(body["status"]),
+    status: normalizeStatus(rawStatus),
     qr: null, // WAHA never returns the QR inline; fetch it separately (see fetchQr()).
     phone: digits(me["id"]),
     battery: null, // Not exposed by WAHA's session payload.
+    rawStatus,
   };
+}
+
+async function deleteSession(id: string): Promise<void> {
+  const res = await request(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (res.status === 404) return;
+  if (res.status < 200 || res.status >= 300) {
+    throw new GatewayError(
+      `Sesi gagal tidak dapat dibuat ulang: ${messageOf(res.body) || `HTTP ${res.status}`}`,
+      res.status >= 400 && res.status < 600 ? res.status : 502,
+    );
+  }
 }
 
 /** GET /api/{id}/auth/qr?format=raw — only valid while status is SCAN_QR_CODE. */
@@ -206,9 +230,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * that status before fetching it.
  */
 export async function startSession(id: string): Promise<GatewaySessionState> {
-  const existing = await findSession(id);
+  let existing = await findSession(id);
 
   if (existing?.status === "connected") return existing;
+
+  // WAHA tidak dapat memulai ulang sesi berstatus FAILED. Hapus hanya sesi
+  // gateway yang rusak lalu buat ulang dengan id yang sama; baris aplikasi
+  // dan nama perangkat tetap dipertahankan.
+  if (existing?.rawStatus === "FAILED") {
+    await deleteSession(id);
+    existing = null;
+  }
 
   if (!existing) {
     // Session doesn't exist yet on the gateway: create it (starts STOPPED).
@@ -224,30 +256,48 @@ export async function startSession(id: string): Promise<GatewaySessionState> {
     }
   }
 
-  // (Re)start it — safe to call even if it's already STARTING/WORKING.
-  const started = await request(`/api/sessions/${encodeURIComponent(id)}/start`, {
-    method: "POST",
-  });
-  if (started.status < 200 || started.status >= 300) {
-    const msg = messageOf(started.body);
-    // "already exists"/"already started"-type responses are fine to ignore.
-    if (!/already|working|starting/i.test(msg)) {
-      throw new GatewayError(`Kesalahan gateway: ${msg || `HTTP ${started.status}`}`, 502);
+  if (existing?.rawStatus !== "STARTING" && existing?.rawStatus !== "SCAN_QR_CODE") {
+    const started = await request(`/api/sessions/${encodeURIComponent(id)}/start`, {
+      method: "POST",
+    });
+    if (started.status < 200 || started.status >= 300) {
+      const msg = messageOf(started.body);
+      // "already exists"/"already started"-type responses are fine to ignore.
+      if (!/already|working|starting/i.test(msg)) {
+        throw new GatewayError(
+          `Kesalahan gateway: ${msg || `HTTP ${started.status}`}`,
+          started.status >= 400 && started.status < 600 ? started.status : 502,
+        );
+      }
     }
   }
 
-  // Poll for SCAN_QR_CODE (or WORKING, if it reconnects from a saved session).
-  let state: GatewaySessionState | null = null;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  // STARTING belum siap menerima request-code. Tunggu status mentah WAHA
+  // benar-benar SCAN_QR_CODE (atau WORKING jika sesi lama tersambung kembali).
+  let state: InternalGatewaySessionState | null = null;
+  for (let attempt = 0; attempt < 20; attempt++) {
     state = await findSession(id);
-    if (state && (state.status === "connected" || state.status === "connecting")) break;
+    if (
+      state &&
+      ["WORKING", "SCAN_QR_CODE", "PASSKEY_REQUIRED", "PASSKEY_CONFIRMATION_REQUIRED"].includes(
+        state.rawStatus,
+      )
+    ) {
+      break;
+    }
+    if (state?.rawStatus === "FAILED") {
+      throw new GatewayError(
+        "Sesi WhatsApp gagal dimulai oleh gateway. Sesi sudah dibuat ulang; silakan coba sekali lagi.",
+        502,
+      );
+    }
     await sleep(700);
   }
 
-  if (!state) {
+  if (!state || !["WORKING", "SCAN_QR_CODE", "PASSKEY_REQUIRED", "PASSKEY_CONFIRMATION_REQUIRED"].includes(state.rawStatus)) {
     throw new GatewayError(
-      "Gateway tidak dapat memulai sesi pemasangan baru. Silakan coba lagi sebentar lagi.",
-      502,
+      `Gateway belum siap untuk pemasangan (status: ${state?.rawStatus || "tidak diketahui"}). Silakan coba lagi.`,
+      504,
     );
   }
 
@@ -284,31 +334,134 @@ export async function sendMessage(params: {
   to: string;
   text: string;
   mediaUrl?: string | null;
+  mediaType?: MediaType | null;
+  mediaFilename?: string | null;
+  footerText?: string | null;
+  buttons?: TemplateButton[] | null;
 }): Promise<{ id: string | null }> {
-  const isImage = Boolean(params.mediaUrl);
-  const path = isImage ? "/api/sendImage" : "/api/sendText";
-  const body = isImage
-    ? {
-        session: params.sessionId,
-        chatId: toChatId(params.to),
-        caption: params.text,
-        file: { url: params.mediaUrl },
-      }
-    : {
-        session: params.sessionId,
-        chatId: toChatId(params.to),
-        text: params.text,
-      };
+  const chatId = toChatId(params.to);
+  const buttons = (params.buttons ?? []).filter((b) => b.text && b.url).slice(0, 3);
+  const mediaUrl = params.mediaUrl?.trim() || null;
+  const mediaType: MediaType = params.mediaType ?? (mediaUrl ? "image" : "text");
+
+  // Attachment + buttons: send the media (with its caption) first, then the
+  // interactive message carrying the buttons.
+  if (buttons.length && mediaUrl && mediaType !== "text") {
+    await sendMessage({ ...params, buttons: null });
+    return sendMessage({
+      ...params,
+      mediaUrl: null,
+      mediaType: "text",
+      text: params.footerText?.trim() || "Pilih tombol di bawah 👇",
+      footerText: null,
+    });
+  }
+
+  // Interactive URL buttons: WAHA exposes them through /api/sendButtons.
+  if (buttons.length) {
+    try {
+      const raw = await call("/api/sendButtons", {
+        method: "POST",
+        body: JSON.stringify({
+          session: params.sessionId,
+          chatId,
+          header: "",
+          body: params.text,
+          footer: params.footerText ?? "",
+          buttons: buttons.map((b) => ({ type: "url", text: b.text, url: b.url })),
+        }),
+      });
+      return { id: readMessageId(raw) };
+    } catch {
+      // Engine without button support: fall back to plain text with the links.
+      const appended = [
+        params.text,
+        ...buttons.map((b) => `\u{1F449} ${b.text}: ${b.url}`),
+        params.footerText ?? "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      const raw = await call("/api/sendText", {
+        method: "POST",
+        body: JSON.stringify({ session: params.sessionId, chatId, text: appended }),
+      });
+      return { id: readMessageId(raw) };
+    }
+  }
+
+  const caption = [params.text, params.footerText ?? ""].filter(Boolean).join("\n\n");
+
+  if (!mediaUrl || mediaType === "text") {
+    const raw = await call("/api/sendText", {
+      method: "POST",
+      body: JSON.stringify({ session: params.sessionId, chatId, text: caption }),
+    });
+    return { id: readMessageId(raw) };
+  }
+
+  const path =
+    mediaType === "image"
+      ? "/api/sendImage"
+      : mediaType === "video"
+        ? "/api/sendVideo"
+        : mediaType === "audio"
+          ? "/api/sendVoice"
+          : "/api/sendFile";
+
+  const file: Record<string, string> = { url: mediaUrl };
+  if (params.mediaFilename) file["filename"] = params.mediaFilename;
+
+  const body: Record<string, unknown> = {
+    session: params.sessionId,
+    chatId,
+    file,
+  };
+  if (mediaType !== "audio") body["caption"] = caption;
 
   const raw = await call(path, { method: "POST", body: JSON.stringify(body) });
+  return { id: readMessageId(raw) };
+}
 
-  // WAHA's message id shape can vary slightly by engine (NOWEB/GOWS/WEBJS);
-  // try the common shapes defensively.
+/** WAHA's message id shape varies by engine (NOWEB/GOWS/WEBJS). */
+function readMessageId(raw: Record<string, unknown>): string | null {
   const idField = raw["id"];
-  if (typeof idField === "string") return { id: idField };
+  if (typeof idField === "string") return idField;
   if (idField && typeof idField === "object") {
     const serialized = (idField as Record<string, unknown>)["_serialized"];
-    if (typeof serialized === "string") return { id: serialized };
+    if (typeof serialized === "string") return serialized;
   }
-  return { id: null };
+  return null;
+}
+
+/**
+ * Pairing by code: WAHA's POST /api/{session}/auth/request-code returns an
+ * 8-character code the user types into WhatsApp (Perangkat tertaut ->
+ * Tautkan dengan nomor telepon).
+ */
+export async function requestPairingCode(id: string, phone: string): Promise<string> {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 8) {
+    throw new GatewayError("Nomor telepon tidak valid untuk pemasangan dengan kode.", 400);
+  }
+
+  // The session must be running (SCAN_QR_CODE) before a code can be issued.
+  await startSession(id);
+
+  const raw = await call(`/api/${encodeURIComponent(id)}/auth/request-code`, {
+    method: "POST",
+    // Mengosongkan method meminta kode pairing web yang ditampilkan di aplikasi.
+    // Nilai "sms"/"voice" adalah alur registrasi OTP yang berbeda.
+    body: JSON.stringify({ phoneNumber: digits }),
+  });
+
+  const code = raw["code"] ?? raw["pairingCode"] ?? raw["data"];
+  if (typeof code === "string" && code.trim()) return code.trim();
+  if (code && typeof code === "object") {
+    const nested = (code as Record<string, unknown>)["code"];
+    if (typeof nested === "string" && nested.trim()) return nested.trim();
+  }
+  throw new GatewayError(
+    "Gateway tidak mengembalikan kode pemasangan. Pastikan gateway mendukung pairing dengan kode.",
+    502,
+  );
 }

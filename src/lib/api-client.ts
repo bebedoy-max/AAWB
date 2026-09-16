@@ -1,5 +1,10 @@
 import { supabase } from "@/integrations/supabase/my-client";
-import type { DispatchPayload, DispatchResult, SessionGatewayResponse } from "@/types/wa";
+import type {
+  DispatchPayload,
+  DispatchResult,
+  PairingCodeResponse,
+  SessionGatewayResponse,
+} from "@/types/wa";
 
 async function authFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const { data } = await supabase.auth.getSession();
@@ -12,8 +17,24 @@ async function authFetch<T>(url: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   });
-  const json = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(json?.error ?? `Request failed (${res.status})`);
+  // Server bisa membalas HTML (halaman error) saat gateway bermasalah,
+  // jadi baca teks dulu lalu coba parse JSON.
+  const text = await res.text();
+  let json: (T & { error?: string }) | null = null;
+  try {
+    json = text ? (JSON.parse(text) as T & { error?: string }) : null;
+  } catch {
+    json = null;
+  }
+  if (!res.ok) {
+    throw new Error(
+      json?.error ??
+        (res.status === 502 || res.status === 503
+          ? "Gateway WhatsApp tidak dapat dihubungi. Periksa alamat gateway di menu Admin."
+          : `Permintaan gagal (${res.status})`),
+    );
+  }
+  if (!json) throw new Error("Server memberi balasan yang tidak dikenali.");
   return json;
 }
 
@@ -26,6 +47,13 @@ export const sessionAction = (id: string, action: "start" | "reconnect" | "disco
   authFetch<SessionGatewayResponse>(`/api/session/${id}`, {
     method: "POST",
     body: JSON.stringify({ action }),
+  });
+
+/** Ask the gateway for an 8-character pairing code for this phone number. */
+export const requestPairingCode = (id: string, phone: string) =>
+  authFetch<PairingCodeResponse>(`/api/session/${id}`, {
+    method: "POST",
+    body: JSON.stringify({ action: "pair-code", phone }),
   });
 
 /** Enqueue / process / control a campaign. */

@@ -6,7 +6,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { backoffMs } from "@/lib/whatsapp";
 import { GatewayError, sendMessage } from "@/lib/wa-gateway.server";
-import type { CampaignStatus, QueuedMessage } from "@/types/wa";
+import type { CampaignStatus, MediaType, QueuedMessage, TemplateButton } from "@/types/wa";
 
 export const MAX_ATTEMPTS = 3;
 
@@ -16,6 +16,10 @@ export interface CampaignRow {
   session_id: string | null;
   status: CampaignStatus;
   media_url: string | null;
+  media_type?: MediaType | null;
+  media_filename?: string | null;
+  footer_text?: string | null;
+  buttons_json?: TemplateButton[] | null;
 }
 
 export interface TickResult {
@@ -91,6 +95,10 @@ export async function processCampaignTick(
         to: item.recipient_phone,
         text: item.message_body,
         mediaUrl: campaign.media_url,
+        mediaType: campaign.media_type ?? null,
+        mediaFilename: campaign.media_filename ?? null,
+        footerText: campaign.footer_text ?? null,
+        buttons: campaign.buttons_json ?? null,
       });
       await supabase
         .from("message_queue")

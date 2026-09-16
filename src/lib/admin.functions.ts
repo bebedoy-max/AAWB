@@ -194,3 +194,17 @@ export const setMemberRole = createServerFn({ method: "POST" })
     if (ins.error) throw new Error(ins.error.message);
     return { ok: true };
   });
+
+/** Cek ringan: apakah gateway WhatsApp sudah dikonfigurasi (boleh diakses semua user login). */
+export const isGatewayConfigured = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async (): Promise<{ configured: boolean }> => {
+    if (process.env["WA_GATEWAY_URL"]) return { configured: true };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await (supabaseAdmin as any)
+      .from("app_settings")
+      .select("wa_gateway_url")
+      .eq("id", "global")
+      .maybeSingle();
+    return { configured: Boolean(data?.wa_gateway_url) };
+  });

@@ -1,11 +1,23 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { isGatewayConfigured } from "@/lib/admin.functions";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, RefreshCw, Power, QrCode, BatteryMedium, Trash2, Smartphone } from "lucide-react";
+import {
+  Plus,
+  RefreshCw,
+  Power,
+  QrCode,
+  BatteryMedium,
+  Trash2,
+  Smartphone,
+  KeyRound,
+  Copy,
+} from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/integrations/supabase/my-client";
-import { getSessionState, sessionAction } from "@/lib/api-client";
+import { getSessionState, requestPairingCode, sessionAction } from "@/lib/api-client";
 import { PageHeader } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +32,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatPhoneDisplay } from "@/lib/whatsapp";
+import { PhoneInput } from "@/components/phone-input";
+import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
+import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
 import type { WaSession } from "@/types/wa";
 
 export const Route = createFileRoute("/_authenticated/devices")({
@@ -58,6 +72,10 @@ function Devices() {
   const [addOpen, setAddOpen] = useState(false);
   const [name, setName] = useState("");
   const [qrSessionId, setQrSessionId] = useState<string | null>(null);
+  const [codeSessionId, setCodeSessionId] = useState<string | null>(null);
+  const [codeCountry, setCodeCountry] = useState(DEFAULT_COUNTRY_ISO);
+  const [codePhone, setCodePhone] = useState("");
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
 
   const { data: sessions } = useQuery({
     queryKey: ["wa-sessions"],
@@ -76,21 +94,30 @@ function Devices() {
 
   // Poll the gateway while the QR modal is open.
   useEffect(() => {
-    if (!qrSessionId) return;
+    const watchedId = qrSessionId ?? codeSessionId;
+    if (!watchedId) return;
     const timer = setInterval(async () => {
       try {
-        const state = await getSessionState(qrSessionId);
+        const state = await getSessionState(watchedId);
         queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
         if (state.status === "connected") {
           toast.success("Perangkat berhasil dipasangkan");
           setQrSessionId(null);
+          setCodeSessionId(null);
+          setPairingCode(null);
         }
       } catch {
         /* keep polling */
       }
     }, 2500);
     return () => clearInterval(timer);
-  }, [qrSessionId, queryClient]);
+  }, [qrSessionId, codeSessionId, queryClient]);
+
+  const checkGateway = useServerFn(isGatewayConfigured);
+  const { data: gateway } = useQuery({
+    queryKey: ["gateway-configured"],
+    queryFn: () => checkGateway(),
+  });
 
   const createSession = useMutation({
     mutationFn: async () => {
@@ -125,6 +152,27 @@ function Devices() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const pairWithCode = useMutation({
+    mutationFn: async () => {
+      if (!codeSessionId) throw new Error("Perangkat belum dipilih");
+      const phone = sanitizePhone(codePhone, countryByIso(codeCountry).dial);
+      if (phone.length < 8) throw new Error("Masukkan nomor WhatsApp yang valid");
+      return requestPairingCode(codeSessionId, phone);
+    },
+    onSuccess: (res) => {
+      setPairingCode(res.code);
+      queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const openCodeDialog = (sessionId: string, phone: string | null) => {
+    setCodeSessionId(sessionId);
+    setPairingCode(null);
+    setCodePhone(phone ?? "");
+    setCodeCountry(DEFAULT_COUNTRY_ISO);
+  };
+
   const disconnect = useMutation({
     mutationFn: (id: string) => sessionAction(id, "disconnect"),
     onSuccess: () => {
@@ -155,6 +203,20 @@ function Devices() {
           </Button>
         }
       />
+
+      {gateway && !gateway.configured && (
+        <Card className="mb-4 border-destructive/40 bg-destructive/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+            <p>
+              Gateway WhatsApp belum diatur, sehingga perangkat tidak bisa dipasangkan. Isi alamat
+              gateway terlebih dahulu.
+            </p>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin">Buka pengaturan Admin</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {(sessions ?? []).map((session) => (
@@ -201,6 +263,15 @@ function Devices() {
                     <QrCode className="mr-1 size-3.5" /> Pasangkan via QR
                   </Button>
                 )}
+                {session.status !== "connected" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openCodeDialog(session.id, session.phone_number)}
+                  >
+                    <KeyRound className="mr-1 size-3.5" /> Pasangkan via kode
+                  </Button>
+                ) : null}
                 <Button
                   size="sm"
                   variant="outline"
@@ -280,6 +351,62 @@ function Devices() {
               onClick={() => activeQrSession && startPairing.mutate(activeQrSession.id)}
             >
               <RefreshCw className="mr-1 size-3.5" /> Perbarui QR
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!codeSessionId}
+        onOpenChange={(o) => {
+          if (!o) {
+            setCodeSessionId(null);
+            setPairingCode(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pasangkan dengan kode</DialogTitle>
+            <DialogDescription>
+              Masukkan nomor WhatsApp perangkat ini, lalu buka WhatsApp → Perangkat tertaut →
+              Tautkan dengan nomor telepon dan ketik kode yang muncul.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1.5">
+            <Label>Nomor WhatsApp</Label>
+            <PhoneInput
+              country={codeCountry}
+              onCountryChange={setCodeCountry}
+              value={codePhone}
+              onChange={setCodePhone}
+            />
+          </div>
+
+          {pairingCode ? (
+            <div className="space-y-2 rounded-lg border bg-muted/40 p-4 text-center">
+              <p className="text-xs text-muted-foreground">Kode pemasangan</p>
+              <p className="font-mono text-2xl font-semibold tracking-[0.3em]">{pairingCode}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void navigator.clipboard.writeText(pairingCode);
+                  toast.success("Kode disalin");
+                }}
+              >
+                <Copy className="mr-1 size-3.5" /> Salin kode
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Kode berlaku beberapa menit. Status diperbarui otomatis.
+              </p>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button onClick={() => pairWithCode.mutate()} disabled={pairWithCode.isPending}>
+              {pairingCode ? "Minta kode baru" : "Minta kode"}
             </Button>
           </DialogFooter>
         </DialogContent>

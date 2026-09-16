@@ -67,14 +67,21 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
           if (contactsError) return json({ error: contactsError.message }, 400);
           if (!contacts?.length) return json({ error: "Tidak ada kontak dalam daftar penerima ini" }, 400);
 
-          let template = { content: "", media_url: null as string | null };
+          let template = {
+            content: "",
+            media_url: null as string | null,
+            media_type: "text" as string,
+            media_filename: null as string | null,
+            footer_text: null as string | null,
+            buttons_json: [] as unknown,
+          };
           if (campaign.template_id) {
             const { data: tpl } = await supabase
               .from("templates")
-              .select("content,media_url")
+              .select("content,media_url,media_type,media_filename,footer_text,buttons_json")
               .eq("id", campaign.template_id)
               .maybeSingle();
-            if (tpl) template = tpl;
+            if (tpl) template = { ...template, ...(tpl as unknown as typeof template) };
           }
 
           const startAt = campaign.scheduled_at ? new Date(campaign.scheduled_at) : new Date();
@@ -106,7 +113,11 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
               status: campaign.scheduled_at ? "paused" : "running",
               total_targets: rows.length,
               media_url: template.media_url,
-            })
+              media_type: template.media_type ?? "text",
+              media_filename: template.media_filename,
+              footer_text: template.footer_text,
+              buttons_json: template.buttons_json ?? [],
+            } as never)
             .eq("id", campaign_id);
 
           return json({ ok: true, queued: rows.length, status: "running" });
@@ -122,6 +133,10 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
             session_id: campaign.session_id,
             status: campaign.status as CampaignStatus,
             media_url: campaign.media_url,
+            media_type: (campaign as unknown as Record<string, never>)["media_type"] ?? null,
+            media_filename: (campaign as unknown as Record<string, never>)["media_filename"] ?? null,
+            footer_text: (campaign as unknown as Record<string, never>)["footer_text"] ?? null,
+            buttons_json: (campaign as unknown as Record<string, never>)["buttons_json"] ?? null,
           },
           BATCH_PER_TICK,
         );

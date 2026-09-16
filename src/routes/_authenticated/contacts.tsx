@@ -6,6 +6,9 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { PageHeader } from "@/components/app-shell";
 import { CsvImporter, type ParsedContact } from "@/components/csv-importer";
+import { BulkPhoneImporter } from "@/components/bulk-phone-importer";
+import { PhoneInput } from "@/components/phone-input";
+import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -63,6 +66,7 @@ function Contacts() {
   const [contactOpen, setContactOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", group_id: "none" });
+  const [formCountry, setFormCountry] = useState(DEFAULT_COUNTRY_ISO);
   const [groupForm, setGroupForm] = useState({ name: "", description: "" });
 
   const { data: groups } = useQuery({
@@ -99,7 +103,7 @@ function Contacts() {
 
   const addContact = useMutation({
     mutationFn: async () => {
-      const phone = sanitizePhone(form.phone);
+      const phone = sanitizePhone(form.phone, countryByIso(formCountry).dial);
       if (!phone) throw new Error("Masukkan nomor telepon yang valid");
       const { data: user } = await supabase.auth.getUser();
       const { error } = await supabase.from("contacts").insert({
@@ -196,6 +200,10 @@ function Contacts() {
             <Button variant="outline" onClick={() => setGroupOpen(true)}>
               <FolderPlus className="mr-1 size-4" /> Grup baru
             </Button>
+            <BulkPhoneImporter
+              onImport={(rows) => importContacts.mutate(rows)}
+              existingPhones={contacts?.map((c) => c.phone) ?? []}
+            />
             <CsvImporter onImport={(rows) => importContacts.mutate(rows)} />
             <Button onClick={() => setContactOpen(true)}>
               <Plus className="mr-1 size-4" /> Tambah kontak
@@ -358,7 +366,9 @@ function Contacts() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Tambah kontak</DialogTitle>
-            <DialogDescription>Nomor otomatis diubah formatnya (08… menjadi 628…).</DialogDescription>
+            <DialogDescription>
+              Pilih kode negara lalu masukkan nomornya — format internasional otomatis.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -371,15 +381,17 @@ function Contacts() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="c-phone">Nomor telepon</Label>
-              <Input
+              <PhoneInput
                 id="c-phone"
+                country={formCountry}
+                onCountryChange={setFormCountry}
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="081234567890"
+                onChange={(phone) => setForm({ ...form, phone })}
               />
               {form.phone ? (
                 <p className="text-xs text-muted-foreground">
-                  Akan disimpan sebagai {sanitizePhone(form.phone) || "—"}
+                  Akan disimpan sebagai{" "}
+                  {sanitizePhone(form.phone, countryByIso(formCountry).dial) || "—"}
                 </p>
               ) : null}
             </div>

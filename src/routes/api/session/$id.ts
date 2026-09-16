@@ -60,15 +60,29 @@ export const Route = createFileRoute("/api/session/$id")({
         if (error) return json({ error: error.message }, 400);
         if (!row) return json({ error: "Session not found" }, 404);
 
-        const body = (await request.json().catch(() => ({}))) as { action?: string };
+        const body = (await request.json().catch(() => ({}))) as {
+          action?: string;
+          phone?: string;
+        };
         const action = body.action ?? "start";
 
-        const { startSession, logoutSession, GatewayError } = await import(
+        const { startSession, logoutSession, requestPairingCode, GatewayError } = await import(
           "@/lib/wa-gateway.server"
         );
         const now = new Date().toISOString();
 
         try {
+          if (action === "pair-code") {
+            const phone = (body.phone ?? "").replace(/\D/g, "");
+            if (!phone) return json({ error: "Nomor telepon wajib diisi" }, 400);
+            const code = await requestPairingCode(params.id, phone);
+            await supabase
+              .from("wa_sessions")
+              .update({ status: "connecting", updated_at: now })
+              .eq("id", params.id);
+            return json({ id: params.id, code, phone_number: phone });
+          }
+
           if (action === "disconnect") {
             await logoutSession(params.id);
             const patch = {
