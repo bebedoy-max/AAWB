@@ -36,7 +36,10 @@ function authErrorMessage(message: string): string {
   if (normalized.includes("user already registered")) return "Email ini sudah terdaftar.";
   if (normalized.includes("password should be")) return "Kata sandi belum memenuhi ketentuan keamanan.";
   if (normalized.includes("rate limit")) return "Terlalu banyak percobaan. Silakan tunggu beberapa saat.";
+  if (normalized.includes("confirmation email") || normalized.includes("sending"))
+    return "Server email belum dikonfigurasi, sehingga email konfirmasi gagal dikirim. Matikan konfirmasi email atau atur SMTP di server Anda.";
   return "Terjadi kendala. Silakan coba lagi.";
+
 }
 
 function AuthPage() {

@@ -23,6 +23,7 @@ import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authentica
 import { Route as ApiCampaignDispatchRouteImport } from './routes/api/campaign/dispatch'
 import { Route as ApiSessionIdRouteImport } from './routes/api/session/$id'
 import { Route as ApiPublicCronProcessQueueRouteImport } from './routes/api/public/cron/process-queue'
+import { Route as ApiPublicDbSplatRouteImport } from './routes/api/public/db/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -94,6 +95,11 @@ const ApiPublicCronProcessQueueRoute =
     path: '/api/public/cron/process-queue',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicDbSplatRoute = ApiPublicDbSplatRouteImport.update({
+  id: '/api/public/db/$',
+  path: '/api/public/db/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
+  '/api/public/db/$': typeof ApiPublicDbSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
+  '/api/public/db/$': typeof ApiPublicDbSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
+  '/api/public/db/$': typeof ApiPublicDbSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
+    | '/api/public/db/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
+    | '/api/public/db/$'
   id:
     | '__root__'
     | '/'
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
+    | '/api/public/db/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -198,6 +210,7 @@ export interface RootRouteChildren {
   ApiCampaignDispatchRoute: typeof ApiCampaignDispatchRoute
   ApiSessionIdRoute: typeof ApiSessionIdRoute
   ApiPublicCronProcessQueueRoute: typeof ApiPublicCronProcessQueueRoute
+  ApiPublicDbSplatRoute: typeof ApiPublicDbSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -300,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicCronProcessQueueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/db/$': {
+      id: '/api/public/db/$'
+      path: '/api/public/db/$'
+      fullPath: '/api/public/db/$'
+      preLoaderRoute: typeof ApiPublicDbSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -335,6 +355,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCampaignDispatchRoute: ApiCampaignDispatchRoute,
   ApiSessionIdRoute: ApiSessionIdRoute,
   ApiPublicCronProcessQueueRoute: ApiPublicCronProcessQueueRoute,
+  ApiPublicDbSplatRoute: ApiPublicDbSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

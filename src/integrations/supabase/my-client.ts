@@ -3,7 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 import { MY_SUPABASE_URL, MY_SUPABASE_PUBLISHABLE_KEY } from "./my-config";
 
-const SUPABASE_URL = MY_SUPABASE_URL;
+// In the browser we go through a same-origin proxy: the self-hosted instance is
+// HTTP-only and an HTTPS page cannot call it directly (mixed content).
+const SUPABASE_URL =
+  typeof window === "undefined" ? MY_SUPABASE_URL : `${window.location.origin}/api/public/db`;
 const SUPABASE_PUBLISHABLE_KEY = MY_SUPABASE_PUBLISHABLE_KEY;
 
 function isOpaqueApiKey(value: string): boolean {
