@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { MessageCircle, Loader2, CircleAlert } from "lucide-react";
+import { Loader2, CircleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { Button } from "@/components/ui/button";
@@ -9,15 +10,15 @@ import { Card, CardContent } from "@/components/ui/card";
 export const Route = createFileRoute("/verifikasi")({
   head: () => ({
     meta: [
-      { title: "Verifikasi Email — WBlast Suite Broadcast" },
+      { title: "Verifikasi Email — AAWB Suite Broadcast" },
       {
         name: "description",
-        content: "Menyelesaikan verifikasi alamat email akun WBlast Anda secara otomatis.",
+        content: "Menyelesaikan verifikasi alamat email akun AAWB Anda secara otomatis.",
       },
-      { property: "og:title", content: "Verifikasi Email — WBlast Suite Broadcast" },
+      { property: "og:title", content: "Verifikasi Email — AAWB Suite Broadcast" },
       {
         property: "og:description",
-        content: "Menyelesaikan verifikasi alamat email akun WBlast Anda secara otomatis.",
+        content: "Menyelesaikan verifikasi alamat email akun AAWB Anda secara otomatis.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -118,11 +119,8 @@ function VerifyPage() {
   return (
     <div className="flex min-h-screen items-center justify-center hero-gradient px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center justify-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <MessageCircle className="size-5" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">WBlast</span>
+        <div className="mb-6 flex justify-center">
+          <BrandLogo className="h-32" />
         </div>
 
         <Card>

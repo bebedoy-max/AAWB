@@ -1,21 +1,25 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Send, CheckCircle2, Smartphone, Clock } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Send, CheckCircle2, Smartphone, Clock, TrendingUp, Users } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { supabase } from "@/integrations/supabase/my-client";
 import { PageHeader } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { formatPhoneDisplay } from "@/lib/whatsapp";
+import { rupiah } from "@/lib/currency";
+import { getMyRewards } from "@/lib/rewards.functions";
 import type { QueuedMessage } from "@/types/wa";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Dashboard — WBlast" },
+      { title: "Dashboard — AAWB" },
       { name: "description", content: "Ringkasan kinerja pengiriman WhatsApp Anda." },
-      { property: "og:title", content: "Dashboard — WBlast" },
+      { property: "og:title", content: "Dashboard — AAWB" },
       { property: "og:description", content: "Ringkasan kinerja pengiriman WhatsApp Anda." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -53,6 +57,32 @@ function StatCard({
 
 function Dashboard() {
   const queryClient = useQueryClient();
+  const fetchRewards = useServerFn(getMyRewards);
+
+  const { data: rewards } = useQuery({
+    queryKey: ["my-rewards"],
+    queryFn: () => fetchRewards(),
+    refetchInterval: 20_000,
+  });
+
+  const chartData = useMemo(() => {
+    const ledger = rewards?.ledger ?? [];
+    const byDay = new Map<string, number>();
+    for (const l of ledger) {
+      const day = new Date(l.created_at).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+      });
+      byDay.set(day, (byDay.get(day) ?? 0) + Number(l.amount ?? 0));
+    }
+    let total = 0;
+    return Array.from(byDay.entries())
+      .reverse()
+      .map(([hari, jumlah]) => {
+        total += jumlah;
+        return { hari, jumlah: total };
+      });
+  }, [rewards?.ledger]);
 
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
@@ -149,15 +179,85 @@ function Dashboard() {
         />
       </div>
 
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <StatCard
+          icon={TrendingUp}
+          label="Total penghasilan"
+          value={rupiah(rewards?.total_earned)}
+          hint={`Sudah dicairkan ${rupiah(rewards?.total_withdrawn)}`}
+        />
+        <StatCard
+          icon={Users}
+          label="Bonus referal"
+          value={rupiah(rewards?.from_referral)}
+          hint={`Reward pesan ${rupiah(rewards?.from_messages)}`}
+        />
+      </div>
+
       <Card className="mt-4">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Kesehatan pengiriman</CardTitle>
+          <CardTitle className="text-base">Grafik penghasilan</CardTitle>
         </CardHeader>
         <CardContent>
-          <Progress value={stats?.deliveryRate ?? 0} className="h-2" />
-          <p className="mt-2 text-xs text-muted-foreground">
-            {stats?.sent ?? 0} terkirim · {stats?.failed ?? 0} gagal · {stats?.pending ?? 0} dalam antrean
-          </p>
+          {chartData.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Belum ada penghasilan. Grafik akan muncul setelah Anda mendapatkan reward.
+            </p>
+          ) : (
+            <ChartContainer
+              className="h-56 w-full"
+              config={{
+                jumlah: { label: "Penghasilan", color: "var(--primary)" },
+              }}
+            >
+              <AreaChart data={chartData} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradPenghasilan" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-jumlah)" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="var(--color-jumlah)" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} strokeDasharray="4 4" className="stroke-border" />
+                <XAxis
+                  dataKey="hari"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  fontSize={11}
+                  className="fill-muted-foreground"
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={56}
+                  fontSize={11}
+                  className="fill-muted-foreground"
+                  tickFormatter={(v: number) =>
+                    v >= 1000 ? `${Math.round(v / 1000)}rb` : String(v)
+                  }
+                />
+                <ChartTooltip
+                  content={({ active, payload, label }) =>
+                    active && payload?.length ? (
+                      <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
+                        <p className="text-muted-foreground">{label}</p>
+                        <p className="font-medium text-foreground">
+                          {rupiah(Number(payload[0]?.value ?? 0))}
+                        </p>
+                      </div>
+                    ) : null
+                  }
+                />
+                <Area
+                  type="monotone"
+                  dataKey="jumlah"
+                  stroke="var(--color-jumlah)"
+                  strokeWidth={2}
+                  fill="url(#gradPenghasilan)"
+                />
+              </AreaChart>
+            </ChartContainer>
+          )}
         </CardContent>
       </Card>
 

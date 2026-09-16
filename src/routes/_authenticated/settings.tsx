@@ -15,10 +15,10 @@ import type { Profile } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
     meta: [
-      { title: "Pengaturan — WBlast" },
-      { name: "description", content: "Atur ruang kerja dan tampilan WBlast." },
-      { property: "og:title", content: "Pengaturan — WBlast" },
-      { property: "og:description", content: "Atur ruang kerja dan tampilan WBlast." },
+      { title: "Pengaturan — AAWB" },
+      { name: "description", content: "Atur ruang kerja dan tampilan AAWB." },
+      { property: "og:title", content: "Pengaturan — AAWB" },
+      { property: "og:description", content: "Atur ruang kerja dan tampilan AAWB." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

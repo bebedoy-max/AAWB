@@ -43,9 +43,9 @@ import type { MediaType, Template, TemplateButton } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/templates")({
   head: () => ({
     meta: [
-      { title: "Template Pesan — WBlast" },
+      { title: "Template Pesan — AAWB" },
       { name: "description", content: "Buat template WhatsApp dengan media, emoji, dan tombol." },
-      { property: "og:title", content: "Template Pesan — WBlast" },
+      { property: "og:title", content: "Template Pesan — AAWB" },
       {
         property: "og:description",
         content: "Buat template WhatsApp dengan media, emoji, dan tombol tautan.",
@@ -367,12 +367,12 @@ function Templates() {
                 menaruhnya setelah teks mana pun.
               </p>
               {inlineButtons.map((b, i) => (
-                <div key={i} className="flex gap-2">
+                <div key={i} className="flex flex-wrap gap-2 sm:flex-nowrap">
                   <Input
                     value={b.text}
                     onChange={(e) => updateInlineButton(i, { text: e.target.value })}
                     placeholder="Contoh: Klik untuk klaim"
-                    className="w-40"
+                    className="w-full sm:w-40"
                   />
                   <Input
                     value={b.url}

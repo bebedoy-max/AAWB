@@ -13,12 +13,12 @@ import { getMyReferral } from "@/lib/rewards.functions";
 export const Route = createFileRoute("/_authenticated/referral")({
   head: () => ({
     meta: [
-      { title: "Referal — WBlast" },
+      { title: "Referal — AAWB" },
       {
         name: "description",
         content: "Undang anggota baru dan dapatkan bonus dari setiap pesan sukses tim Anda.",
       },
-      { property: "og:title", content: "Referal — WBlast" },
+      { property: "og:title", content: "Referal — AAWB" },
       {
         property: "og:description",
         content: "Bagikan kode undangan dan pantau bonus dari tim referal Anda.",
@@ -82,8 +82,10 @@ function ReferralPage() {
           <CardContent className="space-y-3">
             <div className="rounded-xl border bg-accent/40 p-4">
               <p className="text-xs uppercase text-muted-foreground">Kode referal</p>
-              <div className="mt-1 flex items-center gap-2">
-                <p className="text-2xl font-semibold tracking-widest">{data?.code ?? "······"}</p>
+              <div className="mt-1 flex min-w-0 items-center gap-2">
+                <p className="min-w-0 flex-1 truncate text-xl font-semibold tracking-widest sm:text-2xl">
+                  {data?.code ?? "······"}
+                </p>
                 <Button
                   size="icon"
                   variant="ghost"
@@ -147,18 +149,23 @@ function ReferralPage() {
             </p>
           ) : (
             data!.team.map((m) => (
-              <div key={m.user_id} className="flex items-center gap-3 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{m.name}</p>
+              <div
+                key={m.user_id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3 sm:flex-nowrap"
+              >
+                <div className="min-w-0 basis-full sm:basis-auto sm:flex-1">
+                  <p className="truncate text-sm font-medium">{m.name}</p>
                   <p className="truncate text-xs text-muted-foreground">
                     {m.email_masked} · bergabung {new Date(m.joined_at).toLocaleDateString("id-ID")}
                   </p>
                 </div>
-                <Badge variant="outline">Tingkat {m.level}</Badge>
-                <span className="w-24 text-right text-xs text-muted-foreground">
+                <Badge variant="outline" className="shrink-0">
+                  Tingkat {m.level}
+                </Badge>
+                <span className="shrink-0 text-xs text-muted-foreground sm:w-24 sm:text-right">
                   {m.messages_sent} pesan
                 </span>
-                <span className="w-28 text-right text-sm font-medium text-primary">
+                <span className="ml-auto shrink-0 text-sm font-medium text-primary sm:w-28 sm:text-right">
                   {rupiah(m.bonus)}
                 </span>
               </div>

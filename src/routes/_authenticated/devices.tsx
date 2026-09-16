@@ -40,9 +40,9 @@ import type { WaSession } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/devices")({
   head: () => ({
     meta: [
-      { title: "Perangkat WhatsApp — WBlast" },
+      { title: "Perangkat WhatsApp — AAWB" },
       { name: "description", content: "Kelola perangkat WhatsApp yang terhubung." },
-      { property: "og:title", content: "Perangkat WhatsApp — WBlast" },
+      { property: "og:title", content: "Perangkat WhatsApp — AAWB" },
       { property: "og:description", content: "Kelola perangkat WhatsApp yang terhubung." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

@@ -44,9 +44,9 @@ import type { Contact, ContactGroup } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/contacts")({
   head: () => ({
     meta: [
-      { title: "Kontak & Grup — WBlast" },
+      { title: "Kontak & Grup — AAWB" },
       { name: "description", content: "Kelola kontak dan grup penerima broadcast." },
-      { property: "og:title", content: "Kontak & Grup — WBlast" },
+      { property: "og:title", content: "Kontak & Grup — AAWB" },
       { property: "og:description", content: "Kelola kontak dan grup penerima broadcast." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -215,7 +215,7 @@ function Contacts() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] flex-1">
+            <div className="relative w-full min-w-0 flex-1 sm:min-w-[200px]">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -234,7 +234,7 @@ function Contacts() {
                 setPage(0);
               }}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Semua grup" />
               </SelectTrigger>
               <SelectContent>
@@ -252,7 +252,7 @@ function Contacts() {
             <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 p-2">
               <span className="px-1 text-sm">{selected.length} dipilih</span>
               <Select onValueChange={(v) => bulkAssign.mutate(v)}>
-                <SelectTrigger className="h-8 w-44">
+                <SelectTrigger className="h-8 w-full sm:w-44">
                   <SelectValue placeholder="Pindahkan ke grup" />
                 </SelectTrigger>
                 <SelectContent>

@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -55,10 +57,10 @@ import { AdminRewardSettings, AdminWithdrawals } from "@/components/admin-reward
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
-      { title: "Admin — WBlast" },
-      { name: "description", content: "Atur gateway WhatsApp dan peran pengguna WBlast." },
-      { property: "og:title", content: "Admin — WBlast" },
-      { property: "og:description", content: "Atur gateway WhatsApp dan peran pengguna WBlast." },
+      { title: "Admin — AAWB" },
+      { name: "description", content: "Atur gateway WhatsApp dan peran pengguna AAWB." },
+      { property: "og:title", content: "Admin — AAWB" },
+      { property: "og:description", content: "Atur gateway WhatsApp dan peran pengguna AAWB." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -193,169 +195,197 @@ function AdminPage() {
         }
       />
 
-      <div className="grid gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Gateway WhatsApp</CardTitle>
-            <CardDescription>
-              Alamat server wa-gateway dan kunci API-nya. Nilai ini dipakai untuk pemasangan QR dan
-              semua pengiriman pesan.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="gw-url">URL gateway</Label>
-                <Input
-                  id="gw-url"
-                  placeholder="https://gateway.domainanda.com"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="gw-key">API key</Label>
-                <Input
-                  id="gw-key"
-                  type="password"
-                  placeholder={
-                    settings?.has_api_key
-                      ? `Tersimpan: ${settings.api_key_masked} — isi untuk mengganti`
-                      : "Masukkan kunci API gateway"
-                  }
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                />
-              </div>
-            </div>
+      <Tabs defaultValue="gateway" className="space-y-4">
+        <TabsList
+          className={cn("grid h-auto w-full max-w-full", isSuper ? "grid-cols-4" : "grid-cols-3")}
+        >
+          <TabsTrigger value="gateway" className="px-1.5 text-xs sm:px-3 sm:text-sm">
+            Gateway
+          </TabsTrigger>
+          {isSuper ? (
+            <TabsTrigger value="reward" className="px-1.5 text-xs sm:px-3 sm:text-sm">
+              Reward
+            </TabsTrigger>
+          ) : null}
+          <TabsTrigger value="withdrawal" className="px-1.5 text-xs sm:px-3 sm:text-sm">
+            Penarikan
+          </TabsTrigger>
+          <TabsTrigger value="users" className="px-1.5 text-xs sm:px-3 sm:text-sm">
+            Pengguna
+          </TabsTrigger>
+        </TabsList>
 
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => save.mutate({})} disabled={save.isPending}>
-                Simpan
-              </Button>
-              <Button variant="outline" onClick={() => test.mutate()} disabled={test.isPending}>
-                <PlugZap className="mr-2 size-4" />
-                Uji koneksi
-              </Button>
-              {settings?.has_api_key ? (
-                <Button
-                  variant="ghost"
-                  onClick={() => save.mutate({ clearApiKey: true })}
-                  disabled={save.isPending}
-                >
-                  Hapus API key
+        <TabsContent value="gateway" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Gateway WhatsApp</CardTitle>
+              <CardDescription>
+                Alamat server wa-gateway dan kunci API-nya. Nilai ini dipakai untuk pemasangan QR dan
+                semua pengiriman pesan.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="gw-url">URL gateway</Label>
+                  <Input
+                    id="gw-url"
+                    placeholder="https://gateway.domainanda.com"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="gw-key">API key</Label>
+                  <Input
+                    id="gw-key"
+                    type="password"
+                    placeholder={
+                      settings?.has_api_key
+                        ? `Tersimpan: ${settings.api_key_masked} — isi untuk mengganti`
+                        : "Masukkan kunci API gateway"
+                    }
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => save.mutate({})} disabled={save.isPending}>
+                  Simpan
                 </Button>
-              ) : null}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Kunci API disimpan di database dan tidak pernah ditampilkan kembali secara utuh.
-            </p>
-          </CardContent>
-        </Card>
-
-        {isSuper ? <AdminRewardSettings /> : null}
-        <AdminWithdrawals />
-
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Pengguna & peran</CardTitle>
-            <CardDescription>
-              Akun pertama yang mendaftar otomatis menjadi Super Admin. Super Admin dapat menjadikan
-              anggota lain sebagai Admin atau Member.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!isSuper ? (
-              <p className="text-sm text-muted-foreground">
-                Hanya Super Admin yang dapat mengubah peran pengguna.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                      <th className="py-2 pr-4 font-medium">Nama</th>
-                      <th className="py-2 pr-4 font-medium">Email</th>
-                      <th className="py-2 pr-4 font-medium">Terdaftar</th>
-                      <th className="py-2 pr-4 font-medium">Terakhir masuk</th>
-                      <th className="py-2 pr-4 font-medium">Peran</th>
-                      <th className="py-2 font-medium">Tindakan</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(members ?? []).map((m) => (
-                      <tr
-                        key={m.user_id}
-                        className="cursor-pointer border-b last:border-0 hover:bg-accent/40"
-                        onClick={() => setDetailUser(m.user_id)}
-                      >
-                        <td className="py-2 pr-4 font-medium">{m.name}</td>
-                        <td className="py-2 pr-4">{m.email}</td>
-                        <td className="py-2 pr-4 text-muted-foreground">
-                          {new Date(m.created_at).toLocaleDateString("id-ID")}
-                        </td>
-                        <td className="py-2 pr-4 text-muted-foreground">
-                          {m.last_sign_in_at
-                            ? new Date(m.last_sign_in_at).toLocaleDateString("id-ID")
-                            : "—"}
-                        </td>
-                        <td className="py-2 pr-4" onClick={(e) => e.stopPropagation()}>
-                          <Select
-                            value={m.role}
-                            onValueChange={(role) =>
-                              updateRole.mutate({ userId: m.user_id, role: role as AppRole })
-                            }
-                          >
-                            <SelectTrigger className="w-40">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="super_admin">Super Admin</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="member">Member</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="py-2" onClick={(e) => e.stopPropagation()}>
-
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setNewPassword("");
-                                setResetTarget({ id: m.user_id, email: m.email });
-                              }}
-                            >
-                              <KeyRound className="mr-1 size-3.5" /> Reset sandi
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-destructive"
-                              onClick={() => setDeleteTarget({ id: m.user_id, email: m.email })}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {members && members.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-6 text-center text-muted-foreground">
-                          Belum ada pengguna.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                <Button variant="outline" onClick={() => test.mutate()} disabled={test.isPending}>
+                  <PlugZap className="mr-2 size-4" />
+                  Uji koneksi
+                </Button>
+                {settings?.has_api_key ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => save.mutate({ clearApiKey: true })}
+                    disabled={save.isPending}
+                  >
+                    Hapus API key
+                  </Button>
+                ) : null}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              <p className="text-xs text-muted-foreground">
+                Kunci API disimpan di database dan tidak pernah ditampilkan kembali secara utuh.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {isSuper ? (
+          <TabsContent value="reward" className="space-y-4">
+            <AdminRewardSettings />
+          </TabsContent>
+        ) : null}
+
+        <TabsContent value="withdrawal" className="space-y-4">
+          <AdminWithdrawals />
+        </TabsContent>
+
+        <TabsContent value="users" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Pengguna & peran</CardTitle>
+              <CardDescription>
+                Akun pertama yang mendaftar otomatis menjadi Super Admin. Super Admin dapat menjadikan
+                anggota lain sebagai Admin atau Member.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {!isSuper ? (
+                <p className="text-sm text-muted-foreground">
+                  Hanya Super Admin yang dapat mengubah peran pengguna.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">Nama</th>
+                        <th className="py-2 pr-4 font-medium">Email</th>
+                        <th className="py-2 pr-4 font-medium">Terdaftar</th>
+                        <th className="py-2 pr-4 font-medium">Terakhir masuk</th>
+                        <th className="py-2 pr-4 font-medium">Peran</th>
+                        <th className="py-2 font-medium">Tindakan</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(members ?? []).map((m) => (
+                        <tr
+                          key={m.user_id}
+                          className="cursor-pointer border-b last:border-0 hover:bg-accent/40"
+                          onClick={() => setDetailUser(m.user_id)}
+                        >
+                          <td className="py-2 pr-4 font-medium">{m.name}</td>
+                          <td className="py-2 pr-4">{m.email}</td>
+                          <td className="py-2 pr-4 text-muted-foreground">
+                            {new Date(m.created_at).toLocaleDateString("id-ID")}
+                          </td>
+                          <td className="py-2 pr-4 text-muted-foreground">
+                            {m.last_sign_in_at
+                              ? new Date(m.last_sign_in_at).toLocaleDateString("id-ID")
+                              : "—"}
+                          </td>
+                          <td className="py-2 pr-4" onClick={(e) => e.stopPropagation()}>
+                            <Select
+                              value={m.role}
+                              onValueChange={(role) =>
+                                updateRole.mutate({ userId: m.user_id, role: role as AppRole })
+                              }
+                            >
+                              <SelectTrigger className="w-full sm:w-40">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="super_admin">Super Admin</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="member">Member</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="py-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setNewPassword("");
+                                  setResetTarget({ id: m.user_id, email: m.email });
+                                }}
+                              >
+                                <KeyRound className="mr-1 size-3.5" /> Reset sandi
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive"
+                                onClick={() => setDeleteTarget({ id: m.user_id, email: m.email })}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {members && members.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-6 text-center text-muted-foreground">
+                            Belum ada pengguna.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={Boolean(resetTarget)} onOpenChange={(o) => !o && setResetTarget(null)}>
         <DialogContent>
