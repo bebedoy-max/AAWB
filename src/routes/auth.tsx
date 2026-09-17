@@ -104,16 +104,27 @@ function AuthPage() {
   };
 
   const googleSignIn = async () => {
-    // Google login runs against our own Supabase project, so the Google provider
-    // must be enabled there.
+    // Login/registrasi Google berjalan di Supabase milik sendiri, jadi provider
+    // Google harus diaktifkan di sana. Kode referal (bila ada) dibawa lewat
+    // penyimpanan lokal supaya tetap terpakai setelah kembali dari Google.
+    const code = ref.trim().toUpperCase();
+    if (code) localStorage.setItem("wblast_ref", code);
+    setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: { prompt: "select_account", access_type: "online" },
+      },
     });
     if (error) {
-      toast.error("Login Google belum aktif di database Anda. Aktifkan provider Google terlebih dahulu.");
+      setLoading(false);
+      toast.error(
+        "Login Google belum bisa dipakai. Pastikan provider Google sudah aktif di database Anda.",
+      );
     }
   };
+
 
   if (signupEmail) {
     return (

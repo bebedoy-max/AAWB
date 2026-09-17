@@ -44,7 +44,11 @@ function createMySupabaseClient() {
       storage: typeof window === "undefined" ? undefined : window.localStorage,
       persistSession: true,
       autoRefreshToken: true,
+      // Login Google memakai alur PKCE: kode di URL ditukar jadi sesi di browser.
+      flowType: "pkce",
+      detectSessionInUrl: true,
     },
+
   });
 }
 
