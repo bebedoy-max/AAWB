@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
+
 import {
   Dialog,
   DialogContent,
@@ -55,6 +57,9 @@ const SPEED_OPTIONS = [
   { value: "siput", label: "Siput", description: "30–50 detik", min: 30, max: 50 },
 ] as const;
 
+/** Opsi Anti Ban hanya tersedia pada kecepatan lambat. */
+const ANTI_BAN_SPEEDS: readonly string[] = ["slow", "siput"];
+
 function Campaigns() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -66,9 +71,10 @@ function Campaigns() {
     template_id: "",
     min_delay: 4,
     max_delay: 6,
-    
+    anti_ban: false,
     scheduled_at: "",
   });
+
 
   const { data: sessions } = useQuery({
     queryKey: ["wa-sessions"],
@@ -172,9 +178,12 @@ function Campaigns() {
           min_delay: draft.min_delay,
           max_delay: draft.max_delay,
           batch_limit: 100000,
+          anti_ban: draft.anti_ban,
+
           scheduled_at: draft.scheduled_at ? new Date(draft.scheduled_at).toISOString() : null,
           status: "draft",
-        })
+        } as never)
+
         .select()
         .single();
       if (error) throw error;
@@ -454,27 +463,66 @@ function Campaigns() {
                   onValueChange={(value) => {
                     const option = SPEED_OPTIONS.find((item) => item.value === value);
                     if (!option) return;
-                    setDraft({ ...draft, min_delay: option.min, max_delay: option.max });
+                    setDraft({
+                      ...draft,
+                      min_delay: option.min,
+                      max_delay: option.max,
+                      anti_ban: ANTI_BAN_SPEEDS.includes(option.value) ? draft.anti_ban : false,
+                    });
                   }}
                   className="gap-2"
                 >
-                  {SPEED_OPTIONS.map((option) => (
-                    <Label
-                      key={option.value}
-                      htmlFor={`speed-${option.value}`}
-                      className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2.5 transition-colors hover:bg-accent/50 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
-                    >
-                      <RadioGroupItem id={`speed-${option.value}`} value={option.value} />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold leading-5">{option.label}</span>
-                        <span className="block text-xs font-normal leading-5 text-muted-foreground">
-                          {option.description}
-                        </span>
-                      </span>
-                    </Label>
-                  ))}
+                  {SPEED_OPTIONS.map((option) => {
+                    const supportsAntiBan = ANTI_BAN_SPEEDS.includes(option.value);
+                    const active = selectedSpeed === option.value;
+                    return (
+                      <div
+                        key={option.value}
+                        className="rounded-md border border-border transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                      >
+                        <Label
+                          htmlFor={`speed-${option.value}`}
+                          className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-accent/50"
+                        >
+                          <RadioGroupItem id={`speed-${option.value}`} value={option.value} />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold leading-5">
+                              {option.label}
+                            </span>
+                            <span className="block text-xs font-normal leading-5 text-muted-foreground">
+                              {option.description}
+                            </span>
+                          </span>
+                        </Label>
+                        {supportsAntiBan ? (
+                          <div className="border-t border-border/60 px-3 py-2.5">
+                            <label className="flex cursor-pointer items-start gap-2.5">
+                              <Checkbox
+                                checked={active && draft.anti_ban}
+                                disabled={!active}
+                                onCheckedChange={(checked) =>
+                                  setDraft({ ...draft, anti_ban: checked === true })
+                                }
+                                className="mt-0.5"
+                              />
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium leading-5">Anti Ban</span>
+                                <span className="block text-xs leading-5 text-muted-foreground">
+                                  Jeda acak {option.min}–{option.max} detik, istirahat 2–5 menit
+                                  setiap 20–30 pesan, variasi isi pesan, urutan kontak diacak, dan
+                                  nomor yang membalas STOP/BERHENTI/UNSUB serta nomor tidak aktif
+                                  dilewati otomatis.
+                                </span>
+                              </span>
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </RadioGroup>
               </div>
+
 
 
               <div className="space-y-1.5">

@@ -74,6 +74,8 @@ export interface Campaign {
   min_delay: number;
   max_delay: number;
   batch_limit: number;
+  anti_ban?: boolean;
+
   scheduled_at: string | null;
   created_at: string;
 }

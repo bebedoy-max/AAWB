@@ -195,15 +195,13 @@ function AdminPage() {
         }
       />
 
-      <Tabs defaultValue={isSuper ? "gateway" : "withdrawal"} className="space-y-4">
+      <Tabs defaultValue="users" className="space-y-4">
         <TabsList
           className={cn("grid h-auto w-full max-w-full", isSuper ? "grid-cols-4" : "grid-cols-2")}
         >
-          {isSuper ? (
-            <TabsTrigger value="gateway" className="px-1.5 text-xs sm:px-3 sm:text-sm">
-              Gateway
-            </TabsTrigger>
-          ) : null}
+          <TabsTrigger value="users" className="px-1.5 text-xs sm:px-3 sm:text-sm">
+            Pengguna
+          </TabsTrigger>
           {isSuper ? (
             <TabsTrigger value="reward" className="px-1.5 text-xs sm:px-3 sm:text-sm">
               Reward
@@ -212,10 +210,13 @@ function AdminPage() {
           <TabsTrigger value="withdrawal" className="px-1.5 text-xs sm:px-3 sm:text-sm">
             Penarikan
           </TabsTrigger>
-          <TabsTrigger value="users" className="px-1.5 text-xs sm:px-3 sm:text-sm">
-            Pengguna
-          </TabsTrigger>
+          {isSuper ? (
+            <TabsTrigger value="gateway" className="px-1.5 text-xs sm:px-3 sm:text-sm">
+              Gateway
+            </TabsTrigger>
+          ) : null}
         </TabsList>
+
 
         {isSuper ? (
         <TabsContent value="gateway" className="space-y-4">

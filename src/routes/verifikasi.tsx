@@ -56,6 +56,12 @@ function VerifyPage() {
       // Supabase may report a failure straight in the URL.
       const urlError = hash.get("error_description") ?? query.get("error_description");
       if (urlError) {
+        // Tautan kadang dibuka dua kali; bila sesi sudah aktif, anggap berhasil.
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          navigate({ to: "/dashboard", replace: true });
+          return;
+        }
         setError(friendlyError(urlError));
         return;
       }
@@ -69,6 +75,13 @@ function VerifyPage() {
           refresh_token: refreshToken,
         });
         if (sessionError) {
+          // Klien mungkin sudah memproses tautan ini otomatis — cek sesi dulu.
+          const { data } = await supabase.auth.getSession();
+          if (data.session) {
+            window.history.replaceState(null, "", window.location.pathname);
+            finish();
+            return;
+          }
           setError(friendlyError(sessionError.message));
           return;
         }
@@ -82,6 +95,11 @@ function VerifyPage() {
       if (code) {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session) {
+            finish();
+            return;
+          }
           setError(friendlyError(exchangeError.message));
           return;
         }
@@ -95,6 +113,11 @@ function VerifyPage() {
         const type = (query.get("type") as OtpType | null) ?? "signup";
         const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: token, type });
         if (otpError) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session) {
+            finish();
+            return;
+          }
           setError(friendlyError(otpError.message));
           return;
         }

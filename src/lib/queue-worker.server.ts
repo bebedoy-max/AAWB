@@ -6,6 +6,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
+import { isInvalidNumberError } from "@/lib/anti-ban";
 import type { CampaignStatus, MediaType, QueuedMessage, TemplateButton } from "@/types/wa";
 
 export const MAX_ATTEMPTS = 3;
@@ -23,7 +24,9 @@ export interface CampaignRow {
   media_filename?: string | null;
   footer_text?: string | null;
   buttons_json?: TemplateButton[] | null;
+  anti_ban?: boolean | null;
 }
+
 
 export interface TickResult {
   processed: number;
@@ -235,9 +238,25 @@ export async function processCampaignTick(
             .update({ status: "failed", attempts, error_log: message })
             .eq("id", item.id);
           failed += 1;
+          // Anti Ban: nomor tidak valid / tidak aktif ditandai agar tidak
+          // dicoba terus-menerus pada kampanye berikutnya.
+          if (campaign.anti_ban && isInvalidNumberError(message)) {
+            await supabase
+              .from("suppression_list")
+              .upsert(
+                {
+                  user_id: campaign.user_id,
+                  phone: item.recipient_phone,
+                  reason: "invalid",
+                  note: message.slice(0, 300),
+                } as never,
+                { onConflict: "user_id,phone" },
+              );
+          }
         }
       }
     }
+
   }
 
   const { count: remaining } = await supabase
