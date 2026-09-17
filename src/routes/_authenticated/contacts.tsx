@@ -72,6 +72,7 @@ function Contacts() {
   const [groupForm, setGroupForm] = useState({ name: "", description: "" });
   const [editGroup, setEditGroup] = useState<ContactGroup | null>(null);
   const [editGroupForm, setEditGroupForm] = useState({ name: "", description: "" });
+  const [viewGroup, setViewGroup] = useState<ContactGroup | null>(null);
 
   const { data: groups } = useQuery({
     queryKey: ["contact-groups"],
@@ -204,6 +205,18 @@ function Contacts() {
       setSelected([]);
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
     },
+  });
+
+  const deleteContact = useMutation({
+    mutationFn: async (contactId: string) => {
+      const { error } = await supabase.from("contacts").delete().eq("id", contactId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Kontak berhasil dihapus");
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const groupName = (id: string | null) => groups?.find((g) => g.id === id)?.name;
@@ -455,7 +468,11 @@ function Contacts() {
                   </TableHeader>
                   <TableBody>
                     {(groups ?? []).map((g) => (
-                      <TableRow key={g.id}>
+                      <TableRow
+                        key={g.id}
+                        className="cursor-pointer"
+                        onClick={() => setViewGroup(g)}
+                      >
                         <TableCell className="font-medium">{g.name}</TableCell>
                         <TableCell className="text-muted-foreground">
                           {g.description || <span className="text-xs">—</span>}
@@ -467,7 +484,10 @@ function Contacts() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
+                          <div
+                            className="flex justify-end gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <Button
                               size="sm"
                               variant="ghost"
@@ -649,6 +669,66 @@ function Contacts() {
               Simpan perubahan
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={viewGroup !== null} onOpenChange={(open) => !open && setViewGroup(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Kontak di grup {viewGroup?.name}</DialogTitle>
+            <DialogDescription>
+              {(contacts ?? []).filter((c) => c.group_id === viewGroup?.id).length} kontak dalam
+              grup ini. Klik ikon tempat sampah untuk menghapus kontak.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nama</TableHead>
+                  <TableHead>Nomor telepon</TableHead>
+                  <TableHead className="w-16 text-right">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(contacts ?? [])
+                  .filter((c) => c.group_id === viewGroup?.id)
+                  .map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatPhoneDisplay(c.phone)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => {
+                            if (window.confirm(`Hapus kontak "${c.name}"?`)) {
+                              deleteContact.mutate(c.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                          <span className="sr-only">Hapus {c.name}</span>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                {(contacts ?? []).filter((c) => c.group_id === viewGroup?.id).length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={3}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
+                      Belum ada kontak di grup ini.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
         </DialogContent>
       </Dialog>
     </>

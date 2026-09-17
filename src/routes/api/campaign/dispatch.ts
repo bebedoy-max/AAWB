@@ -6,7 +6,7 @@ import type { CampaignStatus } from "@/types/wa";
 
 const payloadSchema = z.object({
   campaign_id: z.string().uuid(),
-  action: z.enum(["enqueue", "process", "pause", "resume", "abort"]),
+  action: z.enum(["enqueue", "process", "pause", "resume", "abort", "retry"]),
 });
 
 const BATCH_PER_TICK = 5;
@@ -35,7 +35,25 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
         if (campaignError) return json({ error: campaignError.message }, 400);
         if (!campaign) return json({ error: "Kampanye tidak ditemukan" }, 404);
 
+        if (action === "retry") {
+          // Kirim ulang semua pesan yang gagal atau tersangkut di "processing".
+          const { error: retryError } = await supabase
+            .from("message_queue")
+            .update({
+              status: "pending",
+              attempts: 0,
+              error_log: null,
+              scheduled_at: new Date().toISOString(),
+            })
+            .eq("campaign_id", campaign_id)
+            .in("status", ["failed", "processing"]);
+          if (retryError) return json({ error: retryError.message }, 400);
+          await supabase.from("campaigns").update({ status: "running" }).eq("id", campaign_id);
+          return json({ ok: true, status: "running" });
+        }
+
         if (action === "pause" || action === "resume" || action === "abort") {
+
           const status: CampaignStatus =
             action === "pause" ? "paused" : action === "resume" ? "running" : "failed";
           await supabase.from("campaigns").update({ status }).eq("id", campaign_id);

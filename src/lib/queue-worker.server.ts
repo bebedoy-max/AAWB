@@ -89,7 +89,18 @@ export async function processCampaignTick(
     };
   }
 
+  // Recover rows that were claimed by a tick that never finished (worker
+  // restart, timeout, closed browser tab). Without this the queue stalls
+  // forever because "processing" rows are never picked up again.
+  await supabase
+    .from("message_queue")
+    .update({ status: "pending" })
+    .eq("campaign_id", campaign.id)
+    .eq("status", "processing")
+    .lt("scheduled_at", new Date(Date.now() - 2 * 60 * 1000).toISOString());
+
   const { data: batch } = await supabase
+
     .from("message_queue")
     .select("*")
     .eq("campaign_id", campaign.id)
@@ -194,5 +205,13 @@ export async function processCampaignTick(
     await supabase.from("campaigns").update({ status }).eq("id", campaign.id);
   }
 
-  return { processed: queue.length, sent, failed, status };
+  let note: string | undefined;
+  if (waitingForSession) {
+    note = "Perangkat WhatsApp terputus saat pengiriman — menunggu tersambung kembali";
+  } else if (queue.length === 0 && (remaining ?? 0) > 0) {
+    note = "Menunggu jadwal pesan berikutnya";
+  }
+
+  return { processed: queue.length, sent, failed, status, ...(note ? { error: note } : {}) };
+
 }

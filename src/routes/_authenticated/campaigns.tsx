@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Pause, Square, Plus, ChevronLeft, ChevronRight, Rocket, Trash2 } from "lucide-react";
+import { Play, Pause, Square, Plus, ChevronLeft, ChevronRight, Rocket, Trash2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { dispatchCampaign } from "@/lib/api-client";
@@ -91,8 +91,10 @@ function Campaigns() {
       return (data ?? []) as Template[];
     },
   });
+  const [tickNotes, setTickNotes] = useState<Record<string, string | null>>({});
   const { data: campaigns } = useQuery({
     queryKey: ["campaigns"],
+
     refetchInterval: 6000,
     queryFn: async () => {
       const { data } = await supabase
@@ -127,9 +129,13 @@ function Campaigns() {
     const timer = setInterval(async () => {
       for (const c of running) {
         try {
-          await dispatchCampaign({ campaign_id: c.id, action: "process" });
-        } catch {
-          /* retry next tick */
+          const tick = await dispatchCampaign({ campaign_id: c.id, action: "process" });
+          setTickNotes((prev) => ({ ...prev, [c.id]: tick.error ?? null }));
+        } catch (err) {
+          setTickNotes((prev) => ({
+            ...prev,
+            [c.id]: err instanceof Error ? err.message : "Pengiriman tidak dapat dijalankan",
+          }));
         }
       }
       queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
@@ -137,6 +143,7 @@ function Campaigns() {
     }, 4000);
     return () => clearInterval(timer);
   }, [campaigns, queryClient]);
+
 
   const create = useMutation({
     mutationFn: async () => {
@@ -172,13 +179,16 @@ function Campaigns() {
   });
 
   const control = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "pause" | "resume" | "abort" }) =>
+    mutationFn: ({ id, action }: { id: string; action: "pause" | "resume" | "abort" | "retry" }) =>
       dispatchCampaign({ campaign_id: id, action }),
-    onSuccess: () => {
+    onSuccess: (_res, vars) => {
+      if (vars.action === "retry") toast.success("Pesan yang gagal dimasukkan kembali ke antrean");
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
@@ -239,6 +249,12 @@ function Campaigns() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   {p.sent} terkirim · {p.failed} gagal · {Math.max(0, p.total - p.sent - p.failed)} tersisa
                 </p>
+                {c.status === "running" && tickNotes[c.id] ? (
+                  <p className="mt-2 rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                    {tickNotes[c.id]}
+                  </p>
+                ) : null}
+
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button
                     size="sm"
@@ -264,6 +280,16 @@ function Campaigns() {
                   >
                     <Square className="mr-1 size-3.5" /> Batalkan
                   </Button>
+                  {p.failed > 0 ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => control.mutate({ id: c.id, action: "retry" })}
+                    >
+                      <RotateCcw className="mr-1 size-3.5" /> Kirim ulang gagal
+                    </Button>
+                  ) : null}
+
                   <Button
                     size="sm"
                     variant="ghost"
