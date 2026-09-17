@@ -195,7 +195,6 @@ function AdminPage() {
         }
       />
 
-<<<<<<< HEAD
       <Tabs defaultValue={isSuper ? "gateway" : "withdrawal"} className="space-y-4">
         <TabsList
           className={cn("grid h-auto w-full max-w-full", isSuper ? "grid-cols-4" : "grid-cols-2")}
@@ -205,15 +204,6 @@ function AdminPage() {
               Gateway
             </TabsTrigger>
           ) : null}
-=======
-      <Tabs defaultValue="gateway" className="space-y-4">
-        <TabsList
-          className={cn("grid h-auto w-full max-w-full", isSuper ? "grid-cols-4" : "grid-cols-3")}
-        >
-          <TabsTrigger value="gateway" className="px-1.5 text-xs sm:px-3 sm:text-sm">
-            Gateway
-          </TabsTrigger>
->>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
           {isSuper ? (
             <TabsTrigger value="reward" className="px-1.5 text-xs sm:px-3 sm:text-sm">
               Reward
@@ -227,10 +217,7 @@ function AdminPage() {
           </TabsTrigger>
         </TabsList>
 
-<<<<<<< HEAD
         {isSuper ? (
-=======
->>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
         <TabsContent value="gateway" className="space-y-4">
           <Card>
             <CardHeader>
@@ -291,10 +278,7 @@ function AdminPage() {
             </CardContent>
           </Card>
         </TabsContent>
-<<<<<<< HEAD
         ) : null}
-=======
->>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 
         {isSuper ? (
           <TabsContent value="reward" className="space-y-4">

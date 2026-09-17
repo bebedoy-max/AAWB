@@ -342,7 +342,6 @@ export async function sessionStatus(id: string): Promise<GatewaySessionState> {
   return state ?? { status: "disconnected", authStep: null, qr: null, phone: null, battery: null };
 }
 
-<<<<<<< HEAD
 /**
  * Recover an existing sending session without deleting its saved WhatsApp
  * identity. This is intentionally separate from the pairing flow: deleting a
@@ -384,8 +383,6 @@ export async function reconnectSession(id: string): Promise<GatewaySessionState>
   return state ?? { status: "disconnected", authStep: null, qr: null, phone: null, battery: null };
 }
 
-=======
->>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 export async function getPasskeyChallenge(id: string): Promise<Record<string, unknown>> {
   return call(`/api/${encodeURIComponent(id)}/auth/passkey/challenge`);
 }

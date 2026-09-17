@@ -112,10 +112,7 @@ function Settings() {
           </CardContent>
         </Card>
 
-<<<<<<< HEAD
         <TelegramCard />
-=======
->>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
       </div>
     </>
   );
