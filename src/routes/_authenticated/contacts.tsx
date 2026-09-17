@@ -1,11 +1,15 @@
 import { useMemo, useState } from "react";
+
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, FolderPlus } from "lucide-react";
+import { Plus, Search, Trash2, FolderPlus, Pencil, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { PageHeader } from "@/components/app-shell";
 import { CsvImporter, type ParsedContact } from "@/components/csv-importer";
+import { BulkPhoneImporter } from "@/components/bulk-phone-importer";
+import { PhoneInput } from "@/components/phone-input";
+import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,15 +39,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
 import type { Contact, ContactGroup } from "@/types/wa";
 
 export const Route = createFileRoute("/_authenticated/contacts")({
   head: () => ({
     meta: [
-      { title: "Kontak & Grup — WBlast" },
+      { title: "Kontak & Grup — AAWB" },
       { name: "description", content: "Kelola kontak dan grup penerima broadcast." },
-      { property: "og:title", content: "Kontak & Grup — WBlast" },
+      { property: "og:title", content: "Kontak & Grup — AAWB" },
       { property: "og:description", content: "Kelola kontak dan grup penerima broadcast." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -63,7 +68,10 @@ function Contacts() {
   const [contactOpen, setContactOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", group_id: "none" });
+  const [formCountry, setFormCountry] = useState(DEFAULT_COUNTRY_ISO);
   const [groupForm, setGroupForm] = useState({ name: "", description: "" });
+  const [editGroup, setEditGroup] = useState<ContactGroup | null>(null);
+  const [editGroupForm, setEditGroupForm] = useState({ name: "", description: "" });
 
   const { data: groups } = useQuery({
     queryKey: ["contact-groups"],
@@ -76,13 +84,24 @@ function Contacts() {
   const { data: contacts } = useQuery({
     queryKey: ["contacts"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("contacts")
-        .select("*")
-        .order("created_at", { ascending: false });
-      return (data ?? []) as Contact[];
+      // The Data API caps a single response at 1000 rows, so page through all.
+      const CHUNK = 1000;
+      const all: Contact[] = [];
+      for (let from = 0; ; from += CHUNK) {
+        const { data, error } = await supabase
+          .from("contacts")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .range(from, from + CHUNK - 1);
+        if (error) throw error;
+        const rows = (data ?? []) as Contact[];
+        all.push(...rows);
+        if (rows.length < CHUNK) break;
+      }
+      return all;
     },
   });
+
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -99,7 +118,7 @@ function Contacts() {
 
   const addContact = useMutation({
     mutationFn: async () => {
-      const phone = sanitizePhone(form.phone);
+      const phone = sanitizePhone(form.phone, countryByIso(formCountry).dial);
       if (!phone) throw new Error("Masukkan nomor telepon yang valid");
       const { data: user } = await supabase.auth.getUser();
       const { error } = await supabase.from("contacts").insert({
@@ -146,9 +165,12 @@ function Contacts() {
         user_id: user.user!.id,
         group_id: groupFilter === "all" ? null : groupFilter,
       }));
-      const { error } = await supabase.from("contacts").insert(payload);
-      if (error) throw error;
+      for (let i = 0; i < payload.length; i += 500) {
+        const { error } = await supabase.from("contacts").insert(payload.slice(i, i + 500));
+        if (error) throw error;
+      }
       return payload.length;
+
     },
     onSuccess: (count) => {
       toast.success(`${count} kontak berhasil diimpor`);
@@ -186,6 +208,50 @@ function Contacts() {
 
   const groupName = (id: string | null) => groups?.find((g) => g.id === id)?.name;
 
+  const groupCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of contacts ?? []) {
+      if (c.group_id) counts[c.group_id] = (counts[c.group_id] ?? 0) + 1;
+    }
+    return counts;
+  }, [contacts]);
+
+  const renameGroup = useMutation({
+    mutationFn: async () => {
+      if (!editGroup) return;
+      const { error } = await supabase
+        .from("contact_groups")
+        .update({ name: editGroupForm.name, description: editGroupForm.description || null })
+        .eq("id", editGroup.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Grup berhasil diperbarui");
+      setEditGroup(null);
+      queryClient.invalidateQueries({ queryKey: ["contact-groups"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteGroup = useMutation({
+    mutationFn: async (groupId: string) => {
+      const { error: unlinkError } = await supabase
+        .from("contacts")
+        .update({ group_id: null })
+        .eq("group_id", groupId);
+      if (unlinkError) throw unlinkError;
+      const { error } = await supabase.from("contact_groups").delete().eq("id", groupId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Grup berhasil dihapus");
+      if (groupFilter !== "all") setGroupFilter("all");
+      queryClient.invalidateQueries({ queryKey: ["contact-groups"] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <>
       <PageHeader
@@ -196,6 +262,10 @@ function Contacts() {
             <Button variant="outline" onClick={() => setGroupOpen(true)}>
               <FolderPlus className="mr-1 size-4" /> Grup baru
             </Button>
+            <BulkPhoneImporter
+              onImport={(rows) => importContacts.mutate(rows)}
+              existingPhones={contacts?.map((c) => c.phone) ?? []}
+            />
             <CsvImporter onImport={(rows) => importContacts.mutate(rows)} />
             <Button onClick={() => setContactOpen(true)}>
               <Plus className="mr-1 size-4" /> Tambah kontak
@@ -204,10 +274,17 @@ function Contacts() {
         }
       />
 
+      <Tabs defaultValue="kontak">
+        <TabsList>
+          <TabsTrigger value="kontak">Kontak</TabsTrigger>
+          <TabsTrigger value="grup">Grup</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="kontak">
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] flex-1">
+            <div className="relative w-full min-w-0 flex-1 sm:min-w-[200px]">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -226,7 +303,7 @@ function Contacts() {
                 setPage(0);
               }}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Semua grup" />
               </SelectTrigger>
               <SelectContent>
@@ -244,7 +321,7 @@ function Contacts() {
             <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/50 p-2">
               <span className="px-1 text-sm">{selected.length} dipilih</span>
               <Select onValueChange={(v) => bulkAssign.mutate(v)}>
-                <SelectTrigger className="h-8 w-44">
+                <SelectTrigger className="h-8 w-full sm:w-44">
                   <SelectValue placeholder="Pindahkan ke grup" />
                 </SelectTrigger>
                 <SelectContent>
@@ -353,12 +430,107 @@ function Contacts() {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="grup">
+          <Card>
+            <CardContent className="p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {groups?.length ?? 0} grup
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setGroupOpen(true)}>
+                  <FolderPlus className="mr-1 size-4" /> Grup baru
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nama grup</TableHead>
+                      <TableHead>Deskripsi</TableHead>
+                      <TableHead>Jumlah kontak</TableHead>
+                      <TableHead className="w-24 text-right">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(groups ?? []).map((g) => (
+                      <TableRow key={g.id}>
+                        <TableCell className="font-medium">{g.name}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {g.description || <span className="text-xs">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            <Users className="mr-1 size-3" />
+                            {groupCounts[g.id] ?? 0}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditGroup(g);
+                                setEditGroupForm({
+                                  name: g.name,
+                                  description: g.description ?? "",
+                                });
+                              }}
+                            >
+                              <Pencil className="size-3.5" />
+                              <span className="sr-only">Ubah {g.name}</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => {
+                                const count = groupCounts[g.id] ?? 0;
+                                if (
+                                  window.confirm(
+                                    count > 0
+                                      ? `Hapus grup "${g.name}"? ${count} kontak di dalamnya tidak ikut terhapus, hanya dilepas dari grup ini.`
+                                      : `Hapus grup "${g.name}"?`,
+                                  )
+                                ) {
+                                  deleteGroup.mutate(g.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="size-3.5" />
+                              <span className="sr-only">Hapus {g.name}</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(groups ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="py-10 text-center text-sm text-muted-foreground"
+                        >
+                          Belum ada grup. Buat grup pertama untuk mengelompokkan kontak.
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={contactOpen} onOpenChange={setContactOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Tambah kontak</DialogTitle>
-            <DialogDescription>Nomor otomatis diubah formatnya (08… menjadi 628…).</DialogDescription>
+            <DialogDescription>
+              Pilih kode negara lalu masukkan nomornya — format internasional otomatis.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -371,15 +543,17 @@ function Contacts() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="c-phone">Nomor telepon</Label>
-              <Input
+              <PhoneInput
                 id="c-phone"
+                country={formCountry}
+                onCountryChange={setFormCountry}
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="081234567890"
+                onChange={(phone) => setForm({ ...form, phone })}
               />
               {form.phone ? (
                 <p className="text-xs text-muted-foreground">
-                  Akan disimpan sebagai {sanitizePhone(form.phone) || "—"}
+                  Akan disimpan sebagai{" "}
+                  {sanitizePhone(form.phone, countryByIso(formCountry).dial) || "—"}
                 </p>
               ) : null}
             </div>
@@ -436,6 +610,43 @@ function Contacts() {
           <DialogFooter>
             <Button onClick={() => addGroup.mutate()} disabled={!groupForm.name}>
               Buat grup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editGroup !== null} onOpenChange={(open) => !open && setEditGroup(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ubah grup</DialogTitle>
+            <DialogDescription>Perbarui nama atau deskripsi grup ini.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="eg-name">Nama grup</Label>
+              <Input
+                id="eg-name"
+                value={editGroupForm.name}
+                onChange={(e) => setEditGroupForm({ ...editGroupForm, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="eg-desc">Deskripsi</Label>
+              <Input
+                id="eg-desc"
+                value={editGroupForm.description}
+                onChange={(e) =>
+                  setEditGroupForm({ ...editGroupForm, description: e.target.value })
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => renameGroup.mutate()}
+              disabled={!editGroupForm.name || renameGroup.isPending}
+            >
+              Simpan perubahan
             </Button>
           </DialogFooter>
         </DialogContent>

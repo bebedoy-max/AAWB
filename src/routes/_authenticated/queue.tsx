@@ -28,9 +28,9 @@ import type { Campaign, QueuedMessage } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/queue")({
   head: () => ({
     meta: [
-      { title: "Antrean & Log Audit — WBlast" },
+      { title: "Antrean & Log Audit — AAWB" },
       { name: "description", content: "Pantau status dan riwayat pengiriman pesan WhatsApp." },
-      { property: "og:title", content: "Antrean & Log Audit — WBlast" },
+      { property: "og:title", content: "Antrean & Log Audit — AAWB" },
       { property: "og:description", content: "Pantau status dan riwayat pengiriman pesan WhatsApp." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -104,7 +104,7 @@ function Queue() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] flex-1">
+            <div className="relative w-full min-w-0 flex-1 sm:min-w-[200px]">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
@@ -114,7 +114,7 @@ function Queue() {
               />
             </div>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -126,7 +126,7 @@ function Queue() {
               </SelectContent>
             </Select>
             <Select value={campaign} onValueChange={setCampaign}>
-              <SelectTrigger className="w-52">
+              <SelectTrigger className="w-full sm:w-52">
                 <SelectValue placeholder="Semua kampanye" />
               </SelectTrigger>
               <SelectContent>

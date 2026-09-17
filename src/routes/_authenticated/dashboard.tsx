@@ -1,21 +1,25 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Send, CheckCircle2, Smartphone, Clock } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Send, CheckCircle2, Smartphone, Clock, TrendingUp, Users } from "lucide-react";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { supabase } from "@/integrations/supabase/my-client";
 import { PageHeader } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { formatPhoneDisplay } from "@/lib/whatsapp";
+import { rupiah } from "@/lib/currency";
+import { getMyRewards } from "@/lib/rewards.functions";
 import type { QueuedMessage } from "@/types/wa";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Dashboard — WBlast" },
+      { title: "Dashboard — AAWB" },
       { name: "description", content: "Ringkasan kinerja pengiriman WhatsApp Anda." },
-      { property: "og:title", content: "Dashboard — WBlast" },
+      { property: "og:title", content: "Dashboard — AAWB" },
       { property: "og:description", content: "Ringkasan kinerja pengiriman WhatsApp Anda." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -51,8 +55,113 @@ function StatCard({
   );
 }
 
+type SparkPoint = { hari: string; jumlah: number };
+
+function EarningCard({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  data,
+  gradientId,
+}: {
+  icon: typeof Send;
+  label: string;
+  value: string;
+  hint?: string;
+  data: SparkPoint[];
+  gradientId: string;
+}) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="relative p-5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <div className="flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+            <Icon className="size-4" />
+          </div>
+        </div>
+        <p className="mt-3 text-3xl font-semibold tracking-tight">{value}</p>
+        {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+
+        <div className="mt-4 -mx-5 -mb-5">
+          {data.length === 0 ? (
+            <div className="flex h-24 items-end px-5 pb-4">
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
+            </div>
+          ) : (
+            <ChartContainer
+              className="h-24 w-full"
+              config={{ jumlah: { label: "Penghasilan", color: "var(--primary)" } }}
+            >
+              <AreaChart data={data} margin={{ left: 0, right: 0, top: 4, bottom: 0 }}>
+                <defs>
+                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-jumlah)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="var(--color-jumlah)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <ChartTooltip
+                  content={({ active, payload, label: l }) =>
+                    active && payload?.length ? (
+                      <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
+                        <p className="text-muted-foreground">{l}</p>
+                        <p className="font-medium text-foreground">
+                          {rupiah(Number(payload[0]?.value ?? 0))}
+                        </p>
+                      </div>
+                    ) : null
+                  }
+                />
+                <Area
+                  type="monotone"
+                  dataKey="jumlah"
+                  stroke="var(--color-jumlah)"
+                  strokeWidth={2}
+                  fill={`url(#${gradientId})`}
+                  dot={false}
+                  activeDot={{ r: 3 }}
+                />
+              </AreaChart>
+            </ChartContainer>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function Dashboard() {
   const queryClient = useQueryClient();
+  const fetchRewards = useServerFn(getMyRewards);
+
+  const { data: rewards } = useQuery({
+    queryKey: ["my-rewards"],
+    queryFn: () => fetchRewards(),
+    refetchInterval: 20_000,
+  });
+
+  const buildSeries = (kinds?: string[]): SparkPoint[] => {
+    const ledger = (rewards?.ledger ?? []).filter((l) => !kinds || kinds.includes(l.kind));
+    const byDay = new Map<string, number>();
+    for (const l of ledger) {
+      const day = new Date(l.created_at).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+      });
+      byDay.set(day, (byDay.get(day) ?? 0) + Number(l.amount ?? 0));
+    }
+    let total = 0;
+    return Array.from(byDay.entries())
+      .reverse()
+      .map(([hari, jumlah]) => {
+        total += jumlah;
+        return { hari, jumlah: total };
+      });
+  };
+
+  const totalSeries = useMemo(() => buildSeries(), [rewards?.ledger]);
+  const referralSeries = useMemo(() => buildSeries(["referral"]), [rewards?.ledger]);
 
   const { data: stats } = useQuery({
     queryKey: ["dashboard-stats"],
@@ -149,17 +258,25 @@ function Dashboard() {
         />
       </div>
 
-      <Card className="mt-4">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Kesehatan pengiriman</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Progress value={stats?.deliveryRate ?? 0} className="h-2" />
-          <p className="mt-2 text-xs text-muted-foreground">
-            {stats?.sent ?? 0} terkirim · {stats?.failed ?? 0} gagal · {stats?.pending ?? 0} dalam antrean
-          </p>
-        </CardContent>
-      </Card>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <EarningCard
+          icon={TrendingUp}
+          label="Total penghasilan"
+          value={rupiah(rewards?.total_earned)}
+          hint={`Sudah dicairkan ${rupiah(rewards?.total_withdrawn)}`}
+          data={totalSeries}
+          gradientId="sparkTotal"
+        />
+        <EarningCard
+          icon={Users}
+          label="Bonus referal"
+          value={rupiah(rewards?.from_referral)}
+          hint={`Reward pesan ${rupiah(rewards?.from_messages)}`}
+          data={referralSeries}
+          gradientId="sparkReferral"
+        />
+      </div>
+
 
       <Card className="mt-4">
         <CardHeader className="pb-2">

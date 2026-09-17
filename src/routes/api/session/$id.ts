@@ -36,7 +36,7 @@ export const Route = createFileRoute("/api/session/$id")({
             updated_at: now,
           };
           await supabase.from("wa_sessions").update(patch).eq("id", params.id);
-          return json({ id: params.id, ...patch } satisfies SessionGatewayResponse & {
+          return json({ id: params.id, auth_step: state.authStep, ...patch } satisfies SessionGatewayResponse & {
             updated_at: string;
           });
         } catch (err) {
@@ -60,15 +60,59 @@ export const Route = createFileRoute("/api/session/$id")({
         if (error) return json({ error: error.message }, 400);
         if (!row) return json({ error: "Session not found" }, 404);
 
-        const body = (await request.json().catch(() => ({}))) as { action?: string };
+        const body = (await request.json().catch(() => ({}))) as {
+          action?: string;
+          phone?: string;
+          assertion?: Record<string, unknown>;
+        };
         const action = body.action ?? "start";
 
-        const { startSession, logoutSession, GatewayError } = await import(
-          "@/lib/wa-gateway.server"
-        );
+        const {
+          startSession,
+          logoutSession,
+          requestPairingCode,
+          getPasskeyChallenge,
+          submitPasskeyAssertion,
+          getPasskeyConfirmation,
+          confirmPasskey,
+          GatewayError,
+        } = await import("@/lib/wa-gateway.server");
         const now = new Date().toISOString();
 
         try {
+          if (action === "passkey-challenge") {
+            return json({ challenge: await getPasskeyChallenge(params.id) });
+          }
+          if (action === "passkey-submit") {
+            if (!body.assertion) return json({ error: "Hasil verifikasi passkey tidak tersedia" }, 400);
+            await submitPasskeyAssertion(params.id, body.assertion);
+            return json({ ok: true });
+          }
+          if (action === "passkey-confirmation") {
+            return json({ code: await getPasskeyConfirmation(params.id) });
+          }
+          if (action === "passkey-confirm") {
+            await confirmPasskey(params.id);
+            return json({ ok: true });
+          }
+
+          if (action === "pair-code") {
+            const phone = (body.phone ?? "").replace(/\D/g, "");
+            if (!phone) return json({ error: "Nomor telepon wajib diisi" }, 400);
+            const code = await requestPairingCode(params.id, phone);
+            const { error: updateError } = await supabase
+              .from("wa_sessions")
+              .update({
+                status: "connecting",
+                phone_number: phone,
+                qr_string: null,
+                updated_at: now,
+              })
+              .eq("id", params.id);
+            if (updateError) return json({ error: updateError.message }, 400);
+            return json({ id: params.id, code, phone_number: phone });
+          }
+
           if (action === "disconnect") {
             await logoutSession(params.id);
             const patch = {

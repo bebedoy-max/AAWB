@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { MessageCircle } from "lucide-react";
+import { MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { Button } from "@/components/ui/button";
@@ -12,15 +13,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Masuk — WBlast Suite Broadcast" },
+      { title: "Masuk — AAWB Suite Broadcast" },
       {
         name: "description",
-        content: "Masuk atau buat akun WBlast untuk mengelola kampanye broadcast WhatsApp.",
+        content: "Masuk atau buat akun AAWB untuk mengelola kampanye broadcast WhatsApp.",
       },
-      { property: "og:title", content: "Masuk — WBlast Suite Broadcast" },
+      { property: "og:title", content: "Masuk — AAWB Suite Broadcast" },
       {
         property: "og:description",
-        content: "Masuk atau buat akun WBlast untuk mengelola kampanye broadcast WhatsApp.",
+        content: "Masuk atau buat akun AAWB untuk mengelola kampanye broadcast WhatsApp.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -36,7 +37,10 @@ function authErrorMessage(message: string): string {
   if (normalized.includes("user already registered")) return "Email ini sudah terdaftar.";
   if (normalized.includes("password should be")) return "Kata sandi belum memenuhi ketentuan keamanan.";
   if (normalized.includes("rate limit")) return "Terlalu banyak percobaan. Silakan tunggu beberapa saat.";
+  if (normalized.includes("confirmation email") || normalized.includes("sending"))
+    return "Server email belum dikonfigurasi, sehingga email konfirmasi gagal dikirim. Matikan konfirmasi email atau atur SMTP di server Anda.";
   return "Terjadi kendala. Silakan coba lagi.";
+
 }
 
 function AuthPage() {
@@ -44,13 +48,25 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [org, setOrg] = useState("");
+  const [ref, setRef] = useState("");
   const [loading, setLoading] = useState(false);
+  const [signupEmail, setSignupEmail] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/dashboard" });
     });
   }, [navigate]);
+
+  // Kode referal dari tautan undangan (?ref=KODE) diisi otomatis.
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("ref");
+    if (code) {
+      setRef(code.toUpperCase());
+      localStorage.setItem("wblast_ref", code.toUpperCase());
+    }
+  }, []);
+
 
   const signIn = async () => {
     setLoading(true);
@@ -65,12 +81,13 @@ function AuthPage() {
 
   const signUp = async () => {
     setLoading(true);
+    const code = ref.trim().toUpperCase();
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
-        data: { organization_name: org || "Organisasi Saya" },
+        emailRedirectTo: `${window.location.origin}/verifikasi`,
+        data: { organization_name: org || "Pengguna", referral_code: code || null },
       },
     });
     setLoading(false);
@@ -78,11 +95,12 @@ function AuthPage() {
       toast.error(authErrorMessage(error.message));
       return;
     }
+    if (code) localStorage.setItem("wblast_ref", code);
     if (data.session) {
       navigate({ to: "/dashboard" });
       return;
     }
-    toast.success("Periksa kotak masuk untuk mengonfirmasi alamat email Anda.");
+    setSignupEmail(email);
   };
 
   const googleSignIn = async () => {
@@ -97,14 +115,40 @@ function AuthPage() {
     }
   };
 
+  if (signupEmail) {
+    return (
+      <div className="flex min-h-screen items-center justify-center hero-gradient px-4 py-12">
+        <div className="w-full max-w-md">
+          <div className="mb-6 flex justify-center">
+            <BrandLogo className="h-32" />
+          </div>
+          <Card>
+            <CardContent className="space-y-4 p-8 text-center">
+              <MailCheck className="mx-auto size-10 text-primary" />
+              <div className="space-y-1">
+                <h1 className="text-base font-semibold">Periksa email Anda</h1>
+                <p className="text-sm text-muted-foreground">
+                  Kami telah mengirim tautan verifikasi ke{" "}
+                  <span className="font-medium text-foreground">{signupEmail}</span>. Silakan cek
+                  kotak masuk atau folder spam, lalu klik tautan di dalamnya untuk memverifikasi
+                  email Anda.
+                </p>
+              </div>
+              <Button className="w-full" onClick={() => navigate({ to: "/" })}>
+                OK
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center hero-gradient px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center justify-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <MessageCircle className="size-5" />
-          </div>
-          <span className="text-lg font-semibold tracking-tight">WBlast</span>
+        <div className="mb-6 flex justify-center">
+          <BrandLogo className="h-32" />
         </div>
 
         <Card>
@@ -120,6 +164,13 @@ function AuthPage() {
               </TabsList>
 
               <TabsContent value="signin" className="space-y-3">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!loading) signIn();
+                  }}
+                  className="space-y-3"
+                >
                 <div className="space-y-1.5">
                   <Label htmlFor="email">Email</Label>
                   <Input
@@ -139,19 +190,27 @@ function AuthPage() {
                     onChange={(e) => setPassword(e.target.value)}
                   />
                 </div>
-                <Button className="w-full" onClick={signIn} disabled={loading}>
+                <Button type="submit" className="w-full" disabled={loading}>
                   Masuk
                 </Button>
+                </form>
               </TabsContent>
 
               <TabsContent value="signup" className="space-y-3">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!loading) signUp();
+                  }}
+                  className="space-y-3"
+                >
                 <div className="space-y-1.5">
-                  <Label htmlFor="org">Organisasi</Label>
+                  <Label htmlFor="org">Nama</Label>
                   <Input
                     id="org"
                     value={org}
                     onChange={(e) => setOrg(e.target.value)}
-                    placeholder="Nama organisasi"
+                    placeholder="Nama lengkap Anda"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -172,9 +231,19 @@ function AuthPage() {
                     onChange={(e) => setPassword(e.target.value)}
                   />
                 </div>
-                <Button className="w-full" onClick={signUp} disabled={loading}>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ref-up">Kode undangan (opsional)</Label>
+                  <Input
+                    id="ref-up"
+                    value={ref}
+                    onChange={(e) => setRef(e.target.value.toUpperCase())}
+                    placeholder="Misal: BH3GEB"
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
                   Buat akun
                 </Button>
+                </form>
               </TabsContent>
             </Tabs>
 

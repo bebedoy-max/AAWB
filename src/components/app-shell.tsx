@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
@@ -15,11 +16,13 @@ import {
   Moon,
   Sun,
   LogOut,
-  MessageCircle,
   ChevronRight,
   ShieldCheck,
+  Wallet,
+  Gift,
 } from "lucide-react";
 import { getMyRole } from "@/lib/admin.functions";
+import { attachReferral } from "@/lib/rewards.functions";
 
 import { supabase } from "@/integrations/supabase/my-client";
 import { useTheme } from "@/lib/theme";
@@ -44,6 +47,8 @@ const NAV = [
   { to: "/templates", label: "Template Pesan", icon: FileText },
   { to: "/campaigns", label: "Kampanye", icon: Send },
   { to: "/queue", label: "Antrean & Log", icon: ListChecks },
+  { to: "/rewards", label: "Saldo & Reward", icon: Wallet },
+  { to: "/referral", label: "Referal", icon: Gift },
   { to: "/settings", label: "Pengaturan", icon: Settings },
 ] as const;
 
@@ -91,14 +96,8 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 function Brand() {
   return (
-    <div className="flex items-center gap-2.5 px-5 py-5">
-      <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-        <MessageCircle className="size-5" />
-      </div>
-      <div className="leading-tight">
-        <p className="text-sm font-semibold tracking-tight">WBlast</p>
-        <p className="text-xs text-muted-foreground">Suite Broadcast</p>
-      </div>
+    <div className="flex items-center px-5 pt-5 pb-1">
+      <BrandLogo className="h-24 max-w-full" />
     </div>
   );
 }
@@ -110,9 +109,39 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string>("");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
+  const linkReferral = useServerFn(attachReferral);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
   }, []);
+
+  // Kaitkan kode undangan setelah akun aktif (termasuk yang harus konfirmasi
+  // email dulu). Kode diambil dari tautan ?ref= yang disimpan saat mendaftar
+  // atau dari data pendaftaran akun. Dijalankan sekali per akun.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+      if (!user || cancelled) return;
+      const stored = localStorage.getItem("wblast_ref");
+      const meta = (user.user_metadata as { referral_code?: string } | undefined)?.referral_code;
+      const code = (stored || meta || "").trim().toUpperCase();
+      if (!code) return;
+      const doneKey = `wblast_ref_done_${user.id}`;
+      if (localStorage.getItem(doneKey)) return;
+      try {
+        await linkReferral({ data: { code } });
+      } catch {
+        // Kode tidak berlaku atau sudah terpakai — cukup abaikan.
+      }
+      localStorage.setItem(doneKey, "1");
+      localStorage.removeItem("wblast_ref");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [linkReferral]);
 
   const { data: activeSession } = useQuery({
     queryKey: ["active-session-badge"],
@@ -136,7 +165,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-background">
       <aside className="hidden w-64 shrink-0 border-r bg-sidebar lg:block">
         <div className="sticky top-0">
           <Brand />
@@ -160,7 +189,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Sheet>
 
           <div className="flex min-w-0 items-center gap-1.5 text-sm">
-            <span className="text-muted-foreground">WBlast</span>
+            <span className="text-muted-foreground">AAWB</span>
             <ChevronRight className="size-3.5 text-muted-foreground" />
             <span className="truncate font-medium">{current?.label ?? "Ringkasan"}</span>
           </div>
@@ -214,7 +243,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6">{children}</main>
+        <main className="w-full min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -230,14 +261,14 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+    <div className="mb-5 flex w-full min-w-0 flex-wrap items-end justify-between gap-3 sm:mb-6">
+      <div className="min-w-0 flex-1">
+        <h1 className="text-xl font-semibold tracking-tight break-words sm:text-2xl">{title}</h1>
         {description ? (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-1 text-sm text-muted-foreground break-words">{description}</p>
         ) : null}
       </div>
-      {action}
+      {action ? <div className="flex w-full flex-wrap gap-2 sm:w-auto">{action}</div> : null}
     </div>
   );
 }

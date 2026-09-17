@@ -79,13 +79,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "WBlast — Broadcast dan Otomatisasi WhatsApp" },
+      { title: "AAWB — Broadcast dan Otomatisasi WhatsApp" },
       {
         name: "description",
         content:
           "Hubungkan perangkat WhatsApp, kelola kontak, buat templat, dan jalankan kampanye broadcast massal dengan aman.",
       },
-      { property: "og:title", content: "WBlast — Broadcast dan Otomatisasi WhatsApp" },
+      { property: "og:title", content: "AAWB — Broadcast dan Otomatisasi WhatsApp" },
       {
         property: "og:description",
         content:
@@ -105,7 +105,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/favicon.png" },
     ],
   }),
   shellComponent: RootShell,

@@ -42,6 +42,14 @@ export interface Contact {
   created_at: string;
 }
 
+export type MediaType = "text" | "image" | "document" | "video" | "audio";
+
+/** A tappable button that opens a URL when the recipient clicks it. */
+export interface TemplateButton {
+  text: string;
+  url: string;
+}
+
 export interface Template {
   id: string;
   user_id: string;
@@ -49,6 +57,10 @@ export interface Template {
   content: string;
   has_media: boolean;
   media_url: string | null;
+  media_type: MediaType;
+  media_filename: string | null;
+  footer_text: string | null;
+  buttons_json: TemplateButton[];
   created_at: string;
 }
 
@@ -100,16 +112,34 @@ export interface DispatchResult {
 export interface WhatsAppMessagePayload {
   session_id: string;
   to: string;
-  type: "text" | "image" | "document";
+  type: MediaType;
   body: string;
   media_url?: string;
+  media_filename?: string;
+  footer_text?: string;
+  buttons?: TemplateButton[];
+}
+
+export interface PairingCodeResponse {
+  id: string;
+  code: string;
+  phone_number: string;
 }
 
 export interface SessionGatewayResponse {
   id: string;
   status: WaSessionStatus;
+  auth_step?: "pairing" | "passkey" | "confirmation" | null;
   qr_string: string | null;
   phone_number: string | null;
   battery_level: number | null;
   last_ping: string | null;
+}
+
+export interface PasskeyChallengeResponse {
+  challenge: Record<string, unknown>;
+}
+
+export interface PasskeyConfirmationResponse {
+  code: string;
 }

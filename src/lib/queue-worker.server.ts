@@ -5,8 +5,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { backoffMs } from "@/lib/whatsapp";
-import { GatewayError, sendMessage } from "@/lib/wa-gateway.server";
-import type { CampaignStatus, QueuedMessage } from "@/types/wa";
+import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
+import type { CampaignStatus, MediaType, QueuedMessage, TemplateButton } from "@/types/wa";
 
 export const MAX_ATTEMPTS = 3;
 
@@ -16,6 +16,10 @@ export interface CampaignRow {
   session_id: string | null;
   status: CampaignStatus;
   media_url: string | null;
+  media_type?: MediaType | null;
+  media_filename?: string | null;
+  footer_text?: string | null;
+  buttons_json?: TemplateButton[] | null;
 }
 
 export interface TickResult {
@@ -47,20 +51,41 @@ export async function processCampaignTick(
     };
   }
 
-  const { data: device } = await supabase
-    .from("wa_sessions")
-    .select("id,status")
-    .eq("id", campaign.session_id)
-    .maybeSingle();
+  // The database status is only a mirror and can become stale after a gateway
+  // restart or a dropped phone connection. Always verify the live session
+  // before sending so we never burn retries against a non-WORKING session.
+  let liveStatus: "connected" | "connecting" | "disconnected" = "disconnected";
+  let sessionError: string | undefined;
+  try {
+    let liveSession = await sessionStatus(campaign.session_id);
+    if (liveSession.status !== "connected") {
+      liveSession = await reconnectSession(campaign.session_id);
+    }
+    liveStatus = liveSession.status;
+    await supabase
+      .from("wa_sessions")
+      .update({
+        status: liveSession.status,
+        phone_number: liveSession.phone,
+        battery_level: liveSession.battery,
+        last_ping: liveSession.status === "connected" ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", campaign.session_id);
+  } catch (err) {
+    sessionError = err instanceof Error ? err.message : "Status perangkat tidak dapat diperiksa";
+  }
 
-  if (!device || device.status !== "connected") {
-    await supabase.from("campaigns").update({ status: "paused" }).eq("id", campaign.id);
+  if (liveStatus !== "connected") {
+    // A gateway restart or a brief phone disconnect must not stop the blast.
+    // Keep it running so the browser worker/cron retries automatically as soon
+    // as the same device returns to WORKING.
     return {
       processed: 0,
       sent: 0,
       failed: 0,
-      status: "paused",
-      error: "Perangkat WhatsApp tidak terhubung — kampanye dijeda",
+      status: "running",
+      error: sessionError ?? "Perangkat WhatsApp belum terhubung — pengiriman akan mencoba lagi otomatis",
     };
   }
 
@@ -76,13 +101,17 @@ export async function processCampaignTick(
   const queue = (batch ?? []) as QueuedMessage[];
   let sent = 0;
   let failed = 0;
+  let waitingForSession = false;
 
   for (const item of queue) {
-    await supabase
+    const { data: claimed } = await supabase
       .from("message_queue")
       .update({ status: "processing" })
       .eq("id", item.id)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+    if (!claimed) continue;
 
     const attempts = item.attempts + 1;
     try {
@@ -91,6 +120,10 @@ export async function processCampaignTick(
         to: item.recipient_phone,
         text: item.message_body,
         mediaUrl: campaign.media_url,
+        mediaType: campaign.media_type ?? null,
+        mediaFilename: campaign.media_filename ?? null,
+        footerText: campaign.footer_text ?? null,
+        buttons: campaign.buttons_json ?? null,
       });
       await supabase
         .from("message_queue")
@@ -101,10 +134,34 @@ export async function processCampaignTick(
           error_log: null,
         })
         .eq("id", item.id);
+      // Kredit reward pengirim + bonus referal upline-nya. Idempoten di database.
+      try {
+        await supabase.rpc("credit_message_reward", { _message_id: item.id });
+      } catch {
+        // Reward gagal dicatat tidak boleh menggagalkan pengiriman.
+      }
       sent += 1;
     } catch (err) {
       const message =
         err instanceof GatewayError ? err.message : ((err as Error).message ?? "Pengiriman gagal");
+      if (/session status is not as expected/i.test(message)) {
+        await supabase
+          .from("message_queue")
+          .update({
+            status: "pending",
+            attempts: item.attempts,
+            error_log: "Perangkat terputus saat pengiriman; pesan menunggu perangkat tersambung kembali",
+          })
+          .eq("id", item.id);
+        await supabase
+          .from("wa_sessions")
+          .update({ status: "disconnected", last_ping: null, updated_at: new Date().toISOString() })
+          .eq("id", campaign.session_id);
+        // Do not pause the campaign. Leave this message pending and let the
+        // next worker tick continue automatically after the device reconnects.
+        waitingForSession = true;
+        break;
+      }
       if (attempts < MAX_ATTEMPTS) {
         await supabase
           .from("message_queue")
@@ -132,7 +189,7 @@ export async function processCampaignTick(
     .in("status", ["pending", "processing"]);
 
   let status: CampaignStatus = "running";
-  if ((remaining ?? 0) === 0) {
+  if (!waitingForSession && (remaining ?? 0) === 0) {
     status = "completed";
     await supabase.from("campaigns").update({ status }).eq("id", campaign.id);
   }

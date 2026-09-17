@@ -1,4 +1,17 @@
-// Public connection details for this project's own Supabase instance.
-// The publishable key is safe to expose in the browser.
-export const MY_SUPABASE_URL = "https://slleptauldjznvgpqirc.supabase.co";
-export const MY_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_9x_qqAdiOta0CyhX3L5Qkg_R1MObWbF";
+// Connection details for this project's OWN Supabase instance.
+//
+// The browser never talks to Supabase directly: it goes through the
+// same-origin proxy at /api/public/db, which injects the real URL and
+// publishable key server-side (see src/routes/api/public/db/$.ts).
+// So the browser only needs a non-empty placeholder key.
+
+const serverEnv = (name: string): string =>
+  (typeof process !== "undefined" ? (process.env?.[name] ?? "") : "") as string;
+
+const isServer = typeof window === "undefined";
+
+export const MY_SUPABASE_URL = isServer ? serverEnv("MY_SUPABASE_URL") : "";
+
+export const MY_SUPABASE_PUBLISHABLE_KEY = isServer
+  ? serverEnv("MY_SUPABASE_PUBLISHABLE_KEY")
+  : "proxied-by-server";

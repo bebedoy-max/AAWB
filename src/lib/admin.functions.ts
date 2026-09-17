@@ -9,6 +9,7 @@ export type AppRole = "super_admin" | "admin" | "member";
 
 export interface MemberRow {
   user_id: string;
+  name: string;
   email: string;
   role: AppRole;
   created_at: string;
@@ -82,7 +83,7 @@ async function assertAdmin(context: any, superOnly = false): Promise<AppRole> {
 export const getGatewaySettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<GatewaySettings> => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await (supabaseAdmin as any)
       .from("app_settings")
@@ -109,7 +110,7 @@ export const saveGatewaySettings = createServerFn({ method: "POST" })
     return { url, apiKey: (input.apiKey ?? "").trim(), clearApiKey: Boolean(input.clearApiKey) };
   })
   .handler(async ({ data, context }) => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const patch: Record<string, unknown> = {
@@ -135,7 +136,7 @@ export const saveGatewaySettings = createServerFn({ method: "POST" })
 export const testGateway = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { pingGateway } = await import("@/lib/wa-gateway.server");
     return pingGateway();
   });
@@ -154,14 +155,28 @@ export const listMembers = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
 
     const { data: roleRows } = await (supabaseAdmin as any).from("user_roles").select("user_id,role");
+    const { data: profileRows } = await (supabaseAdmin as any)
+      .from("profiles")
+      .select("user_id,organization_name");
+    const nameMap = new Map<string, string>();
+    for (const p of (profileRows ?? []) as { user_id: string; organization_name: string | null }[]) {
+      if (p.organization_name) nameMap.set(p.user_id, p.organization_name);
+    }
     const roleMap = new Map<string, AppRole[]>();
     for (const r of (roleRows ?? []) as { user_id: string; role: AppRole }[]) {
       roleMap.set(r.user_id, [...(roleMap.get(r.user_id) ?? []), r.role]);
     }
 
     return users.users
+      .filter((u) => highest(roleMap.get(u.id) ?? []) !== "super_admin")
       .map((u) => ({
         user_id: u.id,
+        name:
+          nameMap.get(u.id) ??
+          ((u.user_metadata?.["organization_name"] ??
+            u.user_metadata?.["full_name"] ??
+            u.user_metadata?.["name"]) as string | undefined) ??
+          "—",
         email: u.email ?? "(tanpa email)",
         role: highest(roleMap.get(u.id) ?? []),
         created_at: u.created_at,
@@ -182,8 +197,13 @@ export const setMemberRole = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await assertAdmin(context, true);
-    if (data.userId === context.userId && data.role !== "super_admin") {
-      throw new Error("Anda tidak dapat menurunkan peran akun Anda sendiri.");
+    if (data.userId === context.userId) {
+      throw new Error("Anda tidak dapat mengubah peran akun Anda sendiri.");
+    }
+    const { supabaseAdmin: adminCheck } = await import("@/integrations/supabase/client.server");
+    const targetRoles = await rolesOf(adminCheck as any, data.userId);
+    if (highest(targetRoles) === "super_admin") {
+      throw new Error("Peran Super Admin tidak dapat diubah dari sini.");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const del = await (supabaseAdmin as any).from("user_roles").delete().eq("user_id", data.userId);
@@ -192,5 +212,190 @@ export const setMemberRole = createServerFn({ method: "POST" })
       .from("user_roles")
       .insert({ user_id: data.userId, role: data.role });
     if (ins.error) throw new Error(ins.error.message);
+    return { ok: true };
+  });
+
+/** Cek ringan: apakah gateway WhatsApp sudah dikonfigurasi (boleh diakses semua user login). */
+export const isGatewayConfigured = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async (): Promise<{ configured: boolean }> => {
+    if (process.env["WA_GATEWAY_URL"]) return { configured: true };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await (supabaseAdmin as any)
+      .from("app_settings")
+      .select("wa_gateway_url")
+      .eq("id", "global")
+      .maybeSingle();
+    return { configured: Boolean(data?.wa_gateway_url) };
+  });
+
+/** Setel ulang kata sandi seorang anggota (super admin). */
+export const resetMemberPassword = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string; password: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    const password = (input.password ?? "").trim();
+    if (password.length < 8) throw new Error("Kata sandi baru minimal 8 karakter.");
+    return { userId: input.userId, password };
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
+      password: data.password,
+    });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+/** Hapus akun seorang anggota beserta perannya (super admin). */
+export const deleteMember = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    return input;
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    if (data.userId === context.userId) {
+      throw new Error("Anda tidak dapat menghapus akun Anda sendiri.");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await (supabaseAdmin as any).from("user_roles").delete().eq("user_id", data.userId);
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export interface MemberDetail {
+  user_id: string;
+  name: string;
+  email: string;
+  role: AppRole;
+  session_id: string | null;
+  session_status: string | null;
+  wa_phone: string | null;
+  wa_name: string | null;
+  wa_picture: string | null;
+  wa_error: string | null;
+}
+
+async function memberSession(userId: string): Promise<{ id: string; status: string } | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await (supabaseAdmin as any)
+    .from("wa_sessions")
+    .select("id,status,phone_number,updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+  const rows = (data ?? []) as { id: string; status: string }[];
+  return rows.find((r) => r.status === "connected") ?? rows[0] ?? null;
+}
+
+/** Detail seorang pengguna beserta profil WhatsApp perangkat terhubungnya. */
+export const getMemberDetail = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    return input;
+  })
+  .handler(async ({ data, context }): Promise<MemberDetail> => {
+    await assertAdmin(context, true);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { data: user, error } = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    if (error) throw new Error(error.message);
+
+    const { data: profile } = await (supabaseAdmin as any)
+      .from("profiles")
+      .select("organization_name")
+      .eq("user_id", data.userId)
+      .maybeSingle();
+    const { data: roleRows } = await (supabaseAdmin as any)
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", data.userId);
+
+    const session = await memberSession(data.userId);
+    let wa_name: string | null = null;
+    let wa_picture: string | null = null;
+    let wa_phone: string | null = null;
+    let wa_error: string | null = null;
+    if (session) {
+      try {
+        const { getWaProfile } = await import("@/lib/wa-gateway.server");
+        const p = await getWaProfile(session.id);
+        wa_name = p.name;
+        wa_picture = p.picture;
+        wa_phone = p.phone;
+      } catch (err) {
+        wa_error = (err as Error).message;
+      }
+    } else {
+      wa_error = "Pengguna ini belum menautkan perangkat WhatsApp.";
+    }
+
+    return {
+      user_id: data.userId,
+      name:
+        profile?.organization_name ??
+        ((user.user?.user_metadata?.["organization_name"] ??
+          user.user?.user_metadata?.["full_name"]) as string | undefined) ??
+        "—",
+      email: user.user?.email ?? "(tanpa email)",
+      role: highest(((roleRows ?? []) as { role: AppRole }[]).map((r) => r.role)),
+      session_id: session?.id ?? null,
+      session_status: session?.status ?? null,
+      wa_phone,
+      wa_name,
+      wa_picture,
+      wa_error,
+    };
+  });
+
+/** Ubah nama profil WhatsApp asli pada perangkat pengguna. */
+export const setMemberWaName = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string; name: string }) => {
+    const name = (input?.name ?? "").trim();
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    if (name.length < 1 || name.length > 25) throw new Error("Nama WhatsApp 1–25 karakter.");
+    return { userId: input.userId, name };
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    const session = await memberSession(data.userId);
+    if (!session || session.status !== "connected") {
+      throw new Error("Perangkat WhatsApp pengguna ini tidak sedang terhubung.");
+    }
+    const { setWaProfileName } = await import("@/lib/wa-gateway.server");
+    await setWaProfileName(session.id, data.name);
+    return { ok: true };
+  });
+
+/** Ubah foto profil WhatsApp asli pada perangkat pengguna (base64 data URL). */
+export const setMemberWaPicture = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string; dataUrl: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    const match = /^data:(image\/(?:jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(
+      (input.dataUrl ?? "").trim(),
+    );
+    if (!match) throw new Error("Berkas foto harus berupa gambar JPG, PNG, atau WEBP.");
+    const data = match[2]!;
+    if (data.length > 8_000_000) throw new Error("Ukuran foto terlalu besar (maksimal ±6 MB).");
+    return { userId: input.userId, mimetype: match[1]!, data };
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    const session = await memberSession(data.userId);
+    if (!session || session.status !== "connected") {
+      throw new Error("Perangkat WhatsApp pengguna ini tidak sedang terhubung.");
+    }
+    const { setWaProfilePicture } = await import("@/lib/wa-gateway.server");
+    await setWaProfilePicture(session.id, {
+      mimetype: data.mimetype,
+      filename: `profile.${data.mimetype.split("/")[1]}`,
+      data: data.data,
+    });
     return { ok: true };
   });

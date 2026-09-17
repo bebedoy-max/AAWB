@@ -11,14 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { Profile } from "@/types/wa";
+import {
+  disconnectTelegram,
+  getTelegramStatus,
+  startTelegramLink,
+} from "@/lib/telegram.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
     meta: [
-      { title: "Pengaturan — WBlast" },
-      { name: "description", content: "Atur ruang kerja dan tampilan WBlast." },
-      { property: "og:title", content: "Pengaturan — WBlast" },
-      { property: "og:description", content: "Atur ruang kerja dan tampilan WBlast." },
+      { title: "Pengaturan — AAWB" },
+      { name: "description", content: "Atur ruang kerja dan tampilan AAWB." },
+      { property: "og:title", content: "Pengaturan — AAWB" },
+      { property: "og:description", content: "Atur ruang kerja dan tampilan AAWB." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -75,12 +80,12 @@ function Settings() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Ruang kerja</CardTitle>
-            <CardDescription>Ditampilkan di seluruh dasbor broadcast Anda.</CardDescription>
+            <CardTitle className="text-base">Akun</CardTitle>
+            <CardDescription>Nama Anda yang ditampilkan di aplikasi.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="org">Nama organisasi</Label>
+              <Label htmlFor="org">Nama</Label>
               <Input id="org" value={org} onChange={(e) => setOrg(e.target.value)} />
             </div>
             <div className="space-y-1.5">
@@ -107,31 +112,85 @@ function Settings() {
           </CardContent>
         </Card>
 
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Gateway WhatsApp</CardTitle>
-            <CardDescription>
-              Perangkat, pemasangan QR, dan semua broadcast dijalankan melalui server Baileys Anda.
-              Alamat dan kuncinya disimpan dengan aman.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p className="text-muted-foreground">
-              Server Baileys Anda harus menyediakan alamat berikut:
-            </p>
-            <p className="rounded-lg border bg-muted/40 p-3 font-mono text-xs">
-              POST /sessions/:id/start · GET /sessions/:id/status · POST /sessions/:id/logout
-            </p>
-            <p className="rounded-lg border bg-muted/40 p-3 font-mono text-xs">
-              POST /sessions/:id/messages — {"{ to, text, mediaUrl? }"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Antrean diproses otomatis setiap menit, sehingga kampanye terjadwal tetap dikirim
-              setelah halaman ini ditutup.
-            </p>
-          </CardContent>
-        </Card>
+        <TelegramCard />
       </div>
     </>
+  );
+}
+
+function TelegramCard() {
+  const queryClient = useQueryClient();
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: ["telegram-status"],
+    queryFn: () => getTelegramStatus(),
+    refetchInterval: (query) =>
+      (query.state.data as { connected?: boolean } | undefined)?.connected ? false : 5000,
+  });
+
+  const connect = useMutation({
+    mutationFn: () => startTelegramLink(),
+    onSuccess: (res) => {
+      window.open(res.url, "_blank", "noopener,noreferrer");
+      toast.info("Tekan START pada obrolan Telegram yang terbuka untuk menyelesaikan koneksi.");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const disconnect = useMutation({
+    mutationFn: () => disconnectTelegram(),
+    onSuccess: () => {
+      toast.success("Akun Telegram diputuskan");
+      queryClient.invalidateQueries({ queryKey: ["telegram-status"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Telegram</CardTitle>
+        <CardDescription>
+          Hubungkan akun Telegram Anda
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Memeriksa status…</p>
+        ) : !status?.configured ? (
+          <p className="text-sm text-muted-foreground">
+            Fitur Telegram belum diaktifkan oleh admin aplikasi.
+          </p>
+        ) : status.connected ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">
+                Tersambung{status.username ? ` sebagai @${status.username}` : ""}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {status.first_name ?? "Akun Telegram"} · ID {status.chat_id}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => disconnect.mutate()}
+              disabled={disconnect.isPending}
+            >
+              Putuskan
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Belum tersambung. Tekan tombol di bawah, lalu tekan START pada obrolan Telegram yang
+              terbuka. Status di halaman ini akan berubah otomatis.
+            </p>
+            <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
+              Hubungkan Telegram
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
