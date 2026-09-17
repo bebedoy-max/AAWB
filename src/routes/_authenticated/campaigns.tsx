@@ -493,30 +493,23 @@ function Campaigns() {
                               {option.description}
                             </span>
                           </span>
-                        </Label>
-                        {supportsAntiBan ? (
-                          <div className="border-t border-border/60 px-3 py-2.5">
-                            <label className="flex cursor-pointer items-start gap-2.5">
+                          {supportsAntiBan ? (
+                            <span
+                              className="ml-auto flex cursor-pointer items-center gap-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <Checkbox
                                 checked={active && draft.anti_ban}
                                 disabled={!active}
                                 onCheckedChange={(checked) =>
                                   setDraft({ ...draft, anti_ban: checked === true })
                                 }
-                                className="mt-0.5"
+                                className="h-[18px] w-[18px] rounded-[4px]"
                               />
-                              <span className="min-w-0">
-                                <span className="block text-sm font-medium leading-5">Anti Ban</span>
-                                <span className="block text-xs leading-5 text-muted-foreground">
-                                  Jeda acak {option.min}–{option.max} detik, istirahat 2–5 menit
-                                  setiap 20–30 pesan, variasi isi pesan, urutan kontak diacak, dan
-                                  nomor yang membalas STOP/BERHENTI/UNSUB serta nomor tidak aktif
-                                  dilewati otomatis.
-                                </span>
-                              </span>
-                            </label>
-                          </div>
-                        ) : null}
+                              <span className="text-sm font-medium leading-5">Anti Ban</span>
+                            </span>
+                          ) : null}
+                        </Label>
                       </div>
                     );
                   })}
