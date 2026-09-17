@@ -5,7 +5,11 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { backoffMs } from "@/lib/whatsapp";
+<<<<<<< HEAD
 import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
+=======
+import { GatewayError, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 import type { CampaignStatus, MediaType, QueuedMessage, TemplateButton } from "@/types/wa";
 
 export const MAX_ATTEMPTS = 3;
@@ -57,10 +61,14 @@ export async function processCampaignTick(
   let liveStatus: "connected" | "connecting" | "disconnected" = "disconnected";
   let sessionError: string | undefined;
   try {
+<<<<<<< HEAD
     let liveSession = await sessionStatus(campaign.session_id);
     if (liveSession.status !== "connected") {
       liveSession = await reconnectSession(campaign.session_id);
     }
+=======
+    const liveSession = await sessionStatus(campaign.session_id);
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
     liveStatus = liveSession.status;
     await supabase
       .from("wa_sessions")
@@ -77,15 +85,24 @@ export async function processCampaignTick(
   }
 
   if (liveStatus !== "connected") {
+<<<<<<< HEAD
     // A gateway restart or a brief phone disconnect must not stop the blast.
     // Keep it running so the browser worker/cron retries automatically as soon
     // as the same device returns to WORKING.
+=======
+    await supabase.from("campaigns").update({ status: "paused" }).eq("id", campaign.id);
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
     return {
       processed: 0,
       sent: 0,
       failed: 0,
+<<<<<<< HEAD
       status: "running",
       error: sessionError ?? "Perangkat WhatsApp belum terhubung — pengiriman akan mencoba lagi otomatis",
+=======
+      status: "paused",
+      error: sessionError ?? "Perangkat WhatsApp tidak terhubung — kampanye dijeda",
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
     };
   }
 
@@ -101,7 +118,11 @@ export async function processCampaignTick(
   const queue = (batch ?? []) as QueuedMessage[];
   let sent = 0;
   let failed = 0;
+<<<<<<< HEAD
   let waitingForSession = false;
+=======
+  let pausedForSession = false;
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 
   for (const item of queue) {
     const { data: claimed } = await supabase
@@ -157,9 +178,14 @@ export async function processCampaignTick(
           .from("wa_sessions")
           .update({ status: "disconnected", last_ping: null, updated_at: new Date().toISOString() })
           .eq("id", campaign.session_id);
+<<<<<<< HEAD
         // Do not pause the campaign. Leave this message pending and let the
         // next worker tick continue automatically after the device reconnects.
         waitingForSession = true;
+=======
+        await supabase.from("campaigns").update({ status: "paused" }).eq("id", campaign.id);
+        pausedForSession = true;
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
         break;
       }
       if (attempts < MAX_ATTEMPTS) {
@@ -189,7 +215,13 @@ export async function processCampaignTick(
     .in("status", ["pending", "processing"]);
 
   let status: CampaignStatus = "running";
+<<<<<<< HEAD
   if (!waitingForSession && (remaining ?? 0) === 0) {
+=======
+  if (pausedForSession) {
+    status = "paused";
+  } else if ((remaining ?? 0) === 0) {
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
     status = "completed";
     await supabase.from("campaigns").update({ status }).eq("id", campaign.id);
   }

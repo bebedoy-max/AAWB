@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+<<<<<<< HEAD
 import { MailCheck } from "lucide-react";
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { Button } from "@/components/ui/button";
@@ -100,7 +103,14 @@ function AuthPage() {
       navigate({ to: "/dashboard" });
       return;
     }
+<<<<<<< HEAD
     setSignupEmail(email);
+=======
+    toast.success(
+      "Periksa kotak masuk untuk mengonfirmasi email. Jika tautannya error, salin tautan itu dan tempelkan di halaman Verifikasi.",
+    );
+    navigate({ to: "/verifikasi" });
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
   };
 
   const googleSignIn = async () => {
@@ -240,7 +250,11 @@ function AuthPage() {
                     placeholder="Misal: BH3GEB"
                   />
                 </div>
+<<<<<<< HEAD
                 <Button type="submit" className="w-full" disabled={loading}>
+=======
+                <Button className="w-full" onClick={signUp} disabled={loading}>
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
                   Buat akun
                 </Button>
                 </form>

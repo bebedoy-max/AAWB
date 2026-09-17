@@ -27,7 +27,10 @@ import { Route as ApiCampaignDispatchRouteImport } from './routes/api/campaign/d
 import { Route as ApiSessionIdRouteImport } from './routes/api/session/$id'
 import { Route as ApiPublicCronProcessQueueRouteImport } from './routes/api/public/cron/process-queue'
 import { Route as ApiPublicDbSplatRouteImport } from './routes/api/public/db/$'
+<<<<<<< HEAD
 import { Route as ApiPublicTelegramWebhookRouteImport } from './routes/api/public/telegram/webhook'
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -119,12 +122,15 @@ const ApiPublicDbSplatRoute = ApiPublicDbSplatRouteImport.update({
   path: '/api/public/db/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+<<<<<<< HEAD
 const ApiPublicTelegramWebhookRoute =
   ApiPublicTelegramWebhookRouteImport.update({
     id: '/api/public/telegram/webhook',
     path: '/api/public/telegram/webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -144,7 +150,10 @@ export interface FileRoutesByFullPath {
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
+<<<<<<< HEAD
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -164,7 +173,10 @@ export interface FileRoutesByTo {
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
+<<<<<<< HEAD
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -186,7 +198,10 @@ export interface FileRoutesById {
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
+<<<<<<< HEAD
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -208,7 +223,10 @@ export interface FileRouteTypes {
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
+<<<<<<< HEAD
     | '/api/public/telegram/webhook'
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -228,7 +246,10 @@ export interface FileRouteTypes {
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
+<<<<<<< HEAD
     | '/api/public/telegram/webhook'
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
   id:
     | '__root__'
     | '/'
@@ -249,7 +270,10 @@ export interface FileRouteTypes {
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
+<<<<<<< HEAD
     | '/api/public/telegram/webhook'
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -261,7 +285,10 @@ export interface RootRouteChildren {
   ApiSessionIdRoute: typeof ApiSessionIdRoute
   ApiPublicCronProcessQueueRoute: typeof ApiPublicCronProcessQueueRoute
   ApiPublicDbSplatRoute: typeof ApiPublicDbSplatRoute
+<<<<<<< HEAD
   ApiPublicTelegramWebhookRoute: typeof ApiPublicTelegramWebhookRoute
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 }
 
 declare module '@tanstack/react-router' {
@@ -392,6 +419,7 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicDbSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+<<<<<<< HEAD
     '/api/public/telegram/webhook': {
       id: '/api/public/telegram/webhook'
       path: '/api/public/telegram/webhook'
@@ -399,6 +427,8 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicTelegramWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
   }
 }
 
@@ -440,7 +470,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSessionIdRoute: ApiSessionIdRoute,
   ApiPublicCronProcessQueueRoute: ApiPublicCronProcessQueueRoute,
   ApiPublicDbSplatRoute: ApiPublicDbSplatRoute,
+<<<<<<< HEAD
   ApiPublicTelegramWebhookRoute: ApiPublicTelegramWebhookRoute,
+=======
+>>>>>>> 436f1994ae5416aeeff999e03397c6070c713daf
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
