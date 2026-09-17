@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { json, unauthorized, userClientFromRequest } from "@/lib/supabase-user.server";
-import { buildMessageBody, randomDelay, sanitizePhone } from "@/lib/whatsapp";
+import { buildMessageBody, sanitizePhone, sendDelaySeconds } from "@/lib/whatsapp";
 import type { CampaignStatus } from "@/types/wa";
 
 const payloadSchema = z.object({
@@ -9,7 +9,8 @@ const payloadSchema = z.object({
   action: z.enum(["enqueue", "process", "pause", "resume", "abort", "retry"]),
 });
 
-const BATCH_PER_TICK = 5;
+const BATCH_PER_TICK = 200;
+
 
 /**
  * Campaign dispatcher. `enqueue` materialises the audience into
@@ -106,7 +107,7 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
 
           const rows = contacts.map((contact) => {
             const meta = (contact.metadata_json ?? {}) as Record<string, string>;
-            cursor += randomDelay(campaign.min_delay, campaign.max_delay) * 1000;
+            cursor += sendDelaySeconds(campaign.min_delay, campaign.max_delay) * 1000;
             return {
               user_id: campaign.user_id,
               campaign_id,

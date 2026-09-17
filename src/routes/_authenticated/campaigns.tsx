@@ -120,29 +120,42 @@ function Campaigns() {
     },
   });
 
-  // Worker tick: drives running campaigns through the dispatcher. A temporary
-  // device disconnect no longer changes the campaign to paused, so this keeps
-  // retrying until the device returns and the queue can continue.
+  // Worker tick: drives running campaigns through the dispatcher without any
+  // automatic pausing. Ticks run back-to-back so the queue keeps draining from
+  // the first message to the last; only the campaign's own speed setting paces
+  // the sending. A device disconnect never stops the campaign.
   useEffect(() => {
-    const running = (campaigns ?? []).filter((c) => c.status === "running");
-    if (!running.length) return;
-    const timer = setInterval(async () => {
-      for (const c of running) {
-        try {
-          const tick = await dispatchCampaign({ campaign_id: c.id, action: "process" });
-          setTickNotes((prev) => ({ ...prev, [c.id]: tick.error ?? null }));
-        } catch (err) {
-          setTickNotes((prev) => ({
-            ...prev,
-            [c.id]: err instanceof Error ? err.message : "Pengiriman tidak dapat dijalankan",
-          }));
+    const runningIds = (campaigns ?? []).filter((c) => c.status === "running").map((c) => c.id);
+    if (!runningIds.length) return;
+    let cancelled = false;
+
+    const loop = async () => {
+      while (!cancelled) {
+        for (const id of runningIds) {
+          if (cancelled) return;
+          try {
+            const tick = await dispatchCampaign({ campaign_id: id, action: "process" });
+            setTickNotes((prev) => ({ ...prev, [id]: tick.error ?? null }));
+          } catch (err) {
+            setTickNotes((prev) => ({
+              ...prev,
+              [id]: err instanceof Error ? err.message : "Pengiriman tidak dapat dijalankan",
+            }));
+          }
         }
+        if (cancelled) return;
+        queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
+        queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
-      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-    }, 4000);
-    return () => clearInterval(timer);
+    };
+    void loop();
+
+    return () => {
+      cancelled = true;
+    };
   }, [campaigns, queryClient]);
+
 
 
   const create = useMutation({

@@ -197,15 +197,13 @@ export function inlineButtonsAsText(content: string): string {
 }
 
 
-/** Random anti-ban delay, in seconds, between min and max. */
-export function randomDelay(min: number, max: number): number {
-  const lo = Math.max(1, Math.min(min, max));
-  const hi = Math.max(lo, max);
-  return lo + Math.random() * (hi - lo);
+/**
+ * Jeda antar pesan, dalam detik, murni mengikuti pengaturan kecepatan blast.
+ * Tidak ada keacakan, cooldown, atau tambahan jeda apa pun.
+ */
+export function sendDelaySeconds(min: number, max: number): number {
+  const lo = Number.isFinite(min) ? min : 0;
+  const hi = Number.isFinite(max) ? max : lo;
+  return Math.max(0, Math.min(lo, hi));
 }
 
-/** Exponential backoff in ms with jitter, used by the queue worker. */
-export function backoffMs(attempt: number, baseMs = 800, capMs = 30_000): number {
-  const expo = Math.min(capMs, baseMs * 2 ** Math.max(0, attempt - 1));
-  return Math.round(expo * (0.7 + Math.random() * 0.6));
-}
