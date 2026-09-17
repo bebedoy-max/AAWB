@@ -4,7 +4,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { logActivity } from "@/lib/activity-log.server";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -35,7 +34,7 @@ export const recordActivity = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data, context }) => {
-    await logActivity(context.userId, data.action, data.detail ?? null);
+    await (await import("@/lib/activity-log.server")).logActivity(context.userId, data.action, data.detail ?? null);
     return { ok: true };
   });
 

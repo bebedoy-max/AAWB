@@ -212,6 +212,7 @@ export const setMemberRole = createServerFn({ method: "POST" })
       .from("user_roles")
       .insert({ user_id: data.userId, role: data.role });
     if (ins.error) throw new Error(ins.error.message);
+    await (await import("@/lib/activity-log.server")).logActivity(context.userId, "role_change", `Peran pengguna ${data.userId} diubah menjadi ${data.role}`);
     return { ok: true };
   });
 
@@ -245,6 +246,7 @@ export const resetMemberPassword = createServerFn({ method: "POST" })
       password: data.password,
     });
     if (error) throw new Error(error.message);
+    await (await import("@/lib/activity-log.server")).logActivity(context.userId, "password_reset", `Kata sandi pengguna ${data.userId} disetel ulang`);
     return { ok: true };
   });
 
@@ -264,6 +266,7 @@ export const deleteMember = createServerFn({ method: "POST" })
     await (supabaseAdmin as any).from("user_roles").delete().eq("user_id", data.userId);
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
     if (error) throw new Error(error.message);
+    await (await import("@/lib/activity-log.server")).logActivity(context.userId, "user_delete", `Pengguna ${data.userId} dihapus`);
     return { ok: true };
   });
 

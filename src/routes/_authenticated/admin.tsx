@@ -52,15 +52,16 @@ import {
   type AppRole,
 } from "@/lib/admin.functions";
 import { AdminRewardSettings, AdminWithdrawals } from "@/components/admin-rewards";
+import { AdminActivityLog } from "@/components/admin-activity-log";
 
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
       { title: "Admin — AAWB" },
-      { name: "description", content: "Atur gateway WhatsApp dan peran pengguna AAWB." },
+      { name: "description", content: "Kelola pengguna dan konfigurasi sistem AAWB." },
       { property: "og:title", content: "Admin — AAWB" },
-      { property: "og:description", content: "Atur gateway WhatsApp dan peran pengguna AAWB." },
+      { property: "og:description", content: "Kelola pengguna dan konfigurasi sistem AAWB." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -186,7 +187,7 @@ function AdminPage() {
     <>
       <PageHeader
         title="Admin"
-        description="Atur gateway WhatsApp dan peran pengguna."
+        description="Kelola pengguna dan konfigurasi sistem."
         action={
           <Badge variant="outline" className="gap-1.5">
             <ShieldCheck className="size-3.5" />
@@ -195,10 +196,13 @@ function AdminPage() {
         }
       />
 
-      <Tabs defaultValue="users" className="space-y-4">
+      <Tabs defaultValue="activity" className="space-y-4">
         <TabsList
-          className={cn("grid h-auto w-full max-w-full", isSuper ? "grid-cols-4" : "grid-cols-2")}
+          className={cn("grid h-auto w-full max-w-full", isSuper ? "grid-cols-5" : "grid-cols-3")}
         >
+          <TabsTrigger value="activity" className="px-1.5 text-xs sm:px-3 sm:text-sm">
+            User Log
+          </TabsTrigger>
           <TabsTrigger value="users" className="px-1.5 text-xs sm:px-3 sm:text-sm">
             Pengguna
           </TabsTrigger>
@@ -212,7 +216,7 @@ function AdminPage() {
           </TabsTrigger>
           {isSuper ? (
             <TabsTrigger value="gateway" className="px-1.5 text-xs sm:px-3 sm:text-sm">
-              Gateway
+               Sistem
             </TabsTrigger>
           ) : null}
         </TabsList>
@@ -289,6 +293,10 @@ function AdminPage() {
 
         <TabsContent value="withdrawal" className="space-y-4">
           <AdminWithdrawals />
+        </TabsContent>
+
+        <TabsContent value="activity" className="space-y-4">
+          <AdminActivityLog />
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">

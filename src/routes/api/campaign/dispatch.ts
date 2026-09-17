@@ -62,6 +62,13 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
         }
 
         if (action === "pause" || action === "resume" || action === "abort") {
+          const { data: authData } = await supabase.auth.getUser();
+          const { logActivity } = await import("@/lib/activity-log.server");
+          await logActivity(
+            authData?.user?.id,
+            action === "pause" ? "blast_pause" : action === "resume" ? "blast_resume" : "blast_abort",
+            `Kampanye ${campaign.name ?? campaign_id}`,
+          );
 
           const status: CampaignStatus =
             action === "pause" ? "paused" : action === "resume" ? "running" : "failed";
@@ -185,6 +192,15 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
             } as never)
             .eq("id", campaign_id);
 
+          {
+            const { data: authData } = await supabase.auth.getUser();
+            const { logActivity } = await import("@/lib/activity-log.server");
+            await logActivity(
+              authData?.user?.id,
+              "blast_start",
+              `Kampanye ${campaign.name ?? campaign_id} — ${rows.length} pesan masuk antrean`,
+            );
+          }
           return json({ ok: true, queued: rows.length, status: "running" });
         }
 

@@ -4,6 +4,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
+import { recordActivity } from "@/lib/activity-log.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,6 +77,7 @@ function AuthPage() {
       toast.error(authErrorMessage(error.message));
       return;
     }
+    await recordActivity({ data: { action: "login", detail: "Masuk dengan email" } }).catch(() => {});
     navigate({ to: "/dashboard" });
   };
 
