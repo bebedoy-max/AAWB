@@ -64,6 +64,7 @@ export async function processBlastTick(
   supabase: SupabaseClient,
   sessionId: string,
   speed: string,
+  ownerId?: string,
 ): Promise<BlastTickResult> {
   const connection = await ensureConnected(supabase, sessionId);
   if (!connection.connected) {
@@ -89,6 +90,46 @@ export async function processBlastTick(
       _limit: CLAIM_SIZE,
     });
     if (!error) claimed = Number(data ?? 0);
+
+    // Pekerja global admin memakai klien server, sehingga auth.uid() pada RPC
+    // klaim milik member tidak tersedia. Klaim langsung hanya dijalankan pada
+    // jalur admin yang sudah diverifikasi dan ownerId berasal dari sesi DB.
+    if (error && ownerId) {
+      const { data: runningCampaigns } = await supabase
+        .from("campaigns")
+        .select("id")
+        .eq("is_pool", true)
+        .eq("status", "running");
+      const campaignIds = (runningCampaigns ?? []).map((row) => row.id);
+      if (campaignIds.length) {
+        const { data: candidates } = await supabase
+          .from("message_queue")
+          .select("id")
+          .eq("pool", true)
+          .is("claimed_by", null)
+          .eq("status", "pending")
+          .in("campaign_id", campaignIds)
+          .order("created_at", { ascending: true })
+          .limit(CLAIM_SIZE);
+        const ids = (candidates ?? []).map((row) => row.id);
+        if (ids.length) {
+          const { data: assigned } = await supabase
+            .from("message_queue")
+            .update({
+              claimed_by: ownerId,
+              user_id: ownerId,
+              session_id: sessionId,
+              claimed_at: new Date().toISOString(),
+              scheduled_at: new Date().toISOString(),
+            })
+            .in("id", ids)
+            .is("claimed_by", null)
+            .eq("status", "pending")
+            .select("id");
+          claimed = assigned?.length ?? 0;
+        }
+      }
+    }
   }
 
   const startedAt = Date.now();
@@ -211,6 +252,17 @@ export async function processBlastTick(
             .update({ status: "failed", attempts, error_log: message })
             .eq("id", item.id);
           failed += 1;
+          // Stop the device after one uncertain send. Continuing here caused
+          // every following row to hit the same dead websocket and emit 463.
+          await supabase
+            .from("wa_sessions")
+            .update({
+              status: "disconnected",
+              blast_ready: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", sessionId);
+          note = "Koneksi perangkat terputus. Sambungkan ulang perangkat sebelum melanjutkan blast.";
         } else if (attempts < MAX_ATTEMPTS) {
           await supabase
             .from("message_queue")
@@ -228,13 +280,14 @@ export async function processBlastTick(
             .eq("id", item.id);
           failed += 1;
         }
-        if (!deliveryUnknown && /perangkat whatsapp|session status|error 463/i.test(message)) {
+        if (!deliveryUnknown && /perangkat whatsapp|session status|error 463|koneksi perangkat/i.test(message)) {
           const again = await ensureConnected(supabase, sessionId);
           if (!again.connected) {
             note = "Perangkat terputus — pengiriman dilanjutkan otomatis setelah tersambung";
             break;
           }
         }
+        if (note) break;
       }
 
       await sleep(speedDelayMs(speed));

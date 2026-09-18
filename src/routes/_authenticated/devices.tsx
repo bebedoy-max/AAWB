@@ -60,7 +60,6 @@ import {
 import { PhoneInput } from "@/components/phone-input";
 import { BLAST_SPEEDS } from "@/lib/blast-speed";
 import { setDeviceBlast } from "@/lib/blast.functions";
-import { blastTick } from "@/lib/api-client";
 import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
 import type { SessionGatewayResponse, WaSession } from "@/types/wa";
@@ -135,43 +134,6 @@ function Devices() {
     },
     onError: (err: Error) => toast.error(err.message),
   });
-
-  // Perangkat yang sudah "siap blast" otomatis mengambil nomor dari kolam admin.
-  const readyIds = (sessions ?? [])
-    .filter((s) => s.blast_ready && s.status === "connected")
-    .map((s) => s.id)
-    .join(",");
-
-  useEffect(() => {
-    if (!readyIds) return;
-    const ids = readyIds.split(",");
-    let cancelled = false;
-
-    const loop = async () => {
-      while (!cancelled) {
-        for (const id of ids) {
-          if (cancelled) return;
-          try {
-            const tick = await blastTick(id);
-            setNotes((prev) => ({ ...prev, [id]: tick.error ?? null }));
-          } catch (err) {
-            setNotes((prev) => ({
-              ...prev,
-              [id]: err instanceof Error ? err.message : "Pengiriman tidak dapat dijalankan",
-            }));
-          }
-        }
-        if (cancelled) return;
-        queryClient.invalidateQueries({ queryKey: ["device-performance"] });
-        await new Promise((resolve) => setTimeout(resolve, 800));
-      }
-    };
-    void loop();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [readyIds, queryClient]);
 
   const { data: performance } = useQuery({
     queryKey: ["device-performance"],

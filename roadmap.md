@@ -53,4 +53,13 @@
 # Perbaikan error gateway
 - [x] Temukan akar masalah status sesi dan koneksi WebSocket
 - [x] Perbaiki penanganan koneksi, pengiriman, dan pesan error
-- [ ] Uji pengiriman dan pastikan error tidak muncul kembali
+- [x] Hentikan pemrosesan satu perangkat segera setelah socket putus agar error tidak berantai
+- [x] Cegah dua halaman/tab menjalankan pekerja blast yang sama secara bersamaan
+- [x] Bersihkan 27 sesi gateway yatim; verifikasi tidak ada sesi FAILED tersisa
+- [x] Uji siklus create → start → SCAN_QR_CODE → cleanup langsung ke gateway
+- [ ] Uji pengiriman pesan nyata (menunggu pengguna memasangkan minimal satu perangkat)
+
+## Perbaikan pekerja kampanye otomatis
+- [x] Izinkan pekerja global admin menjalankan perangkat member setelah verifikasi peran server.
+- [x] Klaim antrean kolam atas nama pemilik perangkat pada jalur otomatis global.
+- [ ] Verifikasi antrean nyata berpindah dari menunggu ke terkirim (terblokir: perangkat "00000000" masih menunggu pemindaian QR dan "A1" terputus).

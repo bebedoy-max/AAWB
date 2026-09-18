@@ -78,6 +78,7 @@ function Campaigns() {
 
   const { data: sessions } = useQuery({
     queryKey: ["wa-sessions"],
+    refetchInterval: 5000,
     queryFn: async () => {
       const { data } = await supabase.from("wa_sessions").select("*").order("created_at");
       return (data ?? []) as WaSession[];
@@ -125,18 +126,16 @@ function Campaigns() {
     },
   });
 
-  // The database scheduler is the sole campaign worker. The browser only
-  // refreshes progress; running a second worker here made the same WhatsApp
-  // session handle concurrent sends and destabilized its websocket.
+  // Pengiriman otomatis dijalankan oleh pekerja global (CampaignAutoRunner)
+  // di seluruh aplikasi. Halaman ini hanya menyegarkan tampilan.
   useEffect(() => {
-    const hasRunning = (campaigns ?? []).some((campaign) => campaign.status === "running");
-    if (!hasRunning) return;
-    const timer = window.setInterval(() => {
+    const refresh = window.setInterval(() => {
       queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
     }, 5_000);
-    return () => window.clearInterval(timer);
-  }, [campaigns, queryClient]);
+    return () => window.clearInterval(refresh);
+  }, [queryClient]);
 
 
 

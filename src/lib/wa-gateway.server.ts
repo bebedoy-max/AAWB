@@ -45,6 +45,7 @@ export class GatewayError extends Error {
 }
 
 const sessionSendLocks = new Map<string, Promise<void>>();
+const sessionRestartLocks = new Map<string, Promise<GatewaySessionState>>();
 
 /**
  * WAHA uses several non-standard responses when its internal WhatsApp socket
@@ -67,6 +68,18 @@ function isUnknownDeliveryError(error: unknown): boolean {
     (error instanceof GatewayError && (error.deliveryUnknown || error.status === 463)) ||
     /websocket disconnected before message send returned response/i.test(message)
   );
+}
+
+/** Do not expose WAHA/gRPC internals such as `2 UNKNOWN` or status 463 to users. */
+function friendlyGatewayMessage(status: number, body: RawResult["body"]): string {
+  const raw = messageOf(body);
+  if (
+    status === 463 ||
+    /websocket disconnected|session status is not as expected|restart the session|\bunknown\b/i.test(raw)
+  ) {
+    return "Koneksi perangkat WhatsApp terputus. Perangkat sedang dipulihkan otomatis.";
+  }
+  return raw || `HTTP ${status}`;
 }
 
 function isUnsupportedMessageFeature(error: unknown): boolean {
@@ -207,9 +220,11 @@ function messageOf(body: RawResult["body"]): string {
 async function call(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
   const res = await request(path, init);
   if (res.status < 200 || res.status >= 300) {
+    const isSendRequest = init?.method === "POST" && /^\/api\/send/i.test(path);
     throw new GatewayError(
-      `Kesalahan gateway: ${messageOf(res.body) || `HTTP ${res.status}`}`,
+      friendlyGatewayMessage(res.status, res.body),
       res.status >= 400 && res.status < 600 ? res.status : 502,
+      isSendRequest && isUnknownDeliveryError(new GatewayError(messageOf(res.body), res.status)),
     );
   }
   return (res.body && typeof res.body === "object" ? res.body : {}) as Record<string, unknown>;
@@ -471,6 +486,18 @@ async function restartSessionTransport(id: string): Promise<GatewaySessionState>
     if (state.status === "connected") break;
   }
   return state;
+}
+
+/** Collapse simultaneous recovery attempts for the same WhatsApp device. */
+async function recoverSessionTransport(id: string): Promise<GatewaySessionState> {
+  const existing = sessionRestartLocks.get(id);
+  if (existing) return existing;
+
+  const recovery = restartSessionTransport(id).finally(() => {
+    if (sessionRestartLocks.get(id) === recovery) sessionRestartLocks.delete(id);
+  });
+  sessionRestartLocks.set(id, recovery);
+  return recovery;
 }
 
 export async function getPasskeyChallenge(id: string): Promise<Record<string, unknown>> {
@@ -752,16 +779,16 @@ export async function sendMessage(params: {
     } catch (error) {
       if (isUnknownDeliveryError(error)) {
         // Repair the socket for subsequent rows, but never replay this row.
-        await restartSessionTransport(params.sessionId).catch(() => undefined);
+        await recoverSessionTransport(params.sessionId).catch(() => undefined);
         throw new GatewayError(
-          "Koneksi terputus saat konfirmasi pengiriman. Pesan tidak diulang untuk mencegah kiriman ganda.",
-          502,
+          "Koneksi perangkat terputus saat mengirim. Pengiriman dihentikan sementara untuk mencegah pesan ganda.",
+          503,
           true,
         );
       }
       if (!isStaleSessionError(error)) throw error;
 
-      const recovered = await restartSessionTransport(params.sessionId);
+      const recovered = await recoverSessionTransport(params.sessionId);
       if (recovered.status !== "connected") {
         throw new GatewayError(
           "Perangkat WhatsApp sedang menyambungkan ulang. Pengiriman akan dilanjutkan otomatis.",

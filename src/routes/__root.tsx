@@ -13,6 +13,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../lib/theme";
 import { Toaster } from "../components/ui/sonner";
+import { CampaignAutoRunner } from "../components/campaign-auto-runner";
 
 function NotFoundComponent() {
   return (
@@ -137,6 +138,8 @@ function RootComponent() {
       <ThemeProvider>
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
+        {/* Pekerja kampanye jalan di seluruh halaman, bukan hanya di halaman Kampanye. */}
+        <CampaignAutoRunner />
         <Toaster position="top-right" richColors />
       </ThemeProvider>
     </QueryClientProvider>
