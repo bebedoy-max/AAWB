@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EmojiPicker } from "@/components/emoji-picker";
 
 export type CampaignDraft = {
   name: string;
@@ -64,7 +65,7 @@ export function CampaignComposer({
       return;
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      toast.error("Ukuran gambar maksimal 3 MB. Kompres dulu atau tempel URL gambar.");
+      toast.error("Ukuran gambar maksimal 3 MB. Kompres gambar lalu unggah kembali.");
       return;
     }
     const reader = new FileReader();
@@ -141,8 +142,12 @@ export function CampaignComposer({
                 onChange={(e) => pickFile(e.target.files?.[0])}
               />
               {mediaUrl ? (
-                <div className="relative overflow-hidden rounded-xl border">
-                  <img src={mediaUrl} alt="Poster kampanye" className="max-h-56 w-full object-cover" />
+                <div className="relative grid max-h-72 place-items-center overflow-hidden rounded-xl border bg-muted/30">
+                  <img
+                    src={mediaUrl}
+                    alt="Poster kampanye"
+                    className="h-auto max-h-72 max-w-full object-contain"
+                  />
                   <Button
                     type="button"
                     size="sm"
@@ -165,12 +170,6 @@ export function CampaignComposer({
                   Klik untuk upload foto banner
                 </button>
               )}
-              <Input
-                value={mediaUrl && mediaUrl.startsWith("data:") ? "" : (mediaUrl ?? "")}
-                onChange={(e) => setMediaUrl(e.target.value || null)}
-                placeholder="atau tempel URL gambar (https://…)"
-                className="text-xs"
-              />
             </div>
 
             <div className="space-y-1.5">
@@ -189,6 +188,7 @@ export function CampaignComposer({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">Klik tombol di kanan untuk sisip cepat:</p>
                 <div className="flex gap-2">
+                  <EmojiPicker onSelect={insertToken} />
                   <Button
                     type="button"
                     size="sm"
@@ -269,7 +269,13 @@ export function CampaignComposer({
                   </p>
                   <div className="ml-auto w-[85%] overflow-hidden rounded-lg rounded-tr-none bg-[#DCF8C6] shadow-sm">
                     {mediaUrl ? (
-                      <img src={mediaUrl} alt="" className="h-28 w-full object-cover" />
+                      <div className="grid max-h-52 w-full place-items-center overflow-hidden bg-muted/20">
+                        <img
+                          src={mediaUrl}
+                          alt=""
+                          className="h-auto max-h-52 w-full object-contain"
+                        />
+                      </div>
                     ) : null}
                     <div className="px-2.5 py-2">
                       <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-[#1a1a1a]">
@@ -278,9 +284,12 @@ export function CampaignComposer({
                           : "Mulai ketik pesan untuk melihat preview…"}
                       </p>
                       {ctaText.trim() || ctaUrl.trim() ? (
-                        <div className="mt-2 border-t border-black/10 pt-1.5 text-center text-[11px] font-semibold text-[#027EB5]">
-                          <Link2 className="mr-1 inline size-3" />
-                          {ctaText.trim() || "Buka Tautan"}
+                        <div className="mt-2 border-t border-black/10 pt-1.5 text-[11px] text-[#027EB5]">
+                          <span className="font-semibold">
+                            <Link2 className="mr-1 inline size-3" />
+                            {ctaText.trim() || "Buka Tautan"}
+                          </span>
+                          {ctaUrl.trim() ? <span>: {ctaUrl.trim()}</span> : null}
                         </div>
                       ) : null}
                       <p className="mt-1 text-right text-[9px] text-muted-foreground">✓✓</p>

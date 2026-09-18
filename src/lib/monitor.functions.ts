@@ -4,6 +4,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { buttonToken } from "@/lib/whatsapp";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -51,6 +52,14 @@ export interface BlastProjectRow {
 
 /** Pisahkan CTA yang disimpan di akhir pesan ("\n\nTeks: https://…"). */
 function splitCta(body: string): { message: string; cta_text: string | null; cta_url: string | null } {
+  const token = body.match(/^([\s\S]*?)\n*\[\[tombol:([^|\]]+)\|([^\]]+)\]\]\s*$/i);
+  if (token) {
+    return {
+      message: (token[1] ?? body).trim(),
+      cta_text: token[2]?.trim() || null,
+      cta_url: token[3]?.trim() || null,
+    };
+  }
   const m = body.match(/^([\s\S]*?)\n\n([^\n]*?):?\s*(https?:\/\/\S+)\s*$/);
   if (!m) return { message: body, cta_text: null, cta_url: null };
   return { message: m[1] ?? body, cta_text: m[2] || null, cta_url: m[3] ?? null };
@@ -62,7 +71,7 @@ function joinCta(message: string, ctaText?: string | null, ctaUrl?: string | nul
   if (!url) return message;
   const link = /^https?:\/\//i.test(url) ? url : `https://${url}`;
   const text = (ctaText ?? "").trim();
-  return `${message}\n\n${text ? `${text}: ` : ""}${link}`;
+  return `${message}\n\n${buttonToken(text || "Buka Tautan", link)}`;
 }
 
 async function rolesOf(supabase: any, userId: string): Promise<string[]> {
@@ -182,7 +191,7 @@ export const listBlastProjects = createServerFn({ method: "GET" })
 
     const { data: projects, error } = await admin
       .from("campaigns")
-      .select("id,name,message_body,media_url,total_targets,status,created_at")
+      .select("id,name,message_body,media_url,buttons_json,total_targets,status,created_at")
       .eq("is_pool", true)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -206,14 +215,21 @@ export const listBlastProjects = createServerFn({ method: "GET" })
     }
 
     return ((projects ?? []) as any[]).map((p) => {
-      const { message, cta_text, cta_url } = splitCta(p.message_body ?? "");
+      const legacy = splitCta(p.message_body ?? "");
+      const storedButton = Array.isArray(p.buttons_json)
+        ? p.buttons_json.find((button: unknown) => {
+            if (!button || typeof button !== "object") return false;
+            const value = button as Record<string, unknown>;
+            return typeof value["text"] === "string" && typeof value["url"] === "string";
+          }) as { text: string; url: string } | undefined
+        : undefined;
       return {
         id: p.id,
         name: p.name,
-        message_body: message,
+        message_body: legacy.message,
         media_url: p.media_url ?? null,
-        cta_text,
-        cta_url,
+        cta_text: storedButton?.text ?? legacy.cta_text,
+        cta_url: storedButton?.url ?? legacy.cta_url,
         total_targets: p.total_targets ?? 0,
         created_at: p.created_at,
         status: p.status,
@@ -237,13 +253,19 @@ export const createBlastProject = createServerFn({ method: "POST" })
       const name = (input.name ?? "").trim() || "Proyek tanpa nama";
       const base = (input.message ?? "").trim();
       if (!base) throw new Error("Pesan kampanye tidak boleh kosong.");
-      const message = joinCta(base, input.ctaText, input.ctaUrl);
+      const ctaUrl = (input.ctaUrl ?? "").trim();
+      const normalizedCtaUrl = ctaUrl
+        ? (/^https?:\/\//i.test(ctaUrl) ? ctaUrl : `https://${ctaUrl}`)
+        : null;
+      const buttons = normalizedCtaUrl
+        ? [{ text: (input.ctaText ?? "").trim() || "Buka Tautan", url: normalizedCtaUrl }]
+        : [];
       const mediaUrl = (input.mediaUrl ?? "").trim() || null;
       const phones = Array.from(
         new Set((input.phones ?? []).map((p) => String(p).replace(/\D/g, "")).filter(Boolean)),
       );
       if (phones.length > 50000) throw new Error("Maksimal 50.000 nomor per proyek.");
-      return { name, message, phones, mediaUrl };
+      return { name, message: base, phones, mediaUrl, buttons };
     },
   )
   .handler(async ({ data, context }) => {
@@ -258,6 +280,8 @@ export const createBlastProject = createServerFn({ method: "POST" })
         name: data.name,
         message_body: data.message,
         media_url: data.mediaUrl,
+        media_type: data.mediaUrl ? "image" : "text",
+        buttons_json: data.buttons,
         is_pool: true,
         status: data.phones.length ? "running" : "draft",
         total_targets: data.phones.length,
@@ -309,8 +333,16 @@ export const updateBlastProject = createServerFn({ method: "POST" })
       return {
         id: String(input.id),
         name,
-        message: joinCta(base, input.ctaText, input.ctaUrl),
+        message: base,
         mediaUrl: (input.mediaUrl ?? "").trim() || null,
+        buttons: (() => {
+          const url = (input.ctaUrl ?? "").trim();
+          if (!url) return [];
+          return [{
+            text: (input.ctaText ?? "").trim() || "Buka Tautan",
+            url: /^https?:\/\//i.test(url) ? url : `https://${url}`,
+          }];
+        })(),
       };
     },
   )
@@ -321,7 +353,13 @@ export const updateBlastProject = createServerFn({ method: "POST" })
 
     const { error } = await admin
       .from("campaigns")
-      .update({ name: data.name, message_body: data.message, media_url: data.mediaUrl })
+      .update({
+        name: data.name,
+        message_body: data.message,
+        media_url: data.mediaUrl,
+        media_type: data.mediaUrl ? "image" : "text",
+        buttons_json: data.buttons,
+      })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
 

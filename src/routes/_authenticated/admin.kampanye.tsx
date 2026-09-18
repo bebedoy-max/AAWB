@@ -220,9 +220,9 @@ function KampanyePage() {
                   className="flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-sm sm:flex-row sm:items-center"
                 >
                   {/* Poster */}
-                  <div className="h-24 w-full shrink-0 overflow-hidden rounded-xl border bg-muted sm:h-20 sm:w-32">
+                  <div className="grid h-24 w-full shrink-0 place-items-center overflow-hidden rounded-xl border bg-muted sm:h-20 sm:w-32">
                     {p.media_url ? (
-                      <img src={p.media_url} alt={p.name} className="size-full object-cover" />
+                      <img src={p.media_url} alt={p.name} className="max-h-full max-w-full object-contain" />
                     ) : (
                       <div className="grid size-full place-items-center text-muted-foreground">
                         <Send className="size-6" />

@@ -7,7 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
 import { speedDelayMs } from "@/lib/blast-speed";
 import { buildMessageBody } from "@/lib/whatsapp";
-import type { MediaType } from "@/types/wa";
+import type { MediaType, TemplateButton } from "@/types/wa";
 
 const TICK_BUDGET_MS = 20_000;
 const CLAIM_SIZE = 25;
@@ -18,6 +18,8 @@ interface CampaignContent {
   media_url: string | null;
   media_type: MediaType | null;
   media_filename: string | null;
+  footer_text: string | null;
+  buttons_json: TemplateButton[] | null;
 }
 
 
@@ -101,7 +103,7 @@ export async function processBlastTick(
     if (campaignCache.has(campaignId)) return campaignCache.get(campaignId) ?? null;
     const { data } = await supabase
       .from("campaigns")
-      .select("message_body,media_url,media_type,media_filename")
+      .select("message_body,media_url,media_type,media_filename,footer_text,buttons_json")
       .eq("id", campaignId)
       .maybeSingle();
     const row = (data ?? null) as CampaignContent | null;
@@ -149,13 +151,19 @@ export async function processBlastTick(
           name: item.recipient_phone,
         });
         const mediaUrl = campaign?.media_url?.trim() || null;
+        const mediaType =
+          mediaUrl && (!campaign?.media_type || campaign.media_type === "text")
+            ? "image"
+            : (campaign?.media_type ?? "text");
         await sendMessage({
           sessionId,
           to: item.recipient_phone,
           text,
           mediaUrl,
-          mediaType: campaign?.media_type ?? (mediaUrl ? "image" : "text"),
+          mediaType,
           mediaFilename: campaign?.media_filename ?? null,
+          footerText: campaign?.footer_text ?? null,
+          buttons: campaign?.buttons_json ?? null,
         });
 
         await supabase

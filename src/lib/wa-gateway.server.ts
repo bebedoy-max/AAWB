@@ -448,17 +448,79 @@ export async function sendMessage(params: {
   const mediaUrl = params.mediaUrl?.trim() || null;
   const mediaType: MediaType = params.mediaType ?? (mediaUrl ? "image" : "text");
 
-  // Attachment + buttons: send the media (with its caption) first, then the
-  // interactive message carrying the buttons.
+  const mediaFile = (url: string): Record<string, string> => {
+    const inlineFile = url.match(/^data:([^;,]+);base64,(.+)$/s);
+    if (!inlineFile) {
+      return params.mediaFilename ? { url, filename: params.mediaFilename } : { url };
+    }
+
+    const inlineData = inlineFile[2] ?? "";
+    const detectedMime = inlineData.startsWith("/9j/")
+      ? "image/jpeg"
+      : inlineData.startsWith("iVBOR")
+        ? "image/png"
+        : inlineData.startsWith("R0lGOD")
+          ? "image/gif"
+          : inlineFile[1] ?? "application/octet-stream";
+    const detectedExtension = detectedMime === "image/jpeg"
+      ? "jpg"
+      : detectedMime === "image/png"
+        ? "png"
+        : detectedMime === "image/gif"
+          ? "gif"
+          : "bin";
+    return {
+      mimetype: detectedMime,
+      filename: params.mediaFilename ?? (mediaType === "image" ? `kampanye.${detectedExtension}` : "lampiran"),
+      data: inlineData,
+    };
+  };
+
+  // WAHA Plus/NOWEB dapat mengirim gambar, caption, dan tombol dalam satu
+  // pesan melalui headerImage. Mesin lain akan masuk ke fallback lengkap.
   if (buttons.length && mediaUrl && mediaType !== "text") {
-    await sendMessage({ ...params, text: fallbackText, buttons: null });
+    if (mediaType === "image") {
+      try {
+        const raw = await call("/api/sendButtons", {
+          method: "POST",
+          body: JSON.stringify({
+            session: params.sessionId,
+            chatId,
+            header: "",
+            headerImage: mediaFile(mediaUrl),
+            body: cleanText,
+            footer: params.footerText ?? "",
+            buttons: buttons.map((button) => ({
+              type: "url",
+              text: button.text,
+              url: button.url,
+            })),
+          }),
+        });
+        console.info("Kampanye WhatsApp terkirim sebagai gambar + CTA native", {
+          sessionId: params.sessionId,
+          chatId,
+          messageId: readMessageId(raw),
+        });
+        return { id: readMessageId(raw) };
+      } catch (error) {
+        console.warn(
+          "WAHA tidak mendukung gambar + CTA native; CTA disatukan ke caption:",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    const fallbackCaption = [
+      cleanText,
+      ...buttons.map((button) => `👉 ${button.text}: ${button.url}`),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     return sendMessage({
       ...params,
-      mediaUrl: null,
-      mediaType: "text",
-      text: params.footerText?.trim() || "Pilih tombol di bawah 👇",
-      footerText: null,
-      buttons,
+      text: fallbackCaption,
+      buttons: null,
     });
   }
 
@@ -477,7 +539,11 @@ export async function sendMessage(params: {
         }),
       });
       return { id: readMessageId(raw) };
-    } catch {
+    } catch (error) {
+      console.warn(
+        "WAHA sendButtons gagal; CTA dikirim sebagai tautan teks:",
+        error instanceof Error ? error.message : String(error),
+      );
       // Engine without button support: fall back to plain text with the links
       // kept at the position the user wrote them.
       const appended = [
@@ -515,8 +581,7 @@ export async function sendMessage(params: {
           ? "/api/sendVoice"
           : "/api/sendFile";
 
-  const file: Record<string, string> = { url: mediaUrl };
-  if (params.mediaFilename) file["filename"] = params.mediaFilename;
+  const file = mediaFile(mediaUrl);
 
   const body: Record<string, unknown> = {
     session: params.sessionId,

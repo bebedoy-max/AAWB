@@ -20,3 +20,14 @@
 - [x] Tingkatkan kontras seluruh teks pada panel peringatan dan informasi saldo.
 - [x] Terapkan komposisi Modern Dark Dashboard yang dipilih.
 - [x] Verifikasi tampilan dashboard dan klaim saldo pada desktop dan mobile.
+
+## Konsistensi pesan kampanye
+
+- [x] Hapus kolom tautan gambar dari formulir tambah kampanye.
+- [x] Simpan gambar unggahan sebagai media gambar, bukan pesan teks.
+- [x] Verifikasi nyata gambar dan isi pesan pada enam nomor uji; seluruh kiriman diterima gateway.
+- [x] Verifikasi CTA: mesin GOWS menolak tombol native, sehingga otomatis terkirim sebagai tautan klik.
+- [x] Simpan CTA sebagai data tombol dan teruskan melalui jalur blast member.
+- [x] Kenali format gambar dari isi file agar MIME/ekstensi tidak salah saat dikirim.
+- [x] Satukan CTA fallback ke caption gambar agar GOWS mengirim satu pesan saja.
+- [x] Tambahkan pemilih emoji sebelum tombol variabel nama dan telepon.
