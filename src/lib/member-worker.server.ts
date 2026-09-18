@@ -6,10 +6,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
 import { speedDelayMs } from "@/lib/blast-speed";
+import { buildMessageBody } from "@/lib/whatsapp";
+import type { MediaType } from "@/types/wa";
 
 const TICK_BUDGET_MS = 20_000;
 const CLAIM_SIZE = 25;
 const MAX_ATTEMPTS = 3;
+
+interface CampaignContent {
+  message_body: string;
+  media_url: string | null;
+  media_type: MediaType | null;
+  media_filename: string | null;
+}
+
 
 export interface BlastTickResult {
   claimed: number;
@@ -83,10 +93,26 @@ export async function processBlastTick(
   let failed = 0;
   let note: string | undefined;
 
+  // Isi pesan kampanye (teks, gambar, lampiran) dibaca sekali lalu dipakai
+  // ulang, supaya pesan yang terkirim sama persis dengan pratinjau kampanye.
+  const campaignCache = new Map<string, CampaignContent | null>();
+  async function campaignContent(campaignId: string | null): Promise<CampaignContent | null> {
+    if (!campaignId) return null;
+    if (campaignCache.has(campaignId)) return campaignCache.get(campaignId) ?? null;
+    const { data } = await supabase
+      .from("campaigns")
+      .select("message_body,media_url,media_type,media_filename")
+      .eq("id", campaignId)
+      .maybeSingle();
+    const row = (data ?? null) as CampaignContent | null;
+    campaignCache.set(campaignId, row);
+    return row;
+  }
+
   while (Date.now() - startedAt < TICK_BUDGET_MS) {
     const { data: batch } = await supabase
       .from("message_queue")
-      .select("id,recipient_phone,message_body,attempts")
+      .select("id,campaign_id,recipient_phone,message_body,attempts")
       .eq("session_id", sessionId)
       .eq("status", "pending")
       .order("scheduled_at", { ascending: true })
@@ -94,6 +120,7 @@ export async function processBlastTick(
 
     const queue = (batch ?? []) as Array<{
       id: string;
+      campaign_id: string | null;
       recipient_phone: string;
       message_body: string;
       attempts: number;
@@ -114,7 +141,23 @@ export async function processBlastTick(
 
       const attempts = item.attempts + 1;
       try {
-        await sendMessage({ sessionId, to: item.recipient_phone, text: item.message_body });
+        const campaign = await campaignContent(item.campaign_id);
+        const source = campaign?.message_body?.trim() || item.message_body;
+        // Variabel {{phone}} / {{name}} diisi sesuai nomor penerima.
+        const text = buildMessageBody(source, {
+          phone: item.recipient_phone,
+          name: item.recipient_phone,
+        });
+        const mediaUrl = campaign?.media_url?.trim() || null;
+        await sendMessage({
+          sessionId,
+          to: item.recipient_phone,
+          text,
+          mediaUrl,
+          mediaType: campaign?.media_type ?? (mediaUrl ? "image" : "text"),
+          mediaFilename: campaign?.media_filename ?? null,
+        });
+
         await supabase
           .from("message_queue")
           .update({
