@@ -29,7 +29,7 @@ function Landing() {
       </header>
 
       <main className="mx-auto flex min-h-[calc(100vh-160px)] max-w-5xl flex-col items-center justify-center px-6 pb-20 pt-10 text-center">
-        <BrandLogo className="h-20" />
+        <BrandLogo className="h-40" />
         <h1 className="mt-7 max-w-3xl font-display text-4xl font-bold sm:text-6xl">
           Kelola aktivitas dengan mudah dan pantau seluruh perkembangan Anda.
         </h1>

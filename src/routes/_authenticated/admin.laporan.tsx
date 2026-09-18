@@ -15,6 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { listCampaignOptions, listReport } from "@/lib/admin-console.functions";
 import {
   AdminPageTitle,
@@ -78,33 +84,90 @@ function LaporanPage() {
     );
   }, [data, q]);
 
-  const download = () => {
+  const HEADER = [
+    "Waktu",
+    "Pengirim",
+    "Pemilik perangkat",
+    "Nomor tujuan",
+    "Status",
+    "Pesan",
+    "Keterangan",
+  ];
+
+  const tableRows = () =>
+    rows.map((r) => [
+      waktu(r.sent_at ?? r.created_at),
+      r.sender,
+      r.sender_owner,
+      `+${r.recipient_phone}`,
+      STATUS_LABEL[r.status] ?? r.status,
+      r.message_body,
+      r.error_log ?? "",
+    ]);
+
+  const saveFile = (content: string, mime: string, ext: string) => {
+    const url = URL.createObjectURL(new Blob([content], { type: mime }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `laporan-pengiriman-${new Date().toISOString().slice(0, 10)}.${ext}`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Laporan diunduh");
+  };
+
+  const esc = (v: string) =>
+    String(v ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+  const htmlTable = () =>
+    `<table border="1"><thead><tr>${HEADER.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${tableRows()
+      .map((cells) => `<tr>${cells.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`)
+      .join("")}</tbody></table>`;
+
+  const download = (format: "csv" | "excel" | "pdf") => {
     if (!rows.length) {
       toast.error("Tidak ada data untuk diunduh.");
       return;
     }
-    const header = ["Waktu", "Pengirim", "Pemilik perangkat", "Nomor tujuan", "Status", "Pesan", "Keterangan"];
-    const body = rows.map((r) =>
-      [
-        waktu(r.sent_at ?? r.created_at),
-        r.sender,
-        r.sender_owner,
-        `+${r.recipient_phone}`,
-        STATUS_LABEL[r.status] ?? r.status,
-        r.message_body,
-        r.error_log ?? "",
-      ]
-        .map(csvCell)
-        .join(","),
+
+    if (format === "csv") {
+      const body = tableRows().map((cells) => cells.map(csvCell).join(","));
+      saveFile(
+        `\uFEFF${[HEADER.map(csvCell).join(","), ...body].join("\n")}`,
+        "text/csv;charset=utf-8",
+        "csv",
+      );
+      return;
+    }
+
+    if (format === "excel") {
+      saveFile(
+        `\uFEFF<html><head><meta charset="utf-8" /></head><body>${htmlTable()}</body></html>`,
+        "application/vnd.ms-excel;charset=utf-8",
+        "xls",
+      );
+      return;
+    }
+
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error("Izinkan pop-up untuk menyimpan laporan PDF.");
+      return;
+    }
+    win.document.write(
+      `<html><head><meta charset="utf-8" /><title>Laporan Pengiriman</title>` +
+        `<style>body{font-family:system-ui,sans-serif;padding:24px}h1{font-size:18px}` +
+        `table{border-collapse:collapse;width:100%;font-size:11px}` +
+        `th,td{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}` +
+        `th{background:#eee}</style></head><body>` +
+        `<h1>Laporan Pengiriman</h1><p>${esc(waktu(new Date().toISOString()))} · ${rows.length} baris</p>` +
+        `${htmlTable()}</body></html>`,
     );
-    const csv = `\uFEFF${[header.map(csvCell).join(","), ...body].join("\n")}`;
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `laporan-pengiriman-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("Laporan diunduh");
+    win.document.close();
+    win.focus();
+    win.print();
   };
 
   return (
@@ -118,10 +181,19 @@ function LaporanPage() {
               <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
               Muat ulang
             </Button>
-            <Button size="sm" onClick={download}>
-              <Download className="mr-2 size-4" />
-              Unduh CSV
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm">
+                  <Download className="mr-2 size-4" />
+                  Unduh laporan
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => download("pdf")}>PDF</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => download("excel")}>Excel (.xls)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => download("csv")}>CSV</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         }
       />

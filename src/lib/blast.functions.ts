@@ -11,6 +11,8 @@ export interface MemberDevice {
   session_name: string;
   phone_number: string | null;
   status: string;
+  blast_speed: string;
+  blast_ready: boolean;
 }
 
 export interface MemberBlastState {
@@ -40,18 +42,14 @@ export const getBlastState = createServerFn({ method: "GET" })
         .maybeSingle(),
       supabase
         .from("wa_sessions")
-        .select("id,session_name,phone_number,status")
+        .select("id,session_name,phone_number,status,blast_speed,blast_ready")
         .eq("user_id", context.userId)
         .order("created_at"),
       supabase.from("message_queue").select("status").eq("user_id", context.userId).limit(100000),
       supabase.rpc("reward_balance", { _user_id: context.userId }),
       admin.from("app_settings").select("max_devices_per_member").eq("id", "global").maybeSingle(),
-      admin
-        .from("message_queue")
-        .select("id", { count: "exact", head: true })
-        .eq("pool", true)
-        .is("claimed_by", null)
-        .eq("status", "pending"),
+      // Hanya nomor dari kampanye yang berjalan yang benar-benar bisa dikerjakan.
+      supabase.rpc("pool_available"),
     ]);
 
     let sent = 0;
@@ -72,7 +70,7 @@ export const getBlastState = createServerFn({ method: "GET" })
       failed,
       pending,
       balance: Number(balanceRes.data ?? 0),
-      pool_available: Number((poolRes as any)?.count ?? 0),
+      pool_available: Number((poolRes as any)?.data ?? 0),
     };
   });
 
@@ -91,6 +89,12 @@ export const setBlastState = createServerFn({ method: "POST" })
       .eq("user_id", context.userId);
     if (error) throw new Error(error.message);
 
+    // Sinkronkan status siap-blast pada semua perangkat member.
+    await supabase
+      .from("wa_sessions")
+      .update({ blast_ready: data.running, blast_speed: data.speed })
+      .eq("user_id", context.userId);
+
     const { logActivity } = await import("@/lib/activity-log.server");
     await logActivity(
       context.userId,
@@ -98,4 +102,45 @@ export const setBlastState = createServerFn({ method: "POST" })
       `Kecepatan ${data.speed}`,
     );
     return { ok: true, running: data.running, speed: data.speed };
+  });
+
+/** Ubah kecepatan / status siap-blast untuk SATU perangkat. */
+export const setDeviceBlast = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { session_id: string; ready?: boolean; speed?: string }) => ({
+    session_id: String(input.session_id),
+    ...(input.ready === undefined ? {} : { ready: Boolean(input.ready) }),
+    ...(input.speed === undefined ? {} : { speed: String(input.speed) }),
+  }))
+  .handler(async ({ data, context }) => {
+    const supabase = context.supabase as any;
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (data.ready !== undefined) patch["blast_ready"] = data.ready;
+    if (data.speed !== undefined) patch["blast_speed"] = data.speed;
+
+    const { data: row, error } = await supabase
+      .from("wa_sessions")
+      .update(patch)
+      .eq("id", data.session_id)
+      .eq("user_id", context.userId)
+      .select("id,blast_ready,blast_speed")
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!row) throw new Error("Perangkat tidak ditemukan");
+
+    // Selama minimal satu perangkat siap, pekerja member tetap aktif.
+    const { count: readyCount } = await supabase
+      .from("wa_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", context.userId)
+      .eq("blast_ready", true);
+    await supabase
+      .from("profiles")
+      .update({
+        blast_running: (readyCount ?? 0) > 0,
+        ...(data.speed !== undefined ? { blast_speed: data.speed } : {}),
+      })
+      .eq("user_id", context.userId);
+
+    return { ok: true, ready: Boolean(row.blast_ready), speed: String(row.blast_speed ?? "santai") };
   });

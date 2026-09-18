@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import {
   Coins,
   MessageCircle,
-  Palette,
   PlugZap,
   ScrollText,
   Send,
@@ -20,10 +19,8 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/my-client";
-import { useTheme } from "@/lib/theme";
 import type { Profile } from "@/types/wa";
 import {
   getGatewaySettings,
@@ -53,7 +50,6 @@ type SectionId =
   | "reward"
   | "log"
   | "akun"
-  | "tampilan"
   | "telegram-akun";
 
 const SECTIONS: {
@@ -68,7 +64,6 @@ const SECTIONS: {
   { id: "reward", label: "Reward & Keuangan", hint: "Nilai reward, referal", icon: Coins, superOnly: true },
   { id: "log", label: "User Log", hint: "Aktivitas pengguna", icon: ScrollText },
   { id: "akun", label: "Akun", hint: "Nama & email", icon: UserRound },
-  { id: "tampilan", label: "Tampilan", hint: "Terang atau gelap", icon: Palette },
   { id: "telegram-akun", label: "Telegram Saya", hint: "Koneksi notifikasi", icon: MessageCircle },
 ];
 
@@ -121,7 +116,6 @@ function PengaturanPage() {
           {active === "reward" && isSuper ? <AdminRewardSettings /> : null}
           {active === "log" ? <AdminActivityLog /> : null}
           {active === "akun" ? <AkunPanel /> : null}
-          {active === "tampilan" ? <TampilanPanel /> : null}
           {active === "telegram-akun" ? <TelegramAkunPanel /> : null}
         </div>
       </div>
@@ -365,23 +359,6 @@ function AkunPanel() {
         <Button onClick={() => save.mutate()} disabled={save.isPending}>
           Simpan perubahan
         </Button>
-      </div>
-    </Panel>
-  );
-}
-
-function TampilanPanel() {
-  const { theme, toggle } = useTheme();
-  return (
-    <Panel title="Tampilan" description="Pilih tampilan terang atau gelap.">
-      <div className="flex items-center justify-between rounded-lg border p-3 sm:max-w-md">
-        <div>
-          <p className="text-sm font-medium">Mode gelap</p>
-          <p className="text-xs text-muted-foreground">
-            Saat ini {theme === "dark" ? "gelap" : "terang"}
-          </p>
-        </div>
-        <Switch checked={theme === "dark"} onCheckedChange={toggle} />
       </div>
     </Panel>
   );

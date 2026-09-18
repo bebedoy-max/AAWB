@@ -1,4 +1,4 @@
-import { getMyRole } from "@/lib/admin.functions";
+import { getMyRole, ensureFirstUserIsSuperAdmin } from "@/lib/admin.functions";
 import { supabase } from "@/integrations/supabase/my-client";
 
 export type PostLoginPath = "/admin" | "/dashboard";
@@ -18,6 +18,12 @@ async function waitForSession(timeoutMs = 4000): Promise<boolean> {
 export async function getPostLoginPath(): Promise<PostLoginPath> {
   try {
     if (!(await waitForSession())) return "/dashboard";
+    // Akun pertama yang berhasil masuk otomatis menjadi super admin.
+    try {
+      await ensureFirstUserIsSuperAdmin();
+    } catch {
+      /* diabaikan: peran tetap dibaca di bawah */
+    }
     const role = await getMyRole();
     return role.is_admin ? "/admin" : "/dashboard";
   } catch {

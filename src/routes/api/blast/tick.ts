@@ -24,19 +24,16 @@ export const Route = createFileRoute("/api/blast/tick")({
 
         const { data: session } = await supabase
           .from("wa_sessions")
-          .select("id,user_id")
+          .select("id,user_id,blast_ready,blast_speed")
           .eq("id", parsed.data.session_id)
           .maybeSingle();
         if (!session || session.user_id !== userId) {
           return json({ error: "Perangkat tidak ditemukan" }, 404);
         }
 
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("blast_speed,blast_running")
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (!profile?.blast_running) {
+        // Perangkat hanya mengirim bila statusnya "siap blast".
+        const sess = session as { blast_ready?: boolean | null; blast_speed?: string | null };
+        if (!sess.blast_ready) {
           return json({ ok: true, running: false, claimed: 0, sent: 0, failed: 0, remaining: 0 });
         }
 
@@ -44,7 +41,7 @@ export const Route = createFileRoute("/api/blast/tick")({
         const result = await processBlastTick(
           supabase,
           parsed.data.session_id,
-          profile.blast_speed ?? "santai",
+          sess.blast_speed ?? "santai",
         );
         return json({ ok: true, running: true, ...result });
       },

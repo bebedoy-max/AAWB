@@ -19,10 +19,22 @@ import {
 import { BulkPhoneImporter } from "@/components/bulk-phone-importer";
 import { parsePhoneList } from "@/lib/whatsapp";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   addTargets,
   deleteTarget,
   listCampaignOptions,
   listTargets,
+  resetTargets,
 } from "@/lib/admin-console.functions";
 import {
   AdminPageTitle,
@@ -60,6 +72,7 @@ function NomorPage() {
   const fetchTargets = useServerFn(listTargets);
   const pushTargets = useServerFn(addTargets);
   const removeTarget = useServerFn(deleteTarget);
+  const wipeTargets = useServerFn(resetTargets);
 
   const [campaignId, setCampaignId] = useState("all");
   const [status, setStatus] = useState("all");
@@ -94,6 +107,17 @@ function NomorPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const reset = useMutation({
+    mutationFn: () => wipeTargets(),
+    onSuccess: (res) => {
+      toast.success(`${angka(res.removed)} nomor dihapus`);
+      queryClient.invalidateQueries({ queryKey: ["admin-targets"] });
+      queryClient.invalidateQueries({ queryKey: ["blast-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const destroy = useMutation({
     mutationFn: (id: string) => removeTarget({ data: { id } }),
     onSuccess: () => {
@@ -109,10 +133,33 @@ function NomorPage() {
         title="Pool Target Pengiriman"
         description="Kelola nomor tujuan pada setiap kampanye. Nomor otomatis diformat internasional."
         action={
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
-            Muat ulang
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
+              Muat ulang
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" disabled={reset.isPending}>
+                  <Trash2 className="mr-2 size-4" />
+                  {reset.isPending ? "Menghapus…" : "Reset"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Hapus semua nomor?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Seluruh nomor tujuan pada semua kampanye akan dihapus permanen, termasuk yang
+                    sudah terkirim. Pesan dan kampanye tetap ada.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => reset.mutate()}>Hapus semua</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
         }
       />
 

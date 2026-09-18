@@ -158,7 +158,7 @@ function AuthPage() {
   return (
     <div className="member-surface flex min-h-screen items-center justify-center bg-secondary/50 px-4 py-8">
       <div className="relative mx-auto w-full max-w-md">
-        <Link to="/" className="absolute bottom-[calc(100%+1.5rem)] left-1/2 flex -translate-x-1/2 justify-center"><BrandLogo className="h-20" /></Link>
+        <Link to="/" className="absolute bottom-[calc(100%+0.25rem)] left-1/2 flex -translate-x-1/2 justify-center"><BrandLogo className="h-40" /></Link>
         <div className="rounded-lg border bg-card p-6 shadow-panel sm:p-8">
           {mode === "login" ? (
             <>

@@ -99,7 +99,34 @@ export const getAdminOverview = createServerFn({ method: "GET" })
     await assertAdmin(context);
     const { data, error } = await (context.supabase as any).rpc("admin_overview");
     if (error) throw new Error(error.message);
-    return { ...EMPTY, ...((data ?? {}) as Partial<AdminOverview>) };
+    const overview = { ...EMPTY, ...((data ?? {}) as Partial<AdminOverview>) };
+
+    // Perangkat harus mengikuti pengguna yang masih ada. Bersihkan sesi milik
+    // akun yang sudah dihapus, lalu hitung ulang dari data bersih tersebut.
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const admin = supabaseAdmin as any;
+      const [{ data: users }, { data: sessions }] = await Promise.all([
+        admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+        admin.from("wa_sessions").select("id,user_id,status"),
+      ]);
+      const alive = new Set<string>(((users as any)?.users ?? []).map((u: any) => u.id));
+      const rows = ((sessions ?? []) as any[]).filter((s) => alive.has(s.user_id));
+      const orphans = ((sessions ?? []) as any[])
+        .filter((s) => !alive.has(s.user_id))
+        .map((s) => s.id);
+      if (orphans.length) await admin.from("wa_sessions").delete().in("id", orphans);
+
+      overview.devices_total = rows.length;
+      overview.devices_connected = rows.filter((s) => s.status === "connected").length;
+      if (overview.devices_working > overview.devices_connected) {
+        overview.devices_working = overview.devices_connected;
+      }
+    } catch {
+      // biarkan nilai dari RPC bila pembersihan gagal
+    }
+
+    return overview;
   });
 
 /** Semua perangkat member beserta aktivitas terakhirnya. */

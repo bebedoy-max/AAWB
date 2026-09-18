@@ -197,7 +197,6 @@ export const listAdminUsers = createServerFn({ method: "GET" })
           last_sign_in_at: u.last_sign_in_at ?? null,
         };
       })
-      .filter((r) => r.role === "member")
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
     return {
@@ -257,6 +256,7 @@ export const listCampaignOptions = createServerFn({ method: "GET" })
     const { data } = await (supabaseAdmin as any)
       .from("campaigns")
       .select("id,name,created_at")
+      .eq("is_pool", true)
       .order("created_at", { ascending: false })
       .limit(200);
     return ((data ?? []) as any[]).map((c) => ({ id: c.id, name: c.name }));
@@ -274,11 +274,22 @@ export const listTargets = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
-    const { data: campaigns } = await admin.from("campaigns").select("id,name").limit(500);
-    const nameById = new Map(((campaigns ?? []) as any[]).map((c) => [c.id, c.name as string]));
+    const { data: campaigns } = await admin
+      .from("campaigns")
+      .select("id,name")
+      .eq("is_pool", true)
+      .limit(500);
+    const poolCampaigns = (campaigns ?? []) as any[];
+    const nameById = new Map(poolCampaigns.map((c) => [c.id, c.name as string]));
+    const poolIds = poolCampaigns.map((c) => c.id as string);
+
+    // Hanya nomor milik kampanye kolam admin yang dihitung, agar angka di halaman
+    // ini selalu selaras dengan daftar kampanye.
+    if (!poolIds.length) return { rows: [], total: 0, ready: 0, sent: 0, failed: 0 };
 
     let counter = admin.from("message_queue").select("status,claimed_by").limit(200000);
     if (data.campaignId) counter = counter.eq("campaign_id", data.campaignId);
+    else counter = counter.in("campaign_id", poolIds);
     const { data: all } = await counter;
     const list = (all ?? []) as any[];
 
@@ -288,6 +299,7 @@ export const listTargets = createServerFn({ method: "POST" })
       .order("created_at", { ascending: false })
       .limit(500);
     if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
+    else query = query.in("campaign_id", poolIds);
     if (data.status === "ready") query = query.eq("status", "pending");
     else if (data.status) query = query.eq("status", data.status);
 
@@ -387,6 +399,36 @@ export const deleteTarget = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Hapus seluruh nomor target pada kolam kampanye (reset data nomor). */
+export const resetTargets = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+
+    const { data: campaigns } = await admin
+      .from("campaigns")
+      .select("id")
+      .eq("is_pool", true)
+      .limit(500);
+    const ids = ((campaigns ?? []) as any[]).map((c) => c.id as string);
+    if (!ids.length) return { ok: true, removed: 0 };
+
+    const { count } = await admin
+      .from("message_queue")
+      .select("id", { count: "exact", head: true })
+      .in("campaign_id", ids);
+
+    const { error } = await admin.from("message_queue").delete().in("campaign_id", ids);
+    if (error) throw new Error(error.message);
+    await admin.from("campaigns").update({ total_targets: 0 }).in("id", ids);
+
+    const { logActivity } = await import("@/lib/activity-log.server");
+    await logActivity(context.userId, "target_reset", `${count ?? 0} nomor dihapus`);
+    return { ok: true, removed: Number(count ?? 0) };
+  });
+
 /** Laporan pengiriman per kampanye. */
 export const listReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -450,6 +492,7 @@ export const stopAllBlast = createServerFn({ method: "POST" })
       .eq("status", "running");
     if (error) throw new Error(error.message);
     await admin.from("profiles").update({ blast_running: false }).eq("blast_running", true);
+    await admin.from("wa_sessions").update({ blast_ready: false }).eq("blast_ready", true);
     const { logActivity } = await import("@/lib/activity-log.server");
     await logActivity(context.userId, "blast_stop_all", "Seluruh blast dihentikan admin");
     return { ok: true };

@@ -148,12 +148,12 @@ function AdminTopNav() {
 
 function Brand() {
   return (
-    <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center border-b px-4 py-5">
-      <BrandLogo className="h-9 w-10 object-cover object-left" />
-      <div className="min-w-0 border-l pl-4">
-        <p className="text-sm font-bold leading-tight">Member</p>
-        <p className="text-base font-semibold leading-tight text-primary">Dashboard</p>
+    <div className="flex h-[76px] items-center gap-3 overflow-hidden border-b px-3">
+      <BrandLogo className="h-16 w-auto shrink-0 object-contain" />
+      <div className="min-w-0 border-l pl-3">
+        <p className="text-base font-bold leading-tight">Member</p>
       </div>
+
     </div>
   );
 }

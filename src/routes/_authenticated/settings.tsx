@@ -4,12 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { PageHeader } from "@/components/app-shell";
-import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import type { Profile } from "@/types/wa";
 import {
   disconnectTelegram,
@@ -33,7 +31,6 @@ export const Route = createFileRoute("/_authenticated/settings")({
 
 function Settings() {
   const queryClient = useQueryClient();
-  const { theme, toggle } = useTheme();
   const [org, setOrg] = useState("");
   const [email, setEmail] = useState("");
 
@@ -93,22 +90,6 @@ function Settings() {
               <Input id="acc-email" value={email} disabled />
             </div>
             <Button onClick={() => save.mutate()}>Simpan perubahan</Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Tampilan</CardTitle>
-            <CardDescription>Pilih tampilan terang atau gelap.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div>
-                <p className="text-sm font-medium">Mode gelap</p>
-                <p className="text-xs text-muted-foreground">Saat ini {theme === "dark" ? "gelap" : "terang"}</p>
-              </div>
-              <Switch checked={theme === "dark"} onCheckedChange={toggle} />
-            </div>
           </CardContent>
         </Card>
 

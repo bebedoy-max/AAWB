@@ -165,6 +165,13 @@ export async function processBlastTick(
     if (note) break;
   }
 
+  // Kampanye yang seluruh nomornya sudah diproses otomatis ditandai selesai.
+  try {
+    await supabase.rpc("complete_pool_campaigns");
+  } catch {
+    /* tidak menghalangi pengiriman */
+  }
+
   const { count: remaining } = await supabase
     .from("message_queue")
     .select("id", { count: "exact", head: true })

@@ -20,6 +20,8 @@ export interface WaSession {
   qr_string: string | null;
   battery_level: number | null;
   last_ping: string | null;
+  blast_speed?: string | null;
+  blast_ready?: boolean | null;
   updated_at: string;
   created_at: string;
 }

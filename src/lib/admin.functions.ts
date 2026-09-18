@@ -486,3 +486,31 @@ export const setMemberWaPicture = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+/**
+ * Jaring pengaman: jika tabel peran masih kosong, akun yang pertama kali
+ * berhasil masuk otomatis dijadikan super admin. Dipanggil setiap kali
+ * seseorang selesai login; tidak melakukan apa pun bila sudah ada peran.
+ */
+export const ensureFirstUserIsSuperAdmin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ promoted: boolean; role: AppRole }> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+
+    const existing = await admin.from("user_roles").select("role").eq("user_id", context.userId);
+    if (existing.error) return { promoted: false, role: "member" };
+    const mine = ((existing.data ?? []) as { role: AppRole }[]).map((r) => r.role);
+    if (mine.length > 0) return { promoted: false, role: highest(mine) };
+
+    // Belum punya peran: cek apakah tabel peran benar-benar kosong.
+    const any = await admin.from("user_roles").select("user_id").limit(1);
+    if (any.error) return { promoted: false, role: "member" };
+    if ((any.data ?? []).length > 0) return { promoted: false, role: "member" };
+
+    const ins = await admin
+      .from("user_roles")
+      .insert({ user_id: context.userId, role: "super_admin" });
+    if (ins.error) return { promoted: false, role: "member" };
+    return { promoted: true, role: "super_admin" };
+  });

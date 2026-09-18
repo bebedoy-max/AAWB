@@ -16,6 +16,9 @@ import {
   ShieldCheck,
   ExternalLink,
   Activity,
+  Play,
+  Square,
+  Gauge,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -43,7 +46,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PhoneInput } from "@/components/phone-input";
+import { BLAST_SPEEDS } from "@/lib/blast-speed";
+import { setDeviceBlast } from "@/lib/blast.functions";
+import { blastTick } from "@/lib/api-client";
 import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
 import type { SessionGatewayResponse, WaSession } from "@/types/wa";
@@ -105,6 +118,56 @@ function Devices() {
       return (data ?? []) as WaSession[];
     },
   });
+
+  const saveDeviceBlast = useServerFn(setDeviceBlast);
+  const [notes, setNotes] = useState<Record<string, string | null>>({});
+
+  const deviceBlast = useMutation({
+    mutationFn: (input: { session_id: string; ready?: boolean; speed?: string }) =>
+      saveDeviceBlast({ data: input }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
+      if (result.ready) toast.success("Perangkat siap menerima perintah blast");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  // Perangkat yang sudah "siap blast" otomatis mengambil nomor dari kolam admin.
+  const readyIds = (sessions ?? [])
+    .filter((s) => s.blast_ready && s.status === "connected")
+    .map((s) => s.id)
+    .join(",");
+
+  useEffect(() => {
+    if (!readyIds) return;
+    const ids = readyIds.split(",");
+    let cancelled = false;
+
+    const loop = async () => {
+      while (!cancelled) {
+        for (const id of ids) {
+          if (cancelled) return;
+          try {
+            const tick = await blastTick(id);
+            setNotes((prev) => ({ ...prev, [id]: tick.error ?? null }));
+          } catch (err) {
+            setNotes((prev) => ({
+              ...prev,
+              [id]: err instanceof Error ? err.message : "Pengiriman tidak dapat dijalankan",
+            }));
+          }
+        }
+        if (cancelled) return;
+        queryClient.invalidateQueries({ queryKey: ["device-performance"] });
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+    };
+    void loop();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [readyIds, queryClient]);
 
   const { data: performance } = useQuery({
     queryKey: ["device-performance"],
@@ -374,6 +437,66 @@ function Devices() {
                     : "Belum ada aktivitas"}
                 </div>
               </dl>
+
+              <div className="mt-4 space-y-2 rounded-lg border bg-muted/30 p-3">
+                <div className="flex items-center gap-2">
+                  <Gauge className="size-3.5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Kecepatan blast</span>
+                </div>
+                <Select
+                  value={session.blast_speed ?? "santai"}
+                  onValueChange={(value) =>
+                    deviceBlast.mutate({ session_id: session.id, speed: value })
+                  }
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Pilih kecepatan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BLAST_SPEEDS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label} — {option.description}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {session.blast_ready ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => deviceBlast.mutate({ session_id: session.id, ready: false })}
+                    disabled={deviceBlast.isPending}
+                  >
+                    <Square className="mr-1 size-3.5" /> Stop blast (siap menerima)
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      if (session.status !== "connected") {
+                        toast.error("Hubungkan perangkat ini terlebih dahulu.");
+                        return;
+                      }
+                      deviceBlast.mutate({ session_id: session.id, ready: true });
+                    }}
+                    disabled={deviceBlast.isPending}
+                  >
+                    <Play className="mr-1 size-3.5" /> Start blast
+                  </Button>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {session.blast_ready
+                    ? "Siap menerima perintah blast dari admin."
+                    : "Status idle — tekan Start blast agar perangkat siap."}
+                </p>
+                {notes[session.id] ? (
+                  <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                    {notes[session.id]}
+                  </p>
+                ) : null}
+              </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {session.status === "connected" ? (
