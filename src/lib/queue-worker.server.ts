@@ -13,6 +13,7 @@ export const MAX_ATTEMPTS = 3;
 
 /** How long a single tick may keep draining the queue before returning. */
 const TICK_BUDGET_MS = 25_000;
+const RETRY_BASE_DELAY_MS = 5_000;
 
 export interface CampaignRow {
   id: string;
@@ -203,37 +204,33 @@ export async function processCampaignTick(
       } catch (err) {
         const message =
           err instanceof GatewayError ? err.message : ((err as Error).message ?? "Pengiriman gagal");
+        const deliveryUnknown = err instanceof GatewayError && err.deliveryUnknown;
 
-        if (/session status is not as expected/i.test(message)) {
-          // Perangkat terputus: coba sambungkan ulang lalu lanjut, jangan
-          // menghentikan kampanye.
+        if (deliveryUnknown) {
+          // Hasil pengiriman tidak dapat dipastikan. Jangan pernah mengulang
+          // otomatis karena pesan mungkin sudah diterima sebelum socket putus.
           await supabase
             .from("message_queue")
             .update({
-              status: "pending",
-              attempts: item.attempts,
-              error_log: "Perangkat terputus; menyambungkan ulang lalu melanjutkan",
-              scheduled_at: new Date().toISOString(),
+              status: "failed",
+              attempts,
+              error_log: message,
             })
             .eq("id", item.id);
-          const again = await ensureConnected(supabase, sessionId);
-          if (!again.connected) {
-            note =
-              "Perangkat WhatsApp terputus — pengiriman akan melanjutkan otomatis setelah tersambung";
-            return { processed, sent, failed, status: "running", error: note };
-          }
+          failed += 1;
           continue;
         }
 
         if (attempts < MAX_ATTEMPTS) {
-          // Retry immediately on the next pass — no backoff/cooldown.
+          // Beri socket waktu pulih. Retry langsung memperparah putus-sambung
+          // dan menghasilkan rangkaian error yang sama dalam hitungan detik.
           await supabase
             .from("message_queue")
             .update({
               status: "pending",
               attempts,
               error_log: `${message} (percobaan ${attempts}/${MAX_ATTEMPTS})`,
-              scheduled_at: new Date().toISOString(),
+              scheduled_at: new Date(Date.now() + RETRY_BASE_DELAY_MS * attempts).toISOString(),
             })
             .eq("id", item.id);
         } else {

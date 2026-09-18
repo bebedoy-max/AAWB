@@ -76,8 +76,12 @@ export interface CampaignOption {
   name: string;
 }
 
-async function rolesOf(supabase: any, userId: string): Promise<AppRole[]> {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+async function rolesOf(_supabase: any, userId: string): Promise<AppRole[]> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await (supabaseAdmin as any)
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
   return ((data ?? []) as { role: AppRole }[]).map((r) => r.role);
 }
 

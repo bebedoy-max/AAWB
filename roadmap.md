@@ -38,3 +38,19 @@
 - [x] Samakan halaman Beranda, WhatsApp, Klaim Saldo, Tim Afiliasi, dan Pengaturan pada mobile.
 - [x] Pertahankan tampilan desktop dan seluruh fungsi data yang sudah berjalan.
 - [x] Verifikasi setiap halaman pada ukuran ponsel tanpa teks atau elemen bertumpuk.
+
+## Penyamaan tampilan mobile admin
+
+- [x] Terapkan header dan navigasi bawah bergaya flow member pada admin mobile.
+- [x] Batasi menu admin mobile ke Ringkasan, Pengguna, Laporan, dan Klaim Dana.
+- [x] Verifikasi empat halaman admin pada mobile dan pastikan desktop tidak berubah.
+- [x] Cegah judul dan panel admin menyempit menjadi satu karakter per baris pada layar ponsel.
+
+## Tabel mobile admin (detail pop-up)
+- [x] Tabel pengguna mobile: hanya Pengguna, Saldo, Terkirim; email dihapus dari tabel (semua tampilan)
+- [x] Klik baris pengguna membuka pop-up detail semua kolom + tindakan (peran, reset sandi, hapus)
+- [x] Tabel riwayat pengiriman mobile: hanya Waktu, Pengirim, Status; klik baris membuka pop-up detail lengkap
+# Perbaikan error gateway
+- [x] Temukan akar masalah status sesi dan koneksi WebSocket
+- [x] Perbaiki penanganan koneksi, pengiriman, dan pesan error
+- [ ] Uji pengiriman dan pastikan error tidak muncul kembali

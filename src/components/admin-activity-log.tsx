@@ -68,8 +68,8 @@ export function AdminActivityLog() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+        <div className="flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
             <CardTitle className="flex items-center gap-2 text-base">
               <ScrollText className="size-4" />
               User Log
@@ -78,12 +78,12 @@ export function AdminActivityLog() {
               Aktivitas pengguna dan admin, terbaru di atas. Aktivitas Super Admin tidak dicatat.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Cari email atau aktivitas"
-              className="w-44 sm:w-60"
+              className="min-w-0 flex-1 sm:w-60 sm:flex-none"
             />
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
               <RefreshCw className={isFetching ? "size-4 animate-spin" : "size-4"} />
@@ -97,8 +97,8 @@ export function AdminActivityLog() {
         ) : isLoading ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Memuat…</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="w-full max-w-full overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b text-left text-xs uppercase text-muted-foreground">
                   <th className="py-2 pr-4 font-medium">Waktu</th>

@@ -38,14 +38,14 @@ export function AdminPageTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-5 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 sm:flex sm:flex-wrap sm:items-end sm:justify-between">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight break-words sm:text-3xl">{title}</h1>
+    <div className="mb-5 flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+      <div className="min-w-0 flex-1">
+        <h1 className="break-words text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
         {description ? (
           <p className="mt-1 text-sm text-muted-foreground break-words">{description}</p>
         ) : null}
       </div>
-      {action ? <div className="flex shrink-0 flex-wrap gap-2">{action}</div> : null}
+      {action ? <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -112,14 +112,14 @@ export function Panel({
   return (
     <section className={cn("rounded-xl border bg-card", className)}>
       {title || action ? (
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b px-4 py-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
-          <div className="min-w-0">
-            {title ? <h2 className="truncate text-sm font-semibold">{title}</h2> : null}
+        <div className="flex min-w-0 flex-col items-stretch gap-3 border-b px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-5">
+          <div className="min-w-0 flex-1">
+            {title ? <h2 className="break-words text-sm font-semibold">{title}</h2> : null}
             {description ? (
               <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
             ) : null}
           </div>
-          {action ? <div className="flex shrink-0 flex-wrap gap-2">{action}</div> : null}
+          {action ? <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto sm:shrink-0">{action}</div> : null}
         </div>
       ) : null}
       <div className={cn("p-4 sm:p-5", bodyClassName)}>{children}</div>
@@ -138,10 +138,16 @@ export function EmptyState({ title, description }: { title: string; description?
   );
 }
 
-export function TableShell({ children }: { children: ReactNode }) {
+export function TableShell({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="-mx-4 overflow-x-auto sm:mx-0">
-      <table className="w-full min-w-[640px] text-sm">{children}</table>
+    <div className="w-full max-w-full overflow-x-auto">
+      <table className={cn("w-full min-w-[640px] text-sm", className)}>{children}</table>
     </div>
   );
 }

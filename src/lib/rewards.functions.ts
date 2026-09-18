@@ -104,8 +104,12 @@ const DEFAULTS: RewardSettings = {
   referral_rate_l3: 0,
 };
 
-async function rolesOf(supabase: any, userId: string): Promise<string[]> {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+async function rolesOf(_supabase: any, userId: string): Promise<string[]> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await (supabaseAdmin as any)
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
   return ((data ?? []) as { role: string }[]).map((r) => r.role);
 }
 

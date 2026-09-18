@@ -68,6 +68,19 @@ const ROLE_LABEL: Record<AppRole, string> = {
   member: "Member",
 };
 
+type MemberSummary = {
+  user_id: string;
+  name: string;
+  email: string;
+  balance: number;
+  pending_withdrawal: number;
+  devices_online: number;
+  devices_total: number;
+  sent: number;
+  last_sign_in_at: string | null;
+  role: AppRole;
+};
+
 function PenggunaPage() {
   const queryClient = useQueryClient();
   const { data: me } = useMyRole();
@@ -79,7 +92,7 @@ function PenggunaPage() {
   const removeMember = useServerFn(deleteMember);
 
   const [q, setQ] = useState("");
-  const [detailUser, setDetailUser] = useState<string | null>(null);
+  const [detailUser, setDetailUser] = useState<MemberSummary | null>(null);
   const [resetTarget, setResetTarget] = useState<{ id: string; email: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null);
@@ -171,7 +184,7 @@ function PenggunaPage() {
       <Panel
         className="mt-4"
         title="Daftar pengguna"
-        description="Klik baris untuk melihat profil WhatsApp pengguna."
+        description="Klik baris untuk melihat detail lengkap pengguna."
         bodyClassName="p-0"
         action={
           <div className="relative w-full sm:w-64">
@@ -195,16 +208,16 @@ function PenggunaPage() {
             description="Pengguna yang mendaftar akan muncul di sini."
           />
         ) : (
-          <TableShell>
+          <TableShell className="min-w-0 lg:min-w-[640px]">
             <thead className="border-b bg-muted/40">
               <tr>
                 <Th>Pengguna</Th>
                 <Th>Saldo</Th>
-                <Th>Perangkat</Th>
+                <Th className="hidden lg:table-cell">Perangkat</Th>
                 <Th>Terkirim</Th>
-                <Th>Terakhir masuk</Th>
-                <Th>Peran</Th>
-                <Th className="text-right">Tindakan</Th>
+                <Th className="hidden lg:table-cell">Terakhir masuk</Th>
+                <Th className="hidden lg:table-cell">Peran</Th>
+                <Th className="hidden text-right lg:table-cell">Tindakan</Th>
               </tr>
             </thead>
             <tbody>
@@ -212,11 +225,10 @@ function PenggunaPage() {
                 <tr
                   key={m.user_id}
                   className="cursor-pointer border-b last:border-0 hover:bg-muted/40"
-                  onClick={() => setDetailUser(m.user_id)}
+                  onClick={() => setDetailUser(m)}
                 >
                   <Td>
                     <p className="font-medium">{m.name}</p>
-                    <p className="text-xs text-muted-foreground">{m.email}</p>
                   </Td>
                   <Td>
                     <p className="font-medium">{rupiah(m.balance)}</p>
@@ -226,14 +238,14 @@ function PenggunaPage() {
                       </p>
                     ) : null}
                   </Td>
-                  <Td>
+                  <Td className="hidden lg:table-cell">
                     <span className="text-sm">
                       {angka(m.devices_online)}/{angka(m.devices_total)}
                     </span>
                   </Td>
                   <Td>{angka(m.sent)}</Td>
-                  <Td className="text-muted-foreground">{waktu(m.last_sign_in_at)}</Td>
-                  <Td onClick={(e) => e.stopPropagation()}>
+                  <Td className="hidden text-muted-foreground lg:table-cell">{waktu(m.last_sign_in_at)}</Td>
+                  <Td className="hidden lg:table-cell" onClick={(e) => e.stopPropagation()}>
                     {isSuper ? (
                       <Select
                         value={m.role}
@@ -254,7 +266,7 @@ function PenggunaPage() {
                       <Badge variant="outline">{ROLE_LABEL[m.role]}</Badge>
                     )}
                   </Td>
-                  <Td className="text-right" onClick={(e) => e.stopPropagation()}>
+                  <Td className="hidden text-right lg:table-cell" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-end gap-1">
                       <Button
                         size="sm"
@@ -335,18 +347,37 @@ function PenggunaPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <MemberDetailDialog userId={detailUser} onClose={() => setDetailUser(null)} />
+      <MemberDetailDialog
+        summary={detailUser}
+        isSuper={isSuper}
+        onRoleChange={(userId, role) => updateRole.mutate({ userId, role })}
+        onReset={(m) => {
+          setNewPassword("");
+          setResetTarget({ id: m.user_id, email: m.email });
+        }}
+        onDelete={(m) => setDeleteTarget({ id: m.user_id, email: m.email })}
+        onClose={() => setDetailUser(null)}
+      />
     </>
   );
 }
 
 function MemberDetailDialog({
-  userId,
+  summary,
+  isSuper,
+  onRoleChange,
+  onReset,
+  onDelete,
   onClose,
 }: {
-  userId: string | null;
+  summary: MemberSummary | null;
+  isSuper: boolean;
+  onRoleChange: (userId: string, role: AppRole) => void;
+  onReset: (m: MemberSummary) => void;
+  onDelete: (m: MemberSummary) => void;
   onClose: () => void;
 }) {
+  const userId = summary?.user_id ?? null;
   const queryClient = useQueryClient();
   const fetchDetail = useServerFn(getMemberDetail);
   const saveWaName = useServerFn(setMemberWaName);
@@ -433,6 +464,77 @@ function MemberDetailDialog({
               <p className="rounded-lg bg-muted p-2.5 text-xs text-muted-foreground">
                 {detail.wa_error}
               </p>
+            ) : null}
+
+            {summary ? (
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border p-3 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Email</dt>
+                  <dd className="break-all font-medium">{summary.email}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Saldo</dt>
+                  <dd className="font-medium">{rupiah(summary.balance)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Penarikan diajukan</dt>
+                  <dd className="font-medium">
+                    {summary.pending_withdrawal > 0 ? rupiah(summary.pending_withdrawal) : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Perangkat</dt>
+                  <dd className="font-medium">
+                    {angka(summary.devices_online)}/{angka(summary.devices_total)} terhubung
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Terkirim</dt>
+                  <dd className="font-medium">{angka(summary.sent)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Terakhir masuk</dt>
+                  <dd className="font-medium">{waktu(summary.last_sign_in_at)}</dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-xs text-muted-foreground">Peran</dt>
+                  <dd className="mt-1">
+                    {isSuper ? (
+                      <Select
+                        value={summary.role}
+                        onValueChange={(role) => onRoleChange(summary.user_id, role as AppRole)}
+                      >
+                        <SelectTrigger className="w-44">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="super_admin">Super Admin</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="member">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge variant="outline">{ROLE_LABEL[summary.role]}</Badge>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            ) : null}
+
+            {isSuper && summary ? (
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => onReset(summary)}>
+                  <KeyRound className="mr-1 size-3.5" /> Setel ulang kata sandi
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
+                  onClick={() => onDelete(summary)}
+                >
+                  <Trash2 className="mr-1 size-3.5" /> Hapus pengguna
+                </Button>
+              </div>
             ) : null}
 
             <div className="space-y-1.5">

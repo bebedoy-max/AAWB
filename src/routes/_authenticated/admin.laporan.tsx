@@ -16,6 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -37,6 +44,18 @@ import {
 export const Route = createFileRoute("/_authenticated/admin/laporan")({
   component: LaporanPage,
 });
+
+type ReportRow = {
+  id: string;
+  sent_at: string | null;
+  created_at: string;
+  sender: string;
+  sender_owner: string;
+  recipient_phone: string;
+  status: string;
+  message_body: string;
+  error_log: string | null;
+};
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Menunggu",
@@ -62,6 +81,7 @@ function LaporanPage() {
 
   const [campaignId, setCampaignId] = useState("all");
   const [q, setQ] = useState("");
+  const [detail, setDetail] = useState<ReportRow | null>(null);
 
   const { data: campaigns } = useQuery({
     queryKey: ["admin-campaign-options"],
@@ -207,6 +227,7 @@ function LaporanPage() {
       <Panel
         className="mt-4"
         title="Riwayat pengiriman"
+        description="Klik baris untuk melihat detail lengkap pengiriman."
         bodyClassName="p-0"
         action={
           <div className="flex flex-wrap gap-2">
@@ -245,19 +266,23 @@ function LaporanPage() {
             description="Laporan terisi setelah kampanye mulai mengirim pesan."
           />
         ) : (
-          <TableShell>
+          <TableShell className="min-w-0 lg:min-w-[640px]">
             <thead className="border-b bg-muted/40">
               <tr>
                 <Th>Waktu</Th>
                 <Th>Pengirim</Th>
-                <Th>Nomor tujuan</Th>
+                <Th className="hidden lg:table-cell">Nomor tujuan</Th>
                 <Th>Status</Th>
-                <Th>Keterangan</Th>
+                <Th className="hidden lg:table-cell">Keterangan</Th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
+                <tr
+                  key={r.id}
+                  className="cursor-pointer border-b last:border-0 hover:bg-muted/40"
+                  onClick={() => setDetail(r)}
+                >
                   <Td className="whitespace-nowrap text-muted-foreground">
                     {waktu(r.sent_at ?? r.created_at)}
                   </Td>
@@ -265,7 +290,7 @@ function LaporanPage() {
                     <p className="font-medium">{r.sender}</p>
                     <p className="text-xs text-muted-foreground">{r.sender_owner}</p>
                   </Td>
-                  <Td className="font-medium">+{r.recipient_phone}</Td>
+                  <Td className="hidden font-medium lg:table-cell">+{r.recipient_phone}</Td>
                   <Td>
                     <Badge
                       variant="outline"
@@ -274,7 +299,7 @@ function LaporanPage() {
                       {STATUS_LABEL[r.status] ?? r.status}
                     </Badge>
                   </Td>
-                  <Td className="max-w-xs">
+                  <Td className="hidden max-w-xs lg:table-cell">
                     <p className="truncate text-xs text-muted-foreground">
                       {r.error_log || r.message_body || "—"}
                     </p>
@@ -285,6 +310,60 @@ function LaporanPage() {
           </TableShell>
         )}
       </Panel>
+
+      <Dialog open={Boolean(detail)} onOpenChange={(o) => !o && setDetail(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detail pengiriman</DialogTitle>
+            <DialogDescription>Informasi lengkap satu riwayat pengiriman.</DialogDescription>
+          </DialogHeader>
+          {detail ? (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Waktu</dt>
+                <dd className="font-medium">{waktu(detail.sent_at ?? detail.created_at)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Status</dt>
+                <dd>
+                  <Badge
+                    variant="outline"
+                    className={STATUS_STYLE[detail.status] ?? "text-muted-foreground"}
+                  >
+                    {STATUS_LABEL[detail.status] ?? detail.status}
+                  </Badge>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Pengirim</dt>
+                <dd className="font-medium">{detail.sender}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Pemilik perangkat</dt>
+                <dd className="font-medium">{detail.sender_owner}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-muted-foreground">Nomor tujuan</dt>
+                <dd className="font-medium">+{detail.recipient_phone}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-xs text-muted-foreground">Pesan</dt>
+                <dd className="whitespace-pre-wrap break-words rounded-lg bg-muted p-2.5 text-xs">
+                  {detail.message_body || "—"}
+                </dd>
+              </div>
+              {detail.error_log ? (
+                <div className="col-span-2">
+                  <dt className="text-xs text-muted-foreground">Keterangan</dt>
+                  <dd className="whitespace-pre-wrap break-words rounded-lg bg-muted p-2.5 text-xs text-destructive">
+                    {detail.error_log}
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

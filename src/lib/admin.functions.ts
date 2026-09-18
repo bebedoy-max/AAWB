@@ -25,8 +25,14 @@ export interface GatewaySettings {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-async function rolesOf(supabase: any, userId: string): Promise<AppRole[]> {
-  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+async function rolesOf(_supabase: any, userId: string): Promise<AppRole[]> {
+  // Dibaca dengan akses server penuh agar RLS pada user_roles tidak
+  // menyembunyikan peran pengguna sendiri. userId berasal dari token terverifikasi.
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await (supabaseAdmin as any)
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
   return ((data ?? []) as { role: AppRole }[]).map((r) => r.role);
 }

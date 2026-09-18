@@ -65,6 +65,14 @@ const ADMIN_NAV = [
   { to: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
 ] as const;
 
+/** Menu monitoring yang tersedia pada navigasi bawah admin di ponsel. */
+const ADMIN_MOBILE_NAV = [
+  { to: "/admin", label: "Ringkasan", icon: LayoutDashboard },
+  { to: "/admin/pengguna", label: "Pengguna", icon: Users },
+  { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
+] as const;
+
 export function useIsAdmin(): boolean {
   const fetchRole = useServerFn(getMyRole);
   const { data } = useQuery({
@@ -212,6 +220,34 @@ function MemberBottomNav() {
   );
 }
 
+function AdminBottomNav() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  return (
+    <nav
+      className="fixed bottom-5 left-1/2 z-40 grid h-[4.5rem] w-[23rem] max-w-[calc(100%-1.5rem)] -translate-x-1/2 grid-cols-4 items-center rounded-[2rem] border bg-card/95 px-3 shadow-glow backdrop-blur lg:hidden"
+      aria-label="Navigasi admin"
+    >
+      {ADMIN_MOBILE_NAV.map(({ to, label, icon: Icon }) => {
+        const active = isActivePath(pathname, to);
+        return (
+          <Link
+            key={to}
+            to={to}
+            aria-label={label}
+            title={label}
+            className={cn(
+              "mx-auto grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors",
+              active && "border bg-background text-foreground shadow-panel",
+            )}
+          >
+            <Icon className="size-5" />
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { theme, toggle } = useTheme();
@@ -289,7 +325,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className={cn("flex min-h-screen w-full max-w-full overflow-x-hidden bg-background", !adminLayout && "member-surface")}>
+    <div className={cn("flex min-h-screen w-full max-w-full overflow-x-hidden bg-background member-surface", adminLayout && "lg:font-sans")}>
       {adminLayout ? null : (
         <aside className="hidden w-60 shrink-0 border-r bg-sidebar lg:block">
           <div className="sticky top-0 flex h-screen flex-col">
@@ -309,12 +345,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className={cn(
           "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 lg:px-6",
           adminLayout
-            ? "sticky top-0 z-30 h-[4.75rem] border-b bg-background/85 py-1 backdrop-blur"
+            ? "fixed inset-x-0 top-0 z-50 h-[5.5rem] bg-transparent px-2 pt-2 lg:sticky lg:h-[4.75rem] lg:border-b lg:bg-background/85 lg:px-6 lg:py-1 lg:backdrop-blur"
             : "fixed inset-x-0 top-0 z-50 h-[5.5rem] bg-transparent px-2 pt-2 lg:sticky lg:h-20 lg:bg-background/85 lg:px-6 lg:pt-0 lg:backdrop-blur",
         )}> 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className={cn("lg:hidden", !adminLayout && "hidden")} aria-label="Buka menu">
+              <Button variant="ghost" size="icon" className="hidden" aria-label="Buka menu">
                 <Menu className="size-5" />
               </Button>
             </SheetTrigger>
@@ -326,7 +362,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Sheet>
 
           {adminLayout ? (
-            <Link to="/admin" className="flex min-w-0 items-center gap-2">
+            <Link to="/admin" className="hidden min-w-0 items-center gap-2 lg:flex">
               <BrandLogo className="h-[4.5rem] max-w-[300px] shrink-0" />
               <span className="hidden truncate text-sm font-semibold sm:inline">Admin</span>
             </Link>
@@ -350,12 +386,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
 
-          {!adminLayout ? (
-            <div className="col-span-3 w-full lg:hidden">
-              <MemberMobileHeader onSettings={() => navigate({ to: "/settings" })} onSignOut={() => void signOut()} />
-            </div>
-          ) : null}
-
+          <div className="col-span-3 w-full lg:hidden">
+            <MemberMobileHeader
+              onSettings={() => navigate({ to: adminLayout ? "/admin/pengaturan" : "/settings" })}
+              onSignOut={() => void signOut()}
+            />
+          </div>
 
           <div className={cn("col-start-3 ml-auto flex items-center gap-2", !adminLayout && "hidden lg:flex")}> 
             <Badge
@@ -408,14 +444,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        {adminLayout ? <AdminTopNav /> : null}
+        {adminLayout ? <div className="hidden lg:block"><AdminTopNav /></div> : null}
 
 
 
-        <main className={cn("w-full min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6", !adminLayout && "bg-secondary/40 pb-32 pt-[6.25rem] lg:px-10 lg:pb-6 lg:pt-6")}> 
+        <main className={cn(
+          "w-full min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6",
+          !adminLayout && "bg-secondary/40 pb-32 pt-[6.25rem] lg:px-10 lg:pb-6 lg:pt-6",
+          adminLayout && "bg-secondary/40 pb-32 pt-[6.25rem] lg:bg-background lg:pb-6 lg:pt-6",
+        )}> 
           {children}
         </main>
-        {!adminLayout ? <MemberBottomNav /> : null}
+        {adminLayout ? <AdminBottomNav /> : <MemberBottomNav />}
       </div>
     </div>
   );

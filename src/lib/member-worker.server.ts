@@ -12,6 +12,7 @@ import type { MediaType, TemplateButton } from "@/types/wa";
 const TICK_BUDGET_MS = 20_000;
 const CLAIM_SIZE = 25;
 const MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 5_000;
 
 interface CampaignContent {
   message_body: string;
@@ -203,14 +204,21 @@ export async function processBlastTick(
       } catch (err) {
         const message =
           err instanceof GatewayError ? err.message : ((err as Error).message ?? "Pengiriman gagal");
-        if (attempts < MAX_ATTEMPTS) {
+        const deliveryUnknown = err instanceof GatewayError && err.deliveryUnknown;
+        if (deliveryUnknown) {
+          await supabase
+            .from("message_queue")
+            .update({ status: "failed", attempts, error_log: message })
+            .eq("id", item.id);
+          failed += 1;
+        } else if (attempts < MAX_ATTEMPTS) {
           await supabase
             .from("message_queue")
             .update({
               status: "pending",
               attempts,
               error_log: `${message} (percobaan ${attempts}/${MAX_ATTEMPTS})`,
-              scheduled_at: new Date().toISOString(),
+              scheduled_at: new Date(Date.now() + RETRY_BASE_DELAY_MS * attempts).toISOString(),
             })
             .eq("id", item.id);
         } else {
@@ -220,7 +228,7 @@ export async function processBlastTick(
             .eq("id", item.id);
           failed += 1;
         }
-        if (/session status is not as expected/i.test(message)) {
+        if (!deliveryUnknown && /perangkat whatsapp|session status|error 463/i.test(message)) {
           const again = await ensureConnected(supabase, sessionId);
           if (!again.connected) {
             note = "Perangkat terputus — pengiriman dilanjutkan otomatis setelah tersambung";

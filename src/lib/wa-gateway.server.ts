@@ -37,9 +37,57 @@ export class GatewayError extends Error {
   constructor(
     message: string,
     readonly status = 502,
+    readonly deliveryUnknown = false,
   ) {
     super(message);
     this.name = "GatewayError";
+  }
+}
+
+const sessionSendLocks = new Map<string, Promise<void>>();
+
+/**
+ * WAHA uses several non-standard responses when its internal WhatsApp socket
+ * has gone stale although the session endpoint still reports WORKING.
+ */
+function isStaleSessionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const status = error instanceof GatewayError ? error.status : 0;
+  return (
+    status === 463 ||
+    /session status is not as expected|not in working state|connection closed|stream errored|restart required/i.test(
+      message,
+    )
+  );
+}
+
+function isUnknownDeliveryError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    (error instanceof GatewayError && (error.deliveryUnknown || error.status === 463)) ||
+    /websocket disconnected before message send returned response/i.test(message)
+  );
+}
+
+function isUnsupportedMessageFeature(error: unknown): boolean {
+  if (!(error instanceof GatewayError)) return false;
+  return [400, 404, 405, 422, 501].includes(error.status) && !isStaleSessionError(error);
+}
+
+async function withSessionSendLock<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = sessionSendLocks.get(sessionId) ?? Promise.resolve();
+  let release = () => {};
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.catch(() => undefined).then(() => current);
+  sessionSendLocks.set(sessionId, tail);
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (sessionSendLocks.get(sessionId) === tail) sessionSendLocks.delete(sessionId);
   }
 }
 
@@ -115,7 +163,12 @@ async function request(path: string, init?: RequestInit): Promise<RawResult> {
       signal: AbortSignal.timeout(30_000),
     });
   } catch (err) {
-    throw new GatewayError(`Tidak dapat terhubung ke gateway WhatsApp: ${(err as Error).message}`, 502);
+    const isSendRequest = init?.method === "POST" && /^\/api\/send/i.test(path);
+    throw new GatewayError(
+      `Tidak dapat terhubung ke gateway WhatsApp: ${(err as Error).message}`,
+      502,
+      isSendRequest,
+    );
   }
 
   if (res.status >= 300 && res.status < 400) {
@@ -383,6 +436,43 @@ export async function reconnectSession(id: string): Promise<GatewaySessionState>
   return state ?? { status: "disconnected", authStep: null, qr: null, phone: null, battery: null };
 }
 
+/** Force WAHA to replace a stale transport while preserving the paired identity. */
+async function restartSessionTransport(id: string): Promise<GatewaySessionState> {
+  const stopped = await request(`/api/sessions/${encodeURIComponent(id)}/stop`, { method: "POST" });
+  if (stopped.status < 200 || (stopped.status >= 300 && stopped.status !== 404)) {
+    throw new GatewayError(
+      `Perangkat gagal dimulai ulang: ${messageOf(stopped.body) || `HTTP ${stopped.status}`}`,
+      stopped.status >= 400 && stopped.status < 600 ? stopped.status : 502,
+    );
+  }
+
+  await sleep(1_000);
+  const started = await request(`/api/sessions/${encodeURIComponent(id)}/start`, { method: "POST" });
+  if (started.status < 200 || started.status >= 300) {
+    const message = messageOf(started.body);
+    if (!/already|working|starting/i.test(message)) {
+      throw new GatewayError(
+        `Perangkat gagal dimulai ulang: ${message || `HTTP ${started.status}`}`,
+        started.status >= 400 && started.status < 600 ? started.status : 502,
+      );
+    }
+  }
+
+  let state: GatewaySessionState = {
+    status: "disconnected",
+    authStep: null,
+    qr: null,
+    phone: null,
+    battery: null,
+  };
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    await sleep(1_000);
+    state = await sessionStatus(id);
+    if (state.status === "connected") break;
+  }
+  return state;
+}
+
 export async function getPasskeyChallenge(id: string): Promise<Record<string, unknown>> {
   return call(`/api/${encodeURIComponent(id)}/auth/passkey/challenge`);
 }
@@ -458,7 +548,7 @@ async function sessionEngine(id: string): Promise<string> {
 
 
 
-export async function sendMessage(params: {
+async function sendMessageRequest(params: {
   sessionId: string;
   to: string;
   text: string;
@@ -537,6 +627,7 @@ export async function sendMessage(params: {
         });
         return { id: readMessageId(raw) };
       } catch (error) {
+        if (!isUnsupportedMessageFeature(error)) throw error;
         console.warn(
           "WAHA tidak mendukung gambar + CTA native; CTA disatukan ke caption:",
           error instanceof Error ? error.message : String(error),
@@ -551,7 +642,7 @@ export async function sendMessage(params: {
     ]
       .filter(Boolean)
       .join("\n\n");
-    return sendMessage({
+    return sendMessageRequest({
       ...params,
       text: fallbackCaption,
       buttons: null,
@@ -574,6 +665,7 @@ export async function sendMessage(params: {
       });
       return { id: readMessageId(raw) };
     } catch (error) {
+      if (!isUnsupportedMessageFeature(error)) throw error;
       console.warn(
         "WAHA sendButtons gagal; CTA dikirim sebagai tautan teks:",
         error instanceof Error ? error.message : String(error),
@@ -626,6 +718,60 @@ export async function sendMessage(params: {
 
   const raw = await call(path, { method: "POST", body: JSON.stringify(body) });
   return { id: readMessageId(raw) };
+}
+
+/**
+ * Serialize sends per device and repair a stale WAHA socket once before a
+ * safe retry. A disconnected websocket has an unknown delivery outcome, so
+ * it is deliberately never replayed (which could send the same message twice).
+ */
+export async function sendMessage(params: {
+  sessionId: string;
+  to: string;
+  text: string;
+  mediaUrl?: string | null;
+  mediaType?: MediaType | null;
+  mediaFilename?: string | null;
+  footerText?: string | null;
+  buttons?: TemplateButton[] | null;
+}): Promise<{ id: string | null }> {
+  return withSessionSendLock(params.sessionId, async () => {
+    let state = await sessionStatus(params.sessionId);
+    if (state.status !== "connected") {
+      state = await reconnectSession(params.sessionId);
+    }
+    if (state.status !== "connected") {
+      throw new GatewayError(
+        "Perangkat WhatsApp belum siap. Pengiriman ditunda sampai perangkat tersambung kembali.",
+        503,
+      );
+    }
+
+    try {
+      return await sendMessageRequest(params);
+    } catch (error) {
+      if (isUnknownDeliveryError(error)) {
+        // Repair the socket for subsequent rows, but never replay this row.
+        await restartSessionTransport(params.sessionId).catch(() => undefined);
+        throw new GatewayError(
+          "Koneksi terputus saat konfirmasi pengiriman. Pesan tidak diulang untuk mencegah kiriman ganda.",
+          502,
+          true,
+        );
+      }
+      if (!isStaleSessionError(error)) throw error;
+
+      const recovered = await restartSessionTransport(params.sessionId);
+      if (recovered.status !== "connected") {
+        throw new GatewayError(
+          "Perangkat WhatsApp sedang menyambungkan ulang. Pengiriman akan dilanjutkan otomatis.",
+          503,
+        );
+      }
+      await sleep(1_500);
+      return sendMessageRequest(params);
+    }
+  });
 }
 
 /** WAHA's message id shape varies by engine (NOWEB/GOWS/WEBJS). */

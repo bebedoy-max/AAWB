@@ -217,7 +217,7 @@ function RingkasanPage() {
         </Panel>
 
         <Panel title="Pintasan" description="Buka halaman yang paling sering dipakai.">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {SHORTCUTS.map(({ to, label, icon: Icon }) => (
               <Link
                 key={to}

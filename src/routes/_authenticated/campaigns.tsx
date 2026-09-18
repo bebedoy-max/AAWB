@@ -97,7 +97,6 @@ function Campaigns() {
       return (data ?? []) as Template[];
     },
   });
-  const [tickNotes, setTickNotes] = useState<Record<string, string | null>>({});
   const { data: campaigns } = useQuery({
     queryKey: ["campaigns"],
 
@@ -126,40 +125,17 @@ function Campaigns() {
     },
   });
 
-  // Worker tick: drives running campaigns through the dispatcher without any
-  // automatic pausing. Ticks run back-to-back so the queue keeps draining from
-  // the first message to the last; only the campaign's own speed setting paces
-  // the sending. A device disconnect never stops the campaign.
+  // The database scheduler is the sole campaign worker. The browser only
+  // refreshes progress; running a second worker here made the same WhatsApp
+  // session handle concurrent sends and destabilized its websocket.
   useEffect(() => {
-    const runningIds = (campaigns ?? []).filter((c) => c.status === "running").map((c) => c.id);
-    if (!runningIds.length) return;
-    let cancelled = false;
-
-    const loop = async () => {
-      while (!cancelled) {
-        for (const id of runningIds) {
-          if (cancelled) return;
-          try {
-            const tick = await dispatchCampaign({ campaign_id: id, action: "process" });
-            setTickNotes((prev) => ({ ...prev, [id]: tick.error ?? null }));
-          } catch (err) {
-            setTickNotes((prev) => ({
-              ...prev,
-              [id]: err instanceof Error ? err.message : "Pengiriman tidak dapat dijalankan",
-            }));
-          }
-        }
-        if (cancelled) return;
-        queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
-        queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-    };
-    void loop();
-
-    return () => {
-      cancelled = true;
-    };
+    const hasRunning = (campaigns ?? []).some((campaign) => campaign.status === "running");
+    if (!hasRunning) return;
+    const timer = window.setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    }, 5_000);
+    return () => window.clearInterval(timer);
   }, [campaigns, queryClient]);
 
 
@@ -271,12 +247,6 @@ function Campaigns() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   {p.sent} terkirim · {p.failed} gagal · {Math.max(0, p.total - p.sent - p.failed)} tersisa
                 </p>
-                {c.status === "running" && tickNotes[c.id] ? (
-                  <p className="mt-2 rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
-                    {tickNotes[c.id]}
-                  </p>
-                ) : null}
-
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button
                     size="sm"
