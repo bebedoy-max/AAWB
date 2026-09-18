@@ -93,7 +93,7 @@ function BlastPage() {
     const ids = connected.map((d) => d.id);
     let cancelled = false;
 
-    const runLoop = async () => {
+    const loop = async () => {
       while (!cancelled) {
         for (const id of ids) {
           if (cancelled) return;
@@ -116,16 +116,7 @@ function BlastPage() {
         await new Promise((resolve) => setTimeout(resolve, 800));
       }
     };
-
-    // Only one open tab may run the member worker. The Devices page no longer
-    // starts a second worker, and Web Locks prevents duplicate Blast tabs.
-    if (navigator.locks) {
-      void navigator.locks.request("aawb-member-blast-worker", { ifAvailable: true }, async (lock) => {
-        if (lock) await runLoop();
-      });
-    } else {
-      void runLoop();
-    }
+    void loop();
 
     return () => {
       cancelled = true;

@@ -53,8 +53,4 @@
 # Perbaikan error gateway
 - [x] Temukan akar masalah status sesi dan koneksi WebSocket
 - [x] Perbaiki penanganan koneksi, pengiriman, dan pesan error
-- [x] Hentikan pemrosesan satu perangkat segera setelah socket putus agar error tidak berantai
-- [x] Cegah dua halaman/tab menjalankan pekerja blast yang sama secara bersamaan
-- [x] Bersihkan 27 sesi gateway yatim; verifikasi tidak ada sesi FAILED tersisa
-- [x] Uji siklus create → start → SCAN_QR_CODE → cleanup langsung ke gateway
-- [ ] Uji pengiriman pesan nyata (menunggu pengguna memasangkan minimal satu perangkat)
+- [ ] Uji pengiriman dan pastikan error tidak muncul kembali

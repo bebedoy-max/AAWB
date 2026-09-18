@@ -218,14 +218,7 @@ export async function processCampaignTick(
             })
             .eq("id", item.id);
           failed += 1;
-          // The socket is shared by the whole device. Stop this tick instead
-          // of hammering the same broken transport with every queued row.
-          await supabase
-            .from("wa_sessions")
-            .update({ status: "disconnected", updated_at: new Date().toISOString() })
-            .eq("id", sessionId);
-          note = "Koneksi perangkat terputus. Pengiriman berikutnya menunggu perangkat pulih.";
-          break;
+          continue;
         }
 
         if (attempts < MAX_ATTEMPTS) {
@@ -265,8 +258,6 @@ export async function processCampaignTick(
         }
       }
     }
-
-    if (note) break;
 
   }
 
