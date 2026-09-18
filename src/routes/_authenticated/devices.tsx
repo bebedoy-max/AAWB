@@ -151,11 +151,17 @@ function Devices() {
     queryFn: () => checkGateway(),
   });
 
+  const MAX_DEVICES = 4;
+
   const createSession = useMutation({
     mutationFn: async () => {
+      if ((sessions?.length ?? 0) >= MAX_DEVICES) {
+        throw new Error(`Maksimal ${MAX_DEVICES} perangkat per akun.`);
+      }
       const { data: user } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("wa_sessions")
+
         .insert({
           user_id: user.user!.id,
           session_name: name.trim() || "Perangkat baru",

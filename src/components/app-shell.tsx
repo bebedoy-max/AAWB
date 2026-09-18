@@ -20,7 +20,10 @@ import {
   ShieldCheck,
   Wallet,
   Gift,
+  Rocket,
+  Activity,
 } from "lucide-react";
+
 import { getMyRole } from "@/lib/admin.functions";
 import { attachReferral } from "@/lib/rewards.functions";
 
@@ -40,19 +43,30 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-const NAV = [
+/** Menu member/worker: hubungkan perangkat, blast, saldo. */
+const MEMBER_NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/devices", label: "Perangkat", icon: Smartphone },
-  { to: "/contacts", label: "Kontak & Grup", icon: Users },
-  { to: "/templates", label: "Template Pesan", icon: FileText },
-  { to: "/campaigns", label: "Kampanye", icon: Send },
-  { to: "/queue", label: "Antrean & Log", icon: ListChecks },
+  { to: "/blast", label: "Mulai Blast", icon: Rocket },
+  { to: "/queue", label: "Log Pesan", icon: ListChecks },
   { to: "/rewards", label: "Saldo & Reward", icon: Wallet },
   { to: "/referral", label: "Referal", icon: Gift },
   { to: "/settings", label: "Pengaturan", icon: Settings },
 ] as const;
 
-const ADMIN_NAV = { to: "/admin", label: "Admin", icon: ShieldCheck } as const;
+/** Menu admin: monitoring, proyek blast, pengelolaan sistem. */
+const ADMIN_NAV = [
+  { to: "/monitor", label: "Monitoring", icon: Activity },
+  { to: "/projects", label: "Proyek Blast", icon: Rocket },
+  { to: "/contacts", label: "Kontak & Grup", icon: Users },
+  { to: "/templates", label: "Template Pesan", icon: FileText },
+  { to: "/campaigns", label: "Kampanye", icon: Send },
+  { to: "/queue", label: "Antrean & Log", icon: ListChecks },
+  { to: "/admin", label: "Admin", icon: ShieldCheck },
+  { to: "/settings", label: "Pengaturan", icon: Settings },
+] as const;
+
+const ALL_NAV = [...MEMBER_NAV, ...ADMIN_NAV];
 
 function useIsAdmin(): boolean {
   const fetchRole = useServerFn(getMyRole);
@@ -67,7 +81,8 @@ function useIsAdmin(): boolean {
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = useIsAdmin();
-  const items = isAdmin ? [...NAV, ADMIN_NAV] : [...NAV];
+  const items = isAdmin ? [...ADMIN_NAV] : [...MEMBER_NAV];
+
   return (
     <nav className="flex flex-col gap-1 px-3">
       {items.map(({ to, label, icon: Icon }) => {
@@ -157,7 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
   });
 
-  const current = [...NAV, ADMIN_NAV].find((n) => n.to === pathname);
+  const current = ALL_NAV.find((n) => n.to === pathname);
 
   const signOut = async () => {
     await supabase.auth.signOut();

@@ -14,16 +14,20 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as VerifikasiRouteImport } from './routes/verifikasi'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedBlastRouteImport } from './routes/_authenticated/blast'
 import { Route as AuthenticatedCampaignsRouteImport } from './routes/_authenticated/campaigns'
 import { Route as AuthenticatedContactsRouteImport } from './routes/_authenticated/contacts'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDevicesRouteImport } from './routes/_authenticated/devices'
+import { Route as AuthenticatedMonitorRouteImport } from './routes/_authenticated/monitor'
+import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedQueueRouteImport } from './routes/_authenticated/queue'
 import { Route as AuthenticatedReferralRouteImport } from './routes/_authenticated/referral'
 import { Route as AuthenticatedRewardsRouteImport } from './routes/_authenticated/rewards'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as ApiBlastTickRouteImport } from './routes/api/blast/tick'
 import { Route as ApiCampaignDispatchRouteImport } from './routes/api/campaign/dispatch'
 import { Route as ApiSessionIdRouteImport } from './routes/api/session/$id'
 import { Route as ApiPublicCronProcessQueueRouteImport } from './routes/api/public/cron/process-queue'
@@ -55,6 +59,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBlastRoute = AuthenticatedBlastRouteImport.update({
+  id: '/blast',
+  path: '/blast',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCampaignsRoute = AuthenticatedCampaignsRouteImport.update({
   id: '/campaigns',
   path: '/campaigns',
@@ -73,6 +82,16 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 const AuthenticatedDevicesRoute = AuthenticatedDevicesRouteImport.update({
   id: '/devices',
   path: '/devices',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMonitorRoute = AuthenticatedMonitorRouteImport.update({
+  id: '/monitor',
+  path: '/monitor',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedQueueRoute = AuthenticatedQueueRouteImport.update({
@@ -104,6 +123,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
   getParentRoute: () => AuthRoute,
+} as any)
+const ApiBlastTickRoute = ApiBlastTickRouteImport.update({
+  id: '/api/blast/tick',
+  path: '/api/blast/tick',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCampaignDispatchRoute = ApiCampaignDispatchRouteImport.update({
   id: '/api/campaign/dispatch',
@@ -143,16 +167,20 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRouteWithChildren
   '/verifikasi': typeof VerifikasiRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/blast': typeof AuthenticatedBlastRoute
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/contacts': typeof AuthenticatedContactsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/devices': typeof AuthenticatedDevicesRoute
+  '/monitor': typeof AuthenticatedMonitorRoute
+  '/projects': typeof AuthenticatedProjectsRoute
   '/queue': typeof AuthenticatedQueueRoute
   '/referral': typeof AuthenticatedReferralRoute
   '/rewards': typeof AuthenticatedRewardsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/api/blast/tick': typeof ApiBlastTickRoute
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
@@ -165,16 +193,20 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRouteWithChildren
   '/verifikasi': typeof VerifikasiRoute
   '/admin': typeof AuthenticatedAdminRoute
+  '/blast': typeof AuthenticatedBlastRoute
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/contacts': typeof AuthenticatedContactsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/devices': typeof AuthenticatedDevicesRoute
+  '/monitor': typeof AuthenticatedMonitorRoute
+  '/projects': typeof AuthenticatedProjectsRoute
   '/queue': typeof AuthenticatedQueueRoute
   '/referral': typeof AuthenticatedReferralRoute
   '/rewards': typeof AuthenticatedRewardsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/api/blast/tick': typeof ApiBlastTickRoute
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
@@ -189,16 +221,20 @@ export interface FileRoutesById {
   '/auth': typeof AuthRouteWithChildren
   '/verifikasi': typeof VerifikasiRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/_authenticated/blast': typeof AuthenticatedBlastRoute
   '/_authenticated/campaigns': typeof AuthenticatedCampaignsRoute
   '/_authenticated/contacts': typeof AuthenticatedContactsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/devices': typeof AuthenticatedDevicesRoute
+  '/_authenticated/monitor': typeof AuthenticatedMonitorRoute
+  '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/queue': typeof AuthenticatedQueueRoute
   '/_authenticated/referral': typeof AuthenticatedReferralRoute
   '/_authenticated/rewards': typeof AuthenticatedRewardsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/api/blast/tick': typeof ApiBlastTickRoute
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
@@ -213,16 +249,20 @@ export interface FileRouteTypes {
     | '/auth'
     | '/verifikasi'
     | '/admin'
+    | '/blast'
     | '/campaigns'
     | '/contacts'
     | '/dashboard'
     | '/devices'
+    | '/monitor'
+    | '/projects'
     | '/queue'
     | '/referral'
     | '/rewards'
     | '/settings'
     | '/templates'
     | '/auth/callback'
+    | '/api/blast/tick'
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
@@ -235,16 +275,20 @@ export interface FileRouteTypes {
     | '/auth'
     | '/verifikasi'
     | '/admin'
+    | '/blast'
     | '/campaigns'
     | '/contacts'
     | '/dashboard'
     | '/devices'
+    | '/monitor'
+    | '/projects'
     | '/queue'
     | '/referral'
     | '/rewards'
     | '/settings'
     | '/templates'
     | '/auth/callback'
+    | '/api/blast/tick'
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
@@ -258,16 +302,20 @@ export interface FileRouteTypes {
     | '/auth'
     | '/verifikasi'
     | '/_authenticated/admin'
+    | '/_authenticated/blast'
     | '/_authenticated/campaigns'
     | '/_authenticated/contacts'
     | '/_authenticated/dashboard'
     | '/_authenticated/devices'
+    | '/_authenticated/monitor'
+    | '/_authenticated/projects'
     | '/_authenticated/queue'
     | '/_authenticated/referral'
     | '/_authenticated/rewards'
     | '/_authenticated/settings'
     | '/_authenticated/templates'
     | '/auth/callback'
+    | '/api/blast/tick'
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/api/public/cron/process-queue'
@@ -281,6 +329,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
   VerifikasiRoute: typeof VerifikasiRoute
+  ApiBlastTickRoute: typeof ApiBlastTickRoute
   ApiCampaignDispatchRoute: typeof ApiCampaignDispatchRoute
   ApiSessionIdRoute: typeof ApiSessionIdRoute
   ApiPublicCronProcessQueueRoute: typeof ApiPublicCronProcessQueueRoute
@@ -326,6 +375,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/blast': {
+      id: '/_authenticated/blast'
+      path: '/blast'
+      fullPath: '/blast'
+      preLoaderRoute: typeof AuthenticatedBlastRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/campaigns': {
       id: '/_authenticated/campaigns'
       path: '/campaigns'
@@ -352,6 +408,20 @@ declare module '@tanstack/react-router' {
       path: '/devices'
       fullPath: '/devices'
       preLoaderRoute: typeof AuthenticatedDevicesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/monitor': {
+      id: '/_authenticated/monitor'
+      path: '/monitor'
+      fullPath: '/monitor'
+      preLoaderRoute: typeof AuthenticatedMonitorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/projects': {
+      id: '/_authenticated/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/queue': {
@@ -395,6 +465,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/auth/callback'
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof AuthRoute
+    }
+    '/api/blast/tick': {
+      id: '/api/blast/tick'
+      path: '/api/blast/tick'
+      fullPath: '/api/blast/tick'
+      preLoaderRoute: typeof ApiBlastTickRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/campaign/dispatch': {
       id: '/api/campaign/dispatch'
@@ -443,10 +520,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+  AuthenticatedBlastRoute: typeof AuthenticatedBlastRoute
   AuthenticatedCampaignsRoute: typeof AuthenticatedCampaignsRoute
   AuthenticatedContactsRoute: typeof AuthenticatedContactsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDevicesRoute: typeof AuthenticatedDevicesRoute
+  AuthenticatedMonitorRoute: typeof AuthenticatedMonitorRoute
+  AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedQueueRoute: typeof AuthenticatedQueueRoute
   AuthenticatedReferralRoute: typeof AuthenticatedReferralRoute
   AuthenticatedRewardsRoute: typeof AuthenticatedRewardsRoute
@@ -456,10 +536,13 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+  AuthenticatedBlastRoute: AuthenticatedBlastRoute,
   AuthenticatedCampaignsRoute: AuthenticatedCampaignsRoute,
   AuthenticatedContactsRoute: AuthenticatedContactsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDevicesRoute: AuthenticatedDevicesRoute,
+  AuthenticatedMonitorRoute: AuthenticatedMonitorRoute,
+  AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedQueueRoute: AuthenticatedQueueRoute,
   AuthenticatedReferralRoute: AuthenticatedReferralRoute,
   AuthenticatedRewardsRoute: AuthenticatedRewardsRoute,
@@ -485,6 +568,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
   VerifikasiRoute: VerifikasiRoute,
+  ApiBlastTickRoute: ApiBlastTickRoute,
   ApiCampaignDispatchRoute: ApiCampaignDispatchRoute,
   ApiSessionIdRoute: ApiSessionIdRoute,
   ApiPublicCronProcessQueueRoute: ApiPublicCronProcessQueueRoute,

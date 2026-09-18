@@ -84,3 +84,20 @@ export const dispatchCampaign = (payload: DispatchPayload) =>
     method: "POST",
     body: JSON.stringify(payload),
   });
+
+export interface BlastTickResponse {
+  ok: boolean;
+  running: boolean;
+  claimed: number;
+  sent: number;
+  failed: number;
+  remaining: number;
+  error?: string;
+}
+
+/** Satu tick pekerja blast member untuk satu perangkat. */
+export const blastTick = (sessionId: string) =>
+  authFetch<BlastTickResponse>("/api/blast/tick", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
