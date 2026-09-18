@@ -65,7 +65,7 @@ export const Route = createFileRoute("/_authenticated/admin/pengguna")({
 const ROLE_LABEL: Record<AppRole, string> = {
   super_admin: "Super Admin",
   admin: "Admin",
-  member: "Member",
+  member: "Worker's",
 };
 
 type MemberSummary = {
@@ -161,7 +161,7 @@ function PenggunaPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Total pengguna" value={angka(data?.rows.length ?? 0)} icon={Users} tone="info" />
         <StatTile
-          label="Total saldo member"
+          label="Total saldo Worker's"
           value={rupiah(data?.balance_total ?? 0)}
           hint={`${rupiah(data?.pending_total ?? 0)} menunggu pencairan`}
           icon={Wallet}
@@ -259,7 +259,7 @@ function PenggunaPage() {
                         <SelectContent>
                           <SelectItem value="super_admin">Super Admin</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="member">Worker's</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
@@ -510,7 +510,7 @@ function MemberDetailDialog({
                         <SelectContent>
                           <SelectItem value="super_admin">Super Admin</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="member">Worker's</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (

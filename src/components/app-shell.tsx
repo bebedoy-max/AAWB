@@ -160,7 +160,7 @@ function Brand() {
     <div className="flex h-[76px] items-center gap-3 overflow-hidden border-b px-3">
       <BrandLogo className="h-16 w-auto shrink-0 object-contain" />
       <div className="min-w-0 border-l pl-3">
-        <p className="text-base font-bold leading-tight">Member</p>
+        <p className="text-base font-bold leading-tight">Worker's</p>
       </div>
 
     </div>
@@ -252,7 +252,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
-  const [account, setAccount] = useState({ username: "member", name: "Member" });
+  const [account, setAccount] = useState({ username: "member", name: "Worker's" });
   const [clock, setClock] = useState(new Date());
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
@@ -263,7 +263,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       const metadata = data.user?.user_metadata as { username?: string; organization_name?: string } | undefined;
       setAccount({
         username: metadata?.username ?? data.user?.email?.split("@")[0] ?? "member",
-        name: metadata?.organization_name ?? "Member",
+        name: metadata?.organization_name ?? "Worker's",
       });
     });
   }, []);

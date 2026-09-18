@@ -46,7 +46,7 @@ export const Route = createFileRoute("/_authenticated/admin/tim")({
 const ROLE_LABEL: Record<AppRole, string> = {
   super_admin: "Super Admin",
   admin: "Admin",
-  member: "Member",
+  member: "Worker's",
 };
 
 function TimPage() {
@@ -116,7 +116,7 @@ function TimPage() {
                   <DialogHeader>
                     <DialogTitle>Angkat pengguna menjadi admin</DialogTitle>
                     <DialogDescription>
-                      Pilih member yang akan diberi akses konsol admin.
+                      Pilih Worker's yang akan diberi akses konsol admin.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-3">
@@ -124,7 +124,7 @@ function TimPage() {
                       <Label>Pengguna</Label>
                       <Select value={candidate} onValueChange={setCandidate}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Pilih member" />
+                          <SelectValue placeholder="Pilih Worker's" />
                         </SelectTrigger>
                         <SelectContent>
                           {(candidates ?? []).map((c) => (
@@ -209,7 +209,7 @@ function TimPage() {
                         <SelectContent>
                           <SelectItem value="super_admin">Super Admin</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="member">Worker's</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (

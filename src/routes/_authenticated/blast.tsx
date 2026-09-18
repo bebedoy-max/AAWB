@@ -94,9 +94,10 @@ function BlastPage() {
     let cancelled = false;
 
     const runLoop = async () => {
-      while (!cancelled) {
-        for (const id of ids) {
-          if (cancelled) return;
+      // Setiap perangkat berjalan sendiri-sendiri tanpa menunggu perangkat lain,
+      // supaya tidak ada perangkat yang berhenti karena menunggu giliran.
+      const runDevice = async (id: string) => {
+        while (!cancelled) {
           try {
             const tick = await blastTick(id);
             setNotes((prev) => ({ ...prev, [id]: tick.error ?? null }));
@@ -110,11 +111,12 @@ function BlastPage() {
               [id]: err instanceof Error ? err.message : "Pengiriman tidak dapat dijalankan",
             }));
           }
+          if (cancelled) return;
+          queryClient.invalidateQueries({ queryKey: ["blast-state"] });
+          await new Promise((resolve) => setTimeout(resolve, 300));
         }
-        if (cancelled) return;
-        queryClient.invalidateQueries({ queryKey: ["blast-state"] });
-        await new Promise((resolve) => setTimeout(resolve, 800));
-      }
+      };
+      await Promise.all(ids.map(runDevice));
     };
 
     // Only one open tab may run the member worker. The Devices page no longer

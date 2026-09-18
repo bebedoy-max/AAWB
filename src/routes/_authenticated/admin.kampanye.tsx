@@ -149,7 +149,7 @@ function KampanyePage() {
     <>
       <AdminPageTitle
         title="Kampanye Pesan"
-        description="Satu kampanye berisi pesan dan kolam nomor yang dikerjakan perangkat member."
+        description="Satu kampanye berisi pesan dan kolam nomor yang dikerjakan perangkat Worker's."
         action={
           <>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -205,7 +205,7 @@ function KampanyePage() {
           <Panel bodyClassName="p-0">
             <EmptyState
               title="Belum ada kampanye"
-              description="Buat kampanye baru untuk mulai mendistribusikan pesan ke perangkat member."
+              description="Buat kampanye baru untuk mulai mendistribusikan pesan ke perangkat Worker's."
             />
           </Panel>
         ) : (

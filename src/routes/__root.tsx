@@ -80,13 +80,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "AAWB — Ruang Aktivitas Member" },
+      { title: "AAWB — Ruang Aktivitas Worker's" },
       {
         name: "description",
         content:
           "Kelola aktivitas dan pantau perkembangan akun Anda dengan mudah.",
       },
-      { property: "og:title", content: "AAWB — Ruang Aktivitas Member" },
+      { property: "og:title", content: "AAWB — Ruang Aktivitas Worker's" },
       {
         property: "og:description",
         content:

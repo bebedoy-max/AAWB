@@ -23,9 +23,9 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Masuk atau Daftar — AAWB" },
-      { name: "description", content: "Masuk dengan username atau buat akun member AAWB." },
+      { name: "description", content: "Masuk dengan username atau buat akun Worker's AAWB." },
       { property: "og:title", content: "Masuk atau Daftar — AAWB" },
-      { property: "og:description", content: "Masuk dengan username atau buat akun member AAWB." },
+      { property: "og:description", content: "Masuk dengan username atau buat akun Worker's AAWB." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

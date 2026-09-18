@@ -13,9 +13,9 @@ export const Route = createFileRoute("/_authenticated/monitor")({
   head: () => ({
     meta: [
       { title: "Monitoring Real-time — AAWB" },
-      { name: "description", content: "Pantau member, perangkat, dan pengiriman pesan secara real-time." },
+      { name: "description", content: "Pantau Worker's, perangkat, dan pengiriman pesan secara real-time." },
       { property: "og:title", content: "Monitoring Real-time — AAWB" },
-      { property: "og:description", content: "Pantau member, perangkat, dan pengiriman pesan secara real-time." },
+      { property: "og:description", content: "Pantau Worker's, perangkat, dan pengiriman pesan secara real-time." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -79,18 +79,18 @@ function MonitorPage() {
     <>
       <PageHeader
         title="Monitoring Real-time"
-        description="Kondisi member, perangkat, dan proses pengiriman pesan saat ini."
+        description="Kondisi Worker's, perangkat, dan proses pengiriman pesan saat ini."
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Jumlah member" value={String(o?.members ?? 0)} icon={Users} />
+        <Stat label="Jumlah Worker's" value={String(o?.members ?? 0)} icon={Users} />
         <Stat label="Total perangkat" value={String(o?.devices_total ?? 0)} icon={Smartphone} />
         <Stat label="Perangkat terhubung" value={String(o?.devices_connected ?? 0)} icon={Wifi} />
         <Stat label="Sedang bekerja" value={String(o?.devices_working ?? 0)} icon={Activity} accent />
         <Stat label="Pesan sukses" value={String(o?.sent_total ?? 0)} icon={CheckCircle2} />
         <Stat label="Pesan gagal" value={String(o?.failed_total ?? 0)} icon={XCircle} />
         <Stat label="Pesan menunggu" value={String(o?.pending_total ?? 0)} icon={Clock} />
-        <Stat label="Total pendapatan member" value={rupiah(o?.earnings_total ?? 0)} icon={Wallet} />
+        <Stat label="Total pendapatan Worker's" value={rupiah(o?.earnings_total ?? 0)} icon={Wallet} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -103,7 +103,7 @@ function MonitorPage() {
             <p className="mt-2 text-xs text-muted-foreground">
               {o?.sent_total ?? 0} terkirim · {o?.failed_total ?? 0} gagal · {o?.pending_total ?? 0} tersisa
               {" · "}
-              {o?.pool_unclaimed ?? 0} nomor belum diambil member
+              {o?.pool_unclaimed ?? 0} nomor belum diambil Worker's
             </p>
             <div className="mt-4 flex items-center gap-2 rounded-lg bg-accent/50 p-3 text-sm">
               <span className="relative flex size-2.5">
@@ -134,7 +134,7 @@ function MonitorPage() {
 
       <Card className="mt-4">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Perangkat member</CardTitle>
+          <CardTitle className="text-base">Perangkat Worker's</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           <table className="w-full min-w-[720px] text-sm">

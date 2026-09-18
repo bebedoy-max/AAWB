@@ -30,7 +30,7 @@ const ACTION_LABEL: Record<string, string> = {
 
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
-  member: "Member",
+  member: "Worker's",
   super_admin: "Super Admin",
 };
 

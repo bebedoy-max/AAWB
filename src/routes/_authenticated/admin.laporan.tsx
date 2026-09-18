@@ -75,12 +75,15 @@ function csvCell(value: string): string {
   return `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
 }
 
+const PAGE_SIZE = 20;
+
 function LaporanPage() {
   const fetchOptions = useServerFn(listCampaignOptions);
   const fetchReport = useServerFn(listReport);
 
   const [campaignId, setCampaignId] = useState("all");
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<ReportRow | null>(null);
 
   const { data: campaigns } = useQuery({
@@ -103,6 +106,13 @@ function LaporanPage() {
         .some((v) => String(v).toLowerCase().includes(needle)),
     );
   }, [data, q]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedRows = useMemo(
+    () => rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [rows, currentPage],
+  );
 
   const HEADER = [
     "Waktu",
@@ -231,7 +241,13 @@ function LaporanPage() {
         bodyClassName="p-0"
         action={
           <div className="flex flex-wrap gap-2">
-            <Select value={campaignId} onValueChange={setCampaignId}>
+            <Select
+              value={campaignId}
+              onValueChange={(v) => {
+                setCampaignId(v);
+                setPage(1);
+              }}
+            >
               <SelectTrigger className="w-44">
                 <SelectValue />
               </SelectTrigger>
@@ -248,7 +264,10 @@ function LaporanPage() {
               <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="Cari nomor atau pesan"
                 className="pl-8"
               />
@@ -277,7 +296,7 @@ function LaporanPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {pagedRows.map((r) => (
                 <tr
                   key={r.id}
                   className="cursor-pointer border-b last:border-0 hover:bg-muted/40"
@@ -309,6 +328,31 @@ function LaporanPage() {
             </tbody>
           </TableShell>
         )}
+        {rows.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-sm">
+            <p className="text-xs text-muted-foreground">
+              Halaman {currentPage} dari {totalPages} · {angka(rows.length)} baris
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => setPage(currentPage - 1)}
+              >
+                Sebelumnya
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage(currentPage + 1)}
+              >
+                Berikutnya
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Panel>
 
       <Dialog open={Boolean(detail)} onOpenChange={(o) => !o && setDetail(null)}>

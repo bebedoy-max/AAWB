@@ -85,7 +85,7 @@ function RingkasanPage() {
     <>
       <AdminPageTitle
         title="Ringkasan Sistem"
-        description="Pantau kondisi member, perangkat, dan kampanye yang sedang berjalan."
+        description="Pantau kondisi Worker's, perangkat, dan kampanye yang sedang berjalan."
         action={
           <>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -103,7 +103,7 @@ function RingkasanPage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Hentikan seluruh pengiriman?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Semua kampanye yang berjalan akan dijeda dan mesin blast pada perangkat member
+                    Semua kampanye yang berjalan akan dijeda dan mesin blast pada perangkat Worker's
                     dimatikan. Antrean nomor tidak dihapus.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -119,7 +119,7 @@ function RingkasanPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
-          label="Total member"
+          label="Total Worker's"
           value={angka(overview?.members ?? 0)}
           icon={Users}
           tone="info"

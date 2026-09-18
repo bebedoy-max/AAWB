@@ -3,7 +3,7 @@ import { ArrowRight, Globe2 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 
-const TITLE = "AAWB — Ruang Aktivitas Member";
+const TITLE = "AAWB — Ruang Aktivitas Worker's";
 const DESC = "Kelola aktivitas dan pantau perkembangan akun Anda dengan mudah.";
 
 export const Route = createFileRoute("/")({
@@ -35,7 +35,7 @@ function Landing() {
           Kelola aktivitas dengan mudah dan pantau seluruh perkembangan Anda.
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg">
-          Semua kebutuhan member Anda tersedia dalam satu ruang yang sederhana.
+          Semua kebutuhan Worker's Anda tersedia dalam satu ruang yang sederhana.
         </p>
         <div className="mt-9 flex flex-wrap justify-center gap-3">
           <Button asChild size="lg">

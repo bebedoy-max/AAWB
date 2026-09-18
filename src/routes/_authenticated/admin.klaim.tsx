@@ -87,7 +87,7 @@ function KlaimPage() {
     <>
       <AdminPageTitle
         title="Manajemen Klaim Dana"
-        description="Tinjau dan proses pengajuan pencairan saldo dari member."
+        description="Tinjau dan proses pengajuan pencairan saldo dari Worker's."
         action={
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
@@ -131,13 +131,13 @@ function KlaimPage() {
         ) : rows.length === 0 ? (
           <EmptyState
             title="Tidak ada pengajuan"
-            description="Pengajuan pencairan dari member akan tampil pada tab ini."
+            description="Pengajuan pencairan dari Worker's akan tampil pada tab ini."
           />
         ) : (
           <TableShell>
             <thead className="border-b bg-muted/40">
               <tr>
-                <Th>Member</Th>
+                <Th>Worker's</Th>
                 <Th>Jumlah</Th>
                 <Th>Tujuan pencairan</Th>
                 <Th>Diajukan</Th>

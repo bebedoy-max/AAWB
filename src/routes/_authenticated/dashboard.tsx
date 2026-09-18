@@ -134,7 +134,7 @@ function Dashboard() {
   const copyProfileName = async () => {
     const { data } = await supabase.auth.getUser();
     const metadata = data.user?.user_metadata as { organization_name?: string; username?: string } | undefined;
-    const profileName = metadata?.organization_name ?? metadata?.username ?? "Member";
+    const profileName = metadata?.organization_name ?? metadata?.username ?? "Worker's";
     await navigator.clipboard.writeText(profileName);
     toast.success("Nama profil disalin");
   };
@@ -146,7 +146,7 @@ function Dashboard() {
           <h1 className="font-display text-[2rem] font-bold tracking-normal">Selamat datang!</h1>
           <p className="mt-4 max-w-xl text-base leading-8 text-background/70 sm:mt-2 sm:text-sm sm:leading-6 sm:text-member-hero-foreground/70">Kelola aktivitas WhatsApp dan pantau seluruh perkembangan pengiriman dari sini.</p>
           <div className="mt-6 flex flex-wrap items-center gap-2">
-             <span className="rounded-full border border-background/20 bg-background/5 px-4 py-2.5 text-xs font-semibold sm:border-member-hero-foreground/20 sm:bg-background/40">Masuk sebagai MEMBER</span>
+             <span className="rounded-full border border-background/20 bg-background/5 px-4 py-2.5 text-xs font-semibold sm:border-member-hero-foreground/20 sm:bg-background/40">Masuk sebagai WORKER'S</span>
              <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold"><span className="size-2 rounded-full bg-primary" /> SISTEM AKTIF</span>
           </div>
         </div>

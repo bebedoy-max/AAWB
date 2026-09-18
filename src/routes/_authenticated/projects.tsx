@@ -73,7 +73,7 @@ function ProjectsPage() {
         data: { name, message, phones: parsed.valid.map((p) => p.e164 as string) },
       }),
     onSuccess: (res) => {
-      toast.success(`Proyek dibuat — ${res.queued} nomor siap dikerjakan member`);
+      toast.success(`Proyek dibuat — ${res.queued} nomor siap dikerjakan Worker's`);
       setOpen(false);
       setName("");
       setMessage("");
@@ -113,7 +113,7 @@ function ProjectsPage() {
     <>
       <PageHeader
         title="Proyek Blast"
-        description="Satu pesan + daftar nomor. Perangkat member otomatis mengambil dan mengirimnya."
+        description="Satu pesan + daftar nomor. Perangkat Worker's otomatis mengambil dan mengirimnya."
         action={
           <Button onClick={() => setOpen(true)}>
             <Plus className="mr-1 size-4" /> Proyek baru

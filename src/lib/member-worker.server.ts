@@ -262,17 +262,13 @@ export async function processBlastTick(
             .update({ status: "failed", attempts, error_log: message })
             .eq("id", item.id);
           failed += 1;
-          // Stop the device after one uncertain send. Continuing here caused
-          // every following row to hit the same dead websocket and emit 463.
-          await supabase
-            .from("wa_sessions")
-            .update({
-              status: "disconnected",
-              blast_ready: false,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", sessionId);
-          note = "Koneksi perangkat terputus. Sambungkan ulang perangkat sebelum melanjutkan blast.";
+          // Sambungan terputus di tengah jalan: perangkat TIDAK dimatikan.
+          // Saklar "siap blast" hanya boleh dimatikan oleh worker sendiri.
+          // Di sini cukup coba sambungkan ulang, lalu lanjut mengirim.
+          const again = await ensureConnected(supabase, sessionId);
+          if (!again.connected) {
+            note = "Perangkat terputus — pengiriman dilanjutkan otomatis setelah tersambung";
+          }
         } else if (attempts < MAX_ATTEMPTS) {
           await supabase
             .from("message_queue")

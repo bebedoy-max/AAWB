@@ -231,7 +231,7 @@ function Devices() {
   const copyProfileName = async () => {
     const { data } = await supabase.auth.getUser();
     const metadata = data.user?.user_metadata as { organization_name?: string; username?: string } | undefined;
-    await navigator.clipboard.writeText(metadata?.organization_name ?? metadata?.username ?? "Member");
+    await navigator.clipboard.writeText(metadata?.organization_name ?? metadata?.username ?? "Worker's");
     toast.success("Nama profil disalin");
   };
 

@@ -77,25 +77,31 @@ export function CampaignAutoRunner() {
         blast_ready: boolean | null;
       }>).filter((device) => device.blast_ready);
 
-      for (const device of readyDevices) {
-        if (stopped) return;
-        if (busyDevices.has(device.id)) continue;
-        busyDevices.add(device.id);
-        try {
-          await blastTick(device.id);
-        } catch {
-          /* gangguan sementara: dicoba lagi pada siklus berikutnya */
-        } finally {
-          busyDevices.delete(device.id);
-        }
-        refresh();
-      }
+      // Semua perangkat dijalankan BERSAMAAN. Sebelumnya dijalankan bergiliran,
+      // sehingga perangkat ke-2 sampai ke-4 menunggu giliran dan terlihat
+      // seperti berhenti sendiri di tengah blast.
+      await Promise.all(
+        readyDevices.map(async (device) => {
+          if (stopped || busyDevices.has(device.id)) return;
+          busyDevices.add(device.id);
+          try {
+            await blastTick(device.id);
+          } catch {
+            /* gangguan sementara: dicoba lagi pada siklus berikutnya */
+          } finally {
+            busyDevices.delete(device.id);
+          }
+          refresh();
+        }),
+      );
     };
 
     const loop = async () => {
       while (!stopped) {
         await runOnce();
-        await new Promise((resolve) => setTimeout(resolve, 4_000));
+        // Jeda sesingkat mungkin: jeda antar pesan sudah diatur oleh pilihan
+        // kecepatan worker, bukan oleh pemeriksa ini.
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
     };
 
