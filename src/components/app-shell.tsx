@@ -54,21 +54,33 @@ const MEMBER_NAV = [
   { to: "/settings", label: "Pengaturan", icon: Settings },
 ] as const;
 
-/** Menu admin: monitoring, proyek blast, pengelolaan sistem. */
+/** Menu utama admin (bar horizontal, mengikuti rancangan konsol admin). */
 const ADMIN_NAV = [
-  { to: "/monitor", label: "Monitoring", icon: Activity },
+  { to: "/admin", label: "Ringkasan", icon: LayoutDashboard },
+  { to: "/admin/pengguna", label: "Pengguna", icon: Users },
+  { to: "/admin/kampanye", label: "Kampanye", icon: Send },
+  { to: "/admin/nomor", label: "Data Nomor", icon: ListChecks },
+  { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
+  { to: "/admin/tim", label: "Tim Admin", icon: ShieldCheck },
+  { to: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
+] as const;
+
+/** Halaman pendukung admin yang tidak masuk bar utama. */
+const ADMIN_EXTRA_NAV = [
+  { to: "/monitor", label: "Monitoring Realtime", icon: Activity },
   { to: "/projects", label: "Proyek Blast", icon: Rocket },
   { to: "/contacts", label: "Kontak & Grup", icon: Users },
   { to: "/templates", label: "Template Pesan", icon: FileText },
-  { to: "/campaigns", label: "Kampanye", icon: Send },
+  { to: "/campaigns", label: "Kampanye Pribadi", icon: Send },
   { to: "/queue", label: "Antrean & Log", icon: ListChecks },
-  { to: "/admin", label: "Admin", icon: ShieldCheck },
-  { to: "/settings", label: "Pengaturan", icon: Settings },
+  { to: "/devices", label: "Perangkat Saya", icon: Smartphone },
+  { to: "/settings", label: "Pengaturan Akun", icon: Settings },
 ] as const;
 
-const ALL_NAV = [...MEMBER_NAV, ...ADMIN_NAV];
+const ALL_NAV = [...MEMBER_NAV, ...ADMIN_NAV, ...ADMIN_EXTRA_NAV];
 
-function useIsAdmin(): boolean {
+export function useIsAdmin(): boolean {
   const fetchRole = useServerFn(getMyRole);
   const { data } = useQuery({
     queryKey: ["my-role"],
@@ -78,15 +90,20 @@ function useIsAdmin(): boolean {
   return Boolean(data?.is_admin);
 }
 
+function isActivePath(pathname: string, to: string): boolean {
+  if (to === "/admin") return pathname === "/admin" || pathname === "/admin/";
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = useIsAdmin();
-  const items = isAdmin ? [...ADMIN_NAV] : [...MEMBER_NAV];
+  const items = isAdmin ? [...ADMIN_NAV, ...ADMIN_EXTRA_NAV] : [...MEMBER_NAV];
 
   return (
-    <nav className="flex flex-col gap-1 px-3">
+    <nav className="flex flex-col gap-1 px-3 pb-6">
       {items.map(({ to, label, icon: Icon }) => {
-        const active = pathname === to;
+        const active = isActivePath(pathname, to);
         return (
           <Link
             key={to}
@@ -105,6 +122,52 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
         );
       })}
     </nav>
+  );
+}
+
+/** Bar navigasi horizontal khusus konsol admin. */
+function AdminTopNav() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  return (
+    <div className="border-b bg-card">
+      <div className="mx-auto flex max-w-[1400px] items-center gap-2 overflow-x-auto px-3 py-2 lg:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {ADMIN_NAV.map(({ to, label, icon: Icon }) => {
+          const active = isActivePath(pathname, to);
+          return (
+            <Link
+              key={to}
+              to={to}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <Icon className="size-4" />
+              {label}
+            </Link>
+          );
+        })}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground">
+              Lainnya
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {ADMIN_EXTRA_NAV.map(({ to, label, icon: Icon }) => (
+              <DropdownMenuItem key={to} asChild>
+                <Link to={to}>
+                  <Icon className="mr-2 size-4" />
+                  {label}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
   );
 }
 

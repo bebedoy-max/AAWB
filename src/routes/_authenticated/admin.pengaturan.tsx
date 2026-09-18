@@ -1,0 +1,453 @@
+/**
+ * Pengaturan sistem dengan panel samping: gateway WhatsApp, bot Telegram,
+ * reward & keuangan, log aktivitas, akun, tampilan, dan koneksi Telegram.
+ */
+import { useEffect, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
+import {
+  Coins,
+  MessageCircle,
+  Palette,
+  PlugZap,
+  ScrollText,
+  Send,
+  UserRound,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/my-client";
+import { useTheme } from "@/lib/theme";
+import type { Profile } from "@/types/wa";
+import {
+  getGatewaySettings,
+  getTelegramSettings,
+  saveGatewaySettings,
+  saveTelegramSettings,
+  testGateway,
+  testTelegramBot,
+} from "@/lib/admin.functions";
+import {
+  disconnectTelegram,
+  getTelegramStatus,
+  startTelegramLink,
+} from "@/lib/telegram.functions";
+import { AdminRewardSettings } from "@/components/admin-rewards";
+import { AdminActivityLog } from "@/components/admin-activity-log";
+import { useMyRole } from "./admin";
+import { AdminPageTitle, Panel } from "@/components/admin-ui";
+
+export const Route = createFileRoute("/_authenticated/admin/pengaturan")({
+  component: PengaturanPage,
+});
+
+type SectionId =
+  | "gateway"
+  | "telegram-bot"
+  | "reward"
+  | "log"
+  | "akun"
+  | "tampilan"
+  | "telegram-akun";
+
+const SECTIONS: {
+  id: SectionId;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+  superOnly?: boolean;
+}[] = [
+  { id: "gateway", label: "WA Gateway", hint: "URL & API key", icon: PlugZap, superOnly: true },
+  { id: "telegram-bot", label: "Bot Telegram", hint: "Token & username", icon: Send, superOnly: true },
+  { id: "reward", label: "Reward & Keuangan", hint: "Nilai reward, referal", icon: Coins, superOnly: true },
+  { id: "log", label: "User Log", hint: "Aktivitas pengguna", icon: ScrollText },
+  { id: "akun", label: "Akun", hint: "Nama & email", icon: UserRound },
+  { id: "tampilan", label: "Tampilan", hint: "Terang atau gelap", icon: Palette },
+  { id: "telegram-akun", label: "Telegram Saya", hint: "Koneksi notifikasi", icon: MessageCircle },
+];
+
+function PengaturanPage() {
+  const { data: me } = useMyRole();
+  const isSuper = Boolean(me?.is_super_admin);
+  const sections = SECTIONS.filter((s) => !s.superOnly || isSuper);
+  const [active, setActive] = useState<SectionId>(isSuper ? "gateway" : "log");
+
+  useEffect(() => {
+    if (!sections.some((s) => s.id === active)) setActive(sections[0]?.id ?? "log");
+  }, [active, sections]);
+
+  return (
+    <>
+      <AdminPageTitle
+        title="Pengaturan Sistem"
+        description="Semua konfigurasi aplikasi dikelompokkan pada panel di samping."
+      />
+
+      <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <nav className="rounded-xl border bg-card p-2">
+          <ul className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+            {sections.map(({ id, label, hint, icon: Icon }) => (
+              <li key={id} className="shrink-0 lg:shrink">
+                <button
+                  type="button"
+                  onClick={() => setActive(id)}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
+                    active === id
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{label}</span>
+                    <span className="hidden text-xs text-muted-foreground lg:block">{hint}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="min-w-0 space-y-4">
+          {active === "gateway" && isSuper ? <GatewayPanel /> : null}
+          {active === "telegram-bot" && isSuper ? <TelegramBotPanel /> : null}
+          {active === "reward" && isSuper ? <AdminRewardSettings /> : null}
+          {active === "log" ? <AdminActivityLog /> : null}
+          {active === "akun" ? <AkunPanel /> : null}
+          {active === "tampilan" ? <TampilanPanel /> : null}
+          {active === "telegram-akun" ? <TelegramAkunPanel /> : null}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function GatewayPanel() {
+  const queryClient = useQueryClient();
+  const fetchSettings = useServerFn(getGatewaySettings);
+  const persistSettings = useServerFn(saveGatewaySettings);
+  const runTest = useServerFn(testGateway);
+
+  const [url, setUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+
+  const { data: settings } = useQuery({
+    queryKey: ["gateway-settings"],
+    queryFn: () => fetchSettings(),
+  });
+
+  useEffect(() => {
+    if (settings) setUrl(settings.url);
+  }, [settings]);
+
+  const save = useMutation({
+    mutationFn: (vars: { clearApiKey?: boolean }) =>
+      persistSettings({ data: { url, apiKey, clearApiKey: vars.clearApiKey === true } }),
+    onSuccess: () => {
+      setApiKey("");
+      toast.success("Pengaturan gateway tersimpan");
+      queryClient.invalidateQueries({ queryKey: ["gateway-settings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const test = useMutation({
+    mutationFn: () => runTest(),
+    onSuccess: (res) => (res.ok ? toast.success(res.message) : toast.error(res.message)),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Panel
+      title="Gateway WhatsApp"
+      description="Alamat server wa-gateway dan kunci API untuk pemasangan QR serta pengiriman pesan."
+    >
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="gw-url">URL gateway</Label>
+            <Input
+              id="gw-url"
+              placeholder="https://gateway.domainanda.com"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="gw-key">API key</Label>
+            <Input
+              id="gw-key"
+              type="password"
+              placeholder={
+                settings?.has_api_key
+                  ? `Tersimpan: ${settings.api_key_masked} — isi untuk mengganti`
+                  : "Masukkan kunci API gateway"
+              }
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => save.mutate({})} disabled={save.isPending}>
+            Simpan
+          </Button>
+          <Button variant="outline" onClick={() => test.mutate()} disabled={test.isPending}>
+            <PlugZap className="mr-2 size-4" />
+            Uji koneksi
+          </Button>
+          {settings?.has_api_key ? (
+            <Button
+              variant="ghost"
+              onClick={() => save.mutate({ clearApiKey: true })}
+              disabled={save.isPending}
+            >
+              Hapus API key
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Kunci API disimpan di database dan tidak pernah ditampilkan kembali secara utuh.
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+function TelegramBotPanel() {
+  const queryClient = useQueryClient();
+  const fetchTg = useServerFn(getTelegramSettings);
+  const persistTg = useServerFn(saveTelegramSettings);
+  const runTgTest = useServerFn(testTelegramBot);
+
+  const [username, setUsername] = useState("");
+  const [token, setToken] = useState("");
+
+  const { data: tg } = useQuery({
+    queryKey: ["telegram-settings"],
+    queryFn: () => fetchTg(),
+  });
+
+  useEffect(() => {
+    if (tg) setUsername(tg.username);
+  }, [tg]);
+
+  const saveTg = useMutation({
+    mutationFn: (vars: { clearToken?: boolean }) =>
+      persistTg({ data: { token, username, clearToken: vars.clearToken === true } }),
+    onSuccess: () => {
+      setToken("");
+      toast.success("Pengaturan Telegram tersimpan");
+      queryClient.invalidateQueries({ queryKey: ["telegram-settings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const testTg = useMutation({
+    mutationFn: () => runTgTest(),
+    onSuccess: (res) => (res.ok ? toast.success(res.message) : toast.error(res.message)),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Panel
+      title="Bot Telegram"
+      description="Token dan username bot untuk menghubungkan akun Telegram pengguna. Buat bot lewat @BotFather."
+    >
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="tg-username">Username bot</Label>
+            <Input
+              id="tg-username"
+              placeholder="nama_bot_anda"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tg-token">Token bot</Label>
+            <Input
+              id="tg-token"
+              type="password"
+              placeholder={
+                tg?.has_token ? `Tersimpan: ${tg.token_masked} — isi untuk mengganti` : "123456789:AA..."
+              }
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => saveTg.mutate({})} disabled={saveTg.isPending}>
+            Simpan
+          </Button>
+          <Button variant="outline" onClick={() => testTg.mutate()} disabled={testTg.isPending}>
+            <PlugZap className="mr-2 size-4" />
+            Uji bot
+          </Button>
+          {tg?.has_token ? (
+            <Button
+              variant="ghost"
+              onClick={() => saveTg.mutate({ clearToken: true })}
+              disabled={saveTg.isPending}
+            >
+              Hapus token
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Token disimpan di database dan tidak pernah ditampilkan kembali secara utuh.
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
+function AkunPanel() {
+  const queryClient = useQueryClient();
+  const [org, setOrg] = useState("");
+  const [email, setEmail] = useState("");
+
+  const { data: profile } = useQuery({
+    queryKey: ["profile"],
+    queryFn: async () => {
+      const { data: user } = await supabase.auth.getUser();
+      setEmail(user.user?.email ?? "");
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", user.user!.id)
+        .maybeSingle();
+      return (data ?? null) as Profile | null;
+    },
+  });
+
+  useEffect(() => {
+    if (profile?.organization_name) setOrg(profile.organization_name);
+  }, [profile]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const { data: user } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("profiles")
+        .upsert({ user_id: user.user!.id, organization_name: org }, { onConflict: "user_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Pengaturan akun disimpan");
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Panel title="Akun" description="Nama Anda yang ditampilkan di aplikasi.">
+      <div className="space-y-3 sm:max-w-md">
+        <div className="space-y-1.5">
+          <Label htmlFor="org">Nama</Label>
+          <Input id="org" value={org} onChange={(e) => setOrg(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="acc-email">Email akun</Label>
+          <Input id="acc-email" value={email} disabled />
+        </div>
+        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          Simpan perubahan
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
+function TampilanPanel() {
+  const { theme, toggle } = useTheme();
+  return (
+    <Panel title="Tampilan" description="Pilih tampilan terang atau gelap.">
+      <div className="flex items-center justify-between rounded-lg border p-3 sm:max-w-md">
+        <div>
+          <p className="text-sm font-medium">Mode gelap</p>
+          <p className="text-xs text-muted-foreground">
+            Saat ini {theme === "dark" ? "gelap" : "terang"}
+          </p>
+        </div>
+        <Switch checked={theme === "dark"} onCheckedChange={toggle} />
+      </div>
+    </Panel>
+  );
+}
+
+function TelegramAkunPanel() {
+  const queryClient = useQueryClient();
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: ["telegram-status"],
+    queryFn: () => getTelegramStatus(),
+    refetchInterval: (query) =>
+      (query.state.data as { connected?: boolean } | undefined)?.connected ? false : 5000,
+  });
+
+  const connect = useMutation({
+    mutationFn: () => startTelegramLink(),
+    onSuccess: (res) => {
+      window.open(res.url, "_blank", "noopener,noreferrer");
+      toast.info("Tekan START pada obrolan Telegram yang terbuka untuk menyelesaikan koneksi.");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const disconnect = useMutation({
+    mutationFn: () => disconnectTelegram(),
+    onSuccess: () => {
+      toast.success("Akun Telegram diputuskan");
+      queryClient.invalidateQueries({ queryKey: ["telegram-status"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Panel title="Telegram Saya" description="Hubungkan akun Telegram Anda untuk menerima notifikasi.">
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Memeriksa status…</p>
+      ) : !status?.configured ? (
+        <p className="text-sm text-muted-foreground">
+          Bot Telegram belum dikonfigurasi. Isi token bot pada bagian Bot Telegram terlebih dahulu.
+        </p>
+      ) : status.connected ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+          <div>
+            <p className="text-sm font-medium">
+              Tersambung{status.username ? ` sebagai @${status.username}` : ""}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {status.first_name ?? "Akun Telegram"} · ID {status.chat_id}
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>
+            Putuskan
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Belum tersambung. Tekan tombol di bawah, lalu tekan START pada obrolan Telegram yang
+            terbuka.
+          </p>
+          <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
+            Hubungkan Telegram
+          </Button>
+        </div>
+      )}
+    </Panel>
+  );
+}
