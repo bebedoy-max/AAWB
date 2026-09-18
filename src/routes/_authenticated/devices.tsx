@@ -23,6 +23,7 @@ import {
   Download,
   Pin,
   UserRound,
+  Database,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -59,7 +60,7 @@ import {
 } from "@/components/ui/select";
 import { PhoneInput } from "@/components/phone-input";
 import { BLAST_SPEEDS } from "@/lib/blast-speed";
-import { setDeviceBlast } from "@/lib/blast.functions";
+import { getBlastState, setDeviceBlast } from "@/lib/blast.functions";
 import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
 import type { SessionGatewayResponse, WaSession } from "@/types/wa";
@@ -196,6 +197,14 @@ function Devices() {
   });
 
   const MAX_DEVICES = 4;
+
+  const loadBlastState = useServerFn(getBlastState);
+  const { data: blastState } = useQuery({
+    queryKey: ["member-blast-state"],
+    refetchInterval: 10_000,
+    queryFn: () => loadBlastState(),
+  });
+  const poolAvailable = blastState?.pool_available ?? 0;
 
   const copyProfileName = async () => {
     const { data } = await supabase.auth.getUser();
@@ -381,7 +390,14 @@ function Devices() {
 
       <Card className="mb-8 rounded-2xl shadow-panel">
         <CardContent className="grid items-center gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="min-w-0"><p className="text-xs font-medium text-muted-foreground">Data yang tersisa saat ini</p><p className="mt-1 text-2xl font-semibold">{Math.max(0, MAX_DEVICES - (sessions?.length ?? 0))}</p></div>
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-muted"><Database className="size-5 text-primary" /></div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">Data yang tersisa saat ini</p>
+              <p className="mt-1 text-2xl font-semibold">{(poolAvailable ?? 0).toLocaleString("id-ID")}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Sisa kontak dari kampanye yang sedang berjalan</p>
+            </div>
+          </div>
           <Button className="w-full sm:w-auto" onClick={() => setAddOpen(true)} disabled={(sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-5" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
         </CardContent>
       </Card>
