@@ -140,10 +140,14 @@ function Devices() {
     (session) => session.status === "connected" && !session.blast_ready,
   );
 
+  const [startAllSpeed, setStartAllSpeed] = useState("santai");
+
   const startAll = useMutation({
     mutationFn: async () => {
       for (const session of idleDevices) {
-        await saveDeviceBlast({ data: { session_id: session.id, ready: true } });
+        await saveDeviceBlast({
+          data: { session_id: session.id, ready: true, speed: startAllSpeed },
+        });
       }
       return idleDevices.length;
     },
@@ -416,6 +420,18 @@ function Devices() {
             </div>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Select value={startAllSpeed} onValueChange={setStartAllSpeed}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="Pilih kecepatan" />
+              </SelectTrigger>
+              <SelectContent>
+                {BLAST_SPEEDS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label} — {option.description}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               className="w-full sm:w-auto"

@@ -98,14 +98,12 @@ export async function processBlastTick(
       const { data: runningCampaigns } = await supabase
         .from("campaigns")
         .select("id")
-        .eq("is_pool", true)
         .eq("status", "running");
       const campaignIds = (runningCampaigns ?? []).map((row) => row.id);
       if (campaignIds.length) {
         const { data: candidates } = await supabase
           .from("message_queue")
           .select("id")
-          .eq("pool", true)
           .is("claimed_by", null)
           .eq("status", "pending")
           .in("campaign_id", campaignIds)

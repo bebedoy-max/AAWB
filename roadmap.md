@@ -63,3 +63,10 @@
 - [x] Izinkan pekerja global admin menjalankan perangkat member setelah verifikasi peran server.
 - [x] Klaim antrean kolam atas nama pemilik perangkat pada jalur otomatis global.
 - [ ] Verifikasi antrean nyata berpindah dari menunggu ke terkirim (terblokir: perangkat "00000000" masih menunggu pemindaian QR dan "A1" terputus).
+
+## Perbaikan sisa data, kampanye, dan Start semua
+- [x] Migrasi 014: hitungan sisa data mencakup semua kampanye berjalan (pending+processing, termasuk yang sudah diklaim)
+- [x] Migrasi 014: klaim antrean dan penandaan selesai berlaku untuk semua kampanye berjalan, bukan hanya kolam
+- [x] Fallback klaim jalur admin di pekerja blast tidak lagi menyaring kampanye kolam saja
+- [x] Pilihan kecepatan sebelum tombol Start semua; Start semua menerapkan kecepatan itu ke semua perangkat
+- [ ] Pengguna menjalankan db/migrations/014_unify_blast_queue.sql di SQL Editor Supabase
