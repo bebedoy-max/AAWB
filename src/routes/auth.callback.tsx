@@ -5,7 +5,10 @@ import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/my-client";
+<<<<<<< HEAD
 import { getPostLoginPath, type PostLoginPath } from "@/lib/post-login";
+=======
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 
 export const Route = createFileRoute("/auth/callback")({
   ssr: false,
@@ -29,9 +32,15 @@ export const Route = createFileRoute("/auth/callback")({
 });
 
 /** Tujuan setelah login, hanya menerima jalur di dalam aplikasi ini. */
+<<<<<<< HEAD
 function safeNext(value: string | null): PostLoginPath | null {
   if (value === "/admin" || value === "/dashboard") return value;
   return null;
+=======
+function safeNext(value: string | null): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/dashboard";
+  return value;
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 }
 
 function AuthCallback() {
@@ -72,7 +81,11 @@ function AuthCallback() {
         if (cancelled) return;
         if (data.session) {
           window.history.replaceState({}, "", url.pathname);
+<<<<<<< HEAD
           navigate({ to: next ?? (await getPostLoginPath()), replace: true });
+=======
+          navigate({ to: next, replace: true });
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 250));

@@ -4,10 +4,28 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+<<<<<<< HEAD
 import { Calendar, Link2, Pause, Pencil, Play, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+=======
+import { Pause, Play, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,14 +36,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+<<<<<<< HEAD
 import { CampaignComposer, type CampaignDraft } from "@/components/campaign-composer";
+=======
+import { BulkPhoneImporter } from "@/components/bulk-phone-importer";
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 import {
   createBlastProject,
   deleteBlastProject,
   listBlastProjects,
   setProjectStatus,
+<<<<<<< HEAD
   updateBlastProject,
   type BlastProjectRow,
+=======
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 } from "@/lib/monitor.functions";
 import {
   AdminPageTitle,
@@ -58,12 +83,21 @@ function KampanyePage() {
   const queryClient = useQueryClient();
   const fetchProjects = useServerFn(listBlastProjects);
   const createProject = useServerFn(createBlastProject);
+<<<<<<< HEAD
   const updateProject = useServerFn(updateBlastProject);
+=======
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
   const removeProject = useServerFn(deleteBlastProject);
   const changeStatus = useServerFn(setProjectStatus);
 
   const [open, setOpen] = useState(false);
+<<<<<<< HEAD
   const [editing, setEditing] = useState<BlastProjectRow | null>(null);
+=======
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
+  const [phones, setPhones] = useState<string[]>([]);
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
@@ -89,6 +123,7 @@ function KampanyePage() {
   };
 
   const create = useMutation({
+<<<<<<< HEAD
     mutationFn: (draft: CampaignDraft) =>
       createProject({
         data: {
@@ -123,6 +158,15 @@ function KampanyePage() {
     onSuccess: () => {
       toast.success("Kampanye diperbarui");
       setEditing(null);
+=======
+    mutationFn: () => createProject({ data: { name, message, phones } }),
+    onSuccess: (res) => {
+      toast.success(`Kampanye dibuat — ${angka(res.queued)} nomor masuk antrean`);
+      setOpen(false);
+      setName("");
+      setMessage("");
+      setPhones([]);
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -156,14 +200,82 @@ function KampanyePage() {
               <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
               Muat ulang
             </Button>
+<<<<<<< HEAD
             <Button size="sm" onClick={() => setOpen(true)}>
               <Plus className="mr-2 size-4" />
               Tambah kampanye baru
             </Button>
+=======
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="mr-2 size-4" />
+                  Kampanye baru
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Buat kampanye baru</DialogTitle>
+                  <DialogDescription>
+                    Nomor diformat otomatis ke format internasional saat diimpor.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="c-name">Nama kampanye</Label>
+                    <Input
+                      id="c-name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Promo Akhir Bulan"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="c-msg">Isi pesan</Label>
+                    <Textarea
+                      id="c-msg"
+                      rows={5}
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      placeholder="Tulis pesan yang akan dikirim ke semua nomor."
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <BulkPhoneImporter
+                      existingPhones={phones}
+                      onImport={(rows) =>
+                        setPhones((prev) =>
+                          Array.from(new Set([...prev, ...rows.map((r) => r.phone)])),
+                        )
+                      }
+                    />
+                    <Badge variant="outline">{angka(phones.length)} nomor siap</Badge>
+                    {phones.length ? (
+                      <Button variant="ghost" size="sm" onClick={() => setPhones([])}>
+                        Kosongkan
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setOpen(false)}>
+                    Batal
+                  </Button>
+                  <Button
+                    disabled={create.isPending || !message.trim() || !phones.length}
+                    onClick={() => create.mutate()}
+                  >
+                    {create.isPending ? "Menyimpan…" : "Buat kampanye"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
           </>
         }
       />
 
+<<<<<<< HEAD
       <CampaignComposer
         open={open}
         onOpenChange={setOpen}
@@ -189,6 +301,8 @@ function KampanyePage() {
         onSubmit={(draft) => editing && update.mutate({ id: editing.id, draft })}
       />
 
+=======
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Total kampanye" value={angka(totals.campaigns)} icon={Send} tone="info" />
         <StatTile label="Sedang berjalan" value={angka(totals.running)} icon={Play} tone="success" />
@@ -196,12 +310,17 @@ function KampanyePage() {
         <StatTile label="Sisa antrean" value={angka(totals.pending)} icon={Pause} tone="warning" />
       </div>
 
+<<<<<<< HEAD
       <div className="mt-4">
+=======
+      <Panel className="mt-4" title="Daftar kampanye" bodyClassName="p-0">
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
         {error ? (
           <p className="py-10 text-center text-sm text-destructive">{(error as Error).message}</p>
         ) : isLoading ? (
           <p className="py-10 text-center text-sm text-muted-foreground">Memuat…</p>
         ) : (data ?? []).length === 0 ? (
+<<<<<<< HEAD
           <Panel bodyClassName="p-0">
             <EmptyState
               title="Belum ada kampanye"
@@ -293,12 +412,87 @@ function KampanyePage() {
                       aria-label={`Aktifkan kampanye ${p.name}`}
                     />
                   </div>
+=======
+          <EmptyState
+            title="Belum ada kampanye"
+            description="Buat kampanye baru untuk mulai mendistribusikan pesan ke perangkat member."
+          />
+        ) : (
+          <ul className="divide-y">
+            {(data ?? []).map((p) => {
+              const total = Math.max(p.total_targets, 1);
+              const progress = Math.round(((p.sent + p.failed) / total) * 100);
+              return (
+                <li key={p.id} className="px-4 py-4 sm:px-5">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold">{p.name}</p>
+                        <Badge
+                          variant="outline"
+                          className={STATUS_STYLE[p.status] ?? "text-muted-foreground"}
+                        >
+                          {STATUS_LABEL[p.status] ?? p.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                        {p.message_body || "(tanpa pesan)"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={toggle.isPending}
+                        onClick={() =>
+                          toggle.mutate({
+                            id: p.id,
+                            status: p.status === "running" ? "paused" : "running",
+                          })
+                        }
+                      >
+                        {p.status === "running" ? (
+                          <>
+                            <Pause className="mr-1 size-3.5" /> Jeda
+                          </>
+                        ) : (
+                          <>
+                            <Play className="mr-1 size-3.5" /> Jalankan
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => setDeleteTarget({ id: p.id, name: p.name })}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary"
+                      style={{ width: `${Math.min(progress, 100)}%` }}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {angka(p.sent)} terkirim · {angka(p.failed)} gagal · {angka(p.pending)} sisa ·
+                    total {angka(p.total_targets)} · dibuat {waktu(p.created_at)}
+                  </p>
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
                 </li>
               );
             })}
           </ul>
         )}
+<<<<<<< HEAD
       </div>
+=======
+      </Panel>
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>

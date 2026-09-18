@@ -31,12 +31,16 @@ export const Route = createFileRoute("/_authenticated/admin")({
 /** Peran pengguna saat ini, dipakai banyak halaman admin. */
 export function useMyRole() {
   const fetchRole = useServerFn(getMyRole);
+<<<<<<< HEAD
   return useQuery({
     queryKey: ["my-role"],
     queryFn: () => fetchRole(),
     retry: false,
     staleTime: 60_000,
   });
+=======
+  return useQuery({ queryKey: ["my-role"], queryFn: () => fetchRole(), staleTime: 60_000 });
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 }
 
 function AdminLayout() {

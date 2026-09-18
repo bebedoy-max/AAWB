@@ -16,6 +16,7 @@ import {
   LogOut,
   ShieldCheck,
   Wallet,
+<<<<<<< HEAD
   HandCoins,
   Network,
   Home,
@@ -23,6 +24,11 @@ import {
   ListChecks,
   FileText,
   Clock3,
+=======
+  Gift,
+  Rocket,
+  Activity,
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 } from "lucide-react";
 
 import { getMyRole } from "@/lib/admin.functions";
@@ -44,12 +50,24 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
+<<<<<<< HEAD
 /** Menu member utama mengikuti alur ringkas pada referensi. */
 const MEMBER_NAV = [
   { to: "/dashboard", label: "Beranda", icon: Home },
   { to: "/devices", label: "WhatsApp", icon: Smartphone },
   { to: "/rewards", label: "Klaim Saldo", icon: HandCoins },
   { to: "/referral", label: "Tim Afiliasi", icon: Network },
+=======
+/** Menu member/worker: hubungkan perangkat, blast, saldo. */
+const MEMBER_NAV = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/devices", label: "Perangkat", icon: Smartphone },
+  { to: "/blast", label: "Mulai Blast", icon: Rocket },
+  { to: "/queue", label: "Log Pesan", icon: ListChecks },
+  { to: "/rewards", label: "Saldo & Reward", icon: Wallet },
+  { to: "/referral", label: "Referal", icon: Gift },
+  { to: "/settings", label: "Pengaturan", icon: Settings },
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 ] as const;
 
 /** Menu utama admin (bar horizontal, mengikuti rancangan konsol admin). */
@@ -64,6 +82,23 @@ const ADMIN_NAV = [
   { to: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
 ] as const;
 
+<<<<<<< HEAD
+=======
+/** Halaman pendukung admin yang tidak masuk bar utama. */
+const ADMIN_EXTRA_NAV = [
+  { to: "/monitor", label: "Monitoring Realtime", icon: Activity },
+  { to: "/projects", label: "Proyek Blast", icon: Rocket },
+  { to: "/contacts", label: "Kontak & Grup", icon: Users },
+  { to: "/templates", label: "Template Pesan", icon: FileText },
+  { to: "/campaigns", label: "Kampanye Pribadi", icon: Send },
+  { to: "/queue", label: "Antrean & Log", icon: ListChecks },
+  { to: "/devices", label: "Perangkat Saya", icon: Smartphone },
+  { to: "/settings", label: "Pengaturan Akun", icon: Settings },
+] as const;
+
+const ALL_NAV = [...MEMBER_NAV, ...ADMIN_NAV, ...ADMIN_EXTRA_NAV];
+
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 export function useIsAdmin(): boolean {
   const fetchRole = useServerFn(getMyRole);
   const { data } = useQuery({
@@ -86,10 +121,17 @@ function isActivePath(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
+<<<<<<< HEAD
 function NavLinks({ onNavigate, adminMode = false }: { onNavigate?: () => void; adminMode?: boolean }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = useIsAdmin();
   const items = adminMode || isAdmin ? [...ADMIN_NAV] : [...MEMBER_NAV];
+=======
+function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isAdmin = useIsAdmin();
+  const items = isAdmin ? [...ADMIN_NAV, ...ADMIN_EXTRA_NAV] : [...MEMBER_NAV];
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 
   return (
     <nav className="flex flex-col gap-1 px-3 pb-6">
@@ -121,7 +163,11 @@ function AdminTopNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <div className="border-b bg-card">
+<<<<<<< HEAD
       <div className="mx-auto flex max-w-[1400px] items-center justify-center gap-2 overflow-x-auto px-3 py-2 lg:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+=======
+      <div className="mx-auto flex max-w-[1400px] items-center gap-2 overflow-x-auto px-3 py-2 lg:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
         {ADMIN_NAV.map(({ to, label, icon: Icon }) => {
           const active = isActivePath(pathname, to);
           return (
@@ -140,6 +186,26 @@ function AdminTopNav() {
             </Link>
           );
         })}
+<<<<<<< HEAD
+=======
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground">
+              Lainnya
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {ADMIN_EXTRA_NAV.map(({ to, label, icon: Icon }) => (
+              <DropdownMenuItem key={to} asChild>
+                <Link to={to}>
+                  <Icon className="mr-2 size-4" />
+                  {label}
+                </Link>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
       </div>
     </div>
   );
@@ -225,9 +291,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
   });
 
+<<<<<<< HEAD
   // Konsol admin memakai tata letak bar atas horizontal (seperti referensi),
   // sedangkan area member tetap memakai sidebar.
   const adminLayout = pathname === "/admin" || pathname.startsWith("/admin/");
+=======
+  const current = ALL_NAV.find((n) => n.to === pathname);
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 
   const signOut = async () => {
     await supabase.auth.signOut();

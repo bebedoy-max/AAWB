@@ -49,6 +49,10 @@ const SHORTCUTS = [
   { to: "/admin/nomor", label: "Data Nomor", icon: ListChecks },
   { to: "/admin/laporan", label: "Laporan", icon: FileText },
   { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
+<<<<<<< HEAD
+=======
+  { to: "/monitor", label: "Monitoring", icon: Activity },
+>>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 ] as const;
 
 function RingkasanPage() {
