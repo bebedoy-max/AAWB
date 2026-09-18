@@ -211,6 +211,17 @@ export async function processBlastTick(
             .update({ status: "failed", attempts, error_log: message })
             .eq("id", item.id);
           failed += 1;
+          // Stop the device after one uncertain send. Continuing here caused
+          // every following row to hit the same dead websocket and emit 463.
+          await supabase
+            .from("wa_sessions")
+            .update({
+              status: "disconnected",
+              blast_ready: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", sessionId);
+          note = "Koneksi perangkat terputus. Sambungkan ulang perangkat sebelum melanjutkan blast.";
         } else if (attempts < MAX_ATTEMPTS) {
           await supabase
             .from("message_queue")
@@ -228,13 +239,14 @@ export async function processBlastTick(
             .eq("id", item.id);
           failed += 1;
         }
-        if (!deliveryUnknown && /perangkat whatsapp|session status|error 463/i.test(message)) {
+        if (!deliveryUnknown && /perangkat whatsapp|session status|error 463|koneksi perangkat/i.test(message)) {
           const again = await ensureConnected(supabase, sessionId);
           if (!again.connected) {
             note = "Perangkat terputus — pengiriman dilanjutkan otomatis setelah tersambung";
             break;
           }
         }
+        if (note) break;
       }
 
       await sleep(speedDelayMs(speed));
