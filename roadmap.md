@@ -31,3 +31,10 @@
 - [x] Kenali format gambar dari isi file agar MIME/ekstensi tidak salah saat dikirim.
 - [x] Satukan CTA fallback ke caption gambar agar GOWS mengirim satu pesan saja.
 - [x] Tambahkan pemilih emoji sebelum tombol variabel nama dan telepon.
+
+## Penyamaan tampilan mobile member
+
+- [x] Samakan header mobile dan navigasi bawah dengan referensi.
+- [x] Samakan halaman Beranda, WhatsApp, Klaim Saldo, Tim Afiliasi, dan Pengaturan pada mobile.
+- [x] Pertahankan tampilan desktop dan seluruh fungsi data yang sudah berjalan.
+- [x] Verifikasi setiap halaman pada ukuran ponsel tanpa teks atau elemen bertumpuk.

@@ -207,23 +207,23 @@ function RewardsPage() {
       <PageHeader title="Tarik Saldo" description="Cairkan penghasilan Anda ke rekening bank atau e-wallet." />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-        <Card className="rounded-xl shadow-panel">
+        <Card className="rounded-2xl shadow-panel">
           <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
             <div><p className="text-xs font-semibold uppercase text-muted-foreground">Saldo saat ini</p><CardTitle className="mt-5 text-3xl">{rupiah(balance)}</CardTitle></div>
             <div className="grid size-9 place-items-center rounded-lg bg-secondary"><Wallet className="size-4 text-primary" /></div>
           </CardHeader>
-          <CardContent className="pt-14">
+          <CardContent className="pt-8 sm:pt-14">
             <div className="flex items-center justify-between text-xs"><span>Progres penarikan</span><Badge variant="outline">Min. {rupiah(min)}</Badge></div>
             <Progress value={progress} className="mt-2 h-2" />
             <p className="mt-3 rounded-lg border border-warning-border bg-warning-surface p-3 text-xs font-semibold text-warning-foreground">{balance >= min ? "Saldo sudah dapat ditarik." : `Kurang ${rupiah(min - balance)} untuk ditarik.`}</p>
           </CardContent>
         </Card>
 
-        <Card className="rounded-xl shadow-panel">
+        <Card className="rounded-2xl shadow-panel">
           <CardHeader><CardTitle className="text-sm uppercase">Ajukan penarikan</CardTitle></CardHeader>
           <CardContent>
             {!hasAccount ? (
-              <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed border-warning-border bg-warning-surface p-6 text-center">
+               <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-warning-border bg-warning-surface p-6 text-center sm:min-h-48">
                 <div className="grid size-12 place-items-center rounded-full bg-warning/15"><AlertTriangle className="size-5 text-warning" /></div>
                 <p className="mt-3 font-semibold">Data rekening belum diisi</p>
                 <p className="mt-1 max-w-sm text-xs text-muted-foreground">Isi metode pencairan terlebih dahulu sebelum mengajukan penarikan dana.</p>
@@ -250,10 +250,10 @@ function RewardsPage() {
         </Card>
       ) : null}
 
-      <Card className="mt-6 rounded-xl shadow-panel">
-        <CardHeader className="border-b"><CardTitle className="text-sm uppercase">Riwayat penarikan</CardTitle><div className="flex flex-wrap gap-2 pt-2">{["Proses", "Sukses", "Ditolak", "Dibatalkan"].map((label) => <Badge key={label} variant="outline">{label}</Badge>)}</div></CardHeader>
+       <Card className="mt-6 rounded-2xl shadow-panel">
+         <CardHeader className="border-b"><CardTitle className="text-base uppercase">Riwayat penarikan</CardTitle><div className="grid grid-cols-4 rounded-lg bg-secondary p-1 pt-1">{["Proses", "Sukses", "Ditolak", "Dibatalkan"].map((label, index) => <Badge key={label} variant="outline" className={index === 0 ? "justify-center border bg-card py-2 text-foreground" : "justify-center border-transparent py-2 text-muted-foreground"}>{label}</Badge>)}</div></CardHeader>
         <CardContent className="divide-y pt-5">
-          {(history ?? []).length === 0 ? <div className="flex min-h-44 flex-col items-center justify-center text-center"><div className="grid size-11 place-items-center rounded-full bg-secondary"><FileText className="size-5 text-muted-foreground" /></div><p className="mt-3 text-sm font-semibold">Belum ada riwayat</p><p className="mt-1 text-xs text-muted-foreground">Data penarikan Anda masih kosong.</p></div> : (history ?? []).map((w) => <div key={w.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3"><div className="min-w-0"><p className="text-sm font-medium">{rupiah(w.amount)}</p><p className="truncate text-xs text-muted-foreground">{w.provider} · {w.account_number} · {new Date(w.created_at).toLocaleString("id-ID")}{w.note ? ` · ${w.note}` : ""}</p></div><Badge variant="outline">{STATUS_LABEL[w.status] ?? w.status}</Badge></div>)}
+           {(history ?? []).length === 0 ? <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed text-center sm:min-h-44 sm:border-0"><div className="grid size-12 place-items-center rounded-full border bg-card"><FileText className="size-5 text-muted-foreground" /></div><p className="mt-4 font-semibold">Belum ada riwayat</p><p className="mt-1 text-sm text-muted-foreground">Data penarikan Anda masih kosong.</p></div> : (history ?? []).map((w) => <div key={w.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3"><div className="min-w-0"><p className="text-sm font-medium">{rupiah(w.amount)}</p><p className="truncate text-xs text-muted-foreground">{w.provider} · {w.account_number} · {new Date(w.created_at).toLocaleString("id-ID")}{w.note ? ` · ${w.note}` : ""}</p></div><Badge variant="outline">{STATUS_LABEL[w.status] ?? w.status}</Badge></div>)}
         </CardContent>
       </Card>
     </>

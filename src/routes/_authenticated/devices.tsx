@@ -19,6 +19,10 @@ import {
   Play,
   Square,
   Gauge,
+  AlertTriangle,
+  Download,
+  Pin,
+  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -231,6 +235,13 @@ function Devices() {
 
   const MAX_DEVICES = 4;
 
+  const copyProfileName = async () => {
+    const { data } = await supabase.auth.getUser();
+    const metadata = data.user?.user_metadata as { organization_name?: string; username?: string } | undefined;
+    await navigator.clipboard.writeText(metadata?.organization_name ?? metadata?.username ?? "Member");
+    toast.success("Nama profil disalin");
+  };
+
   const createSession = useMutation({
     mutationFn: async () => {
       if ((sessions?.length ?? 0) >= MAX_DEVICES) {
@@ -374,6 +385,24 @@ function Devices() {
         description="Kelola perangkat WhatsApp Anda untuk pengiriman pesan."
       />
 
+      <section className="mb-6 rounded-2xl border border-warning-border bg-warning-surface p-5 shadow-panel sm:hidden">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 size-6 shrink-0 text-warning" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-bold text-warning-foreground">PERHATIAN: ATUR PROFIL</h2>
+            <p className="mt-2 text-sm leading-6 text-warning-foreground">Gunakan nama dan foto profil yang ditentukan sebelum mulai mengirim pesan.</p>
+            <div className="mt-4 rounded-xl border border-warning-border bg-background/25 p-3 text-xs font-semibold leading-5 text-warning-foreground"><Pin className="mr-2 inline size-3.5 text-warning" />Jika mengerjakan data, simpan bukti aktivitas sesuai arahan admin.</div>
+            <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
+              <div className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-warning/70 bg-member-panel"><UserRound className="size-5 text-foreground/70" /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="sm" asChild><a href="/aawb-wordmark.png" download="foto-profil-aawb.png"><Download className="mr-1 size-4" /> Unduh Foto</a></Button>
+                <Button size="sm" variant="outline" onClick={() => void copyProfileName()}>Salin Nama</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {gateway && !gateway.configured && (
         <Card className="mb-4 border-destructive/40 bg-destructive/5">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
@@ -388,15 +417,15 @@ function Devices() {
         </Card>
       )}
 
-      <Card className="mb-6 rounded-xl shadow-panel">
-        <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 p-5">
+      <Card className="mb-8 rounded-2xl shadow-panel">
+        <CardContent className="grid items-center gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_auto]">
           <div className="min-w-0"><p className="text-xs font-medium text-muted-foreground">Data yang tersisa saat ini</p><p className="mt-1 text-2xl font-semibold">{Math.max(0, MAX_DEVICES - (sessions?.length ?? 0))}</p></div>
-          <Button onClick={() => setAddOpen(true)} disabled={(sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-4" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
+          <Button className="w-full sm:w-auto" onClick={() => setAddOpen(true)} disabled={(sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-5" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
         </CardContent>
       </Card>
 
-      <div className="mb-4 flex items-center gap-2"><Activity className="size-4 text-primary" /><h2 className="font-semibold">Ringkasan Performa Blast</h2></div>
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-5 flex items-center gap-2"><Activity className="size-6 text-primary" /><h2 className="text-xl font-semibold">Ringkasan Performa Blast</h2></div>
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         {[
           ["Slot Aktif", (sessions ?? []).filter((session) => session.status === "connected").length, "text-primary"],
           ["Sukses (Semua)", performance?.sent ?? 0, "text-success"],
@@ -404,7 +433,7 @@ function Devices() {
           ["Partisipasi Blast", performance?.pending ?? 0, "text-primary"],
           ["Nomor Tertaut", (sessions ?? []).filter((session) => Boolean(session.phone_number)).length, "text-accent-foreground"],
           ["Rata-rata Speed", 0, "text-warning-foreground"],
-        ].map(([label, value, tone]) => <Card key={String(label)} className="rounded-xl shadow-none"><CardContent className="p-4"><p className="min-h-8 text-xs text-muted-foreground">{label}</p><p className={cn("mt-2 text-2xl font-semibold", String(tone))}>{value}</p></CardContent></Card>)}
+        ].map(([label, value, tone]) => <Card key={String(label)} className="rounded-2xl shadow-none"><CardContent className="min-h-28 p-5"><p className="text-sm text-muted-foreground">{label}</p><p className={cn("mt-3 text-2xl font-semibold", String(tone))}>{value}</p></CardContent></Card>)}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

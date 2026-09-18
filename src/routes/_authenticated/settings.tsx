@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Profile } from "@/types/wa";
+import { ArrowLeft, UserRound } from "lucide-react";
 import {
   disconnectTelegram,
   getTelegramStatus,
@@ -72,12 +73,13 @@ function Settings() {
 
   return (
     <>
-      <PageHeader title="Pengaturan" description="Atur ruang kerja dan tampilan aplikasi." />
+      <Button variant="outline" size="sm" asChild className="mb-5 lg:hidden"><Link to="/dashboard"><ArrowLeft className="mr-1 size-4" /> Kembali</Link></Button>
+      <PageHeader title="Pengaturan Akun" description="Kelola identitas akun dan pengaturan kontak Anda." />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        <Card className="rounded-2xl shadow-panel">
           <CardHeader>
-            <CardTitle className="text-base">Akun</CardTitle>
+            <div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-xl bg-secondary"><UserRound className="size-5 text-muted-foreground" /></div><CardTitle className="text-xl">Informasi Akun</CardTitle></div>
             <CardDescription>Nama Anda yang ditampilkan di aplikasi.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

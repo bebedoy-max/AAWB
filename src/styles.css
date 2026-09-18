@@ -187,6 +187,12 @@
   font-family: var(--font-member);
 }
 
+@media (max-width: 767px) {
+  .member-surface {
+    --radius: 1rem;
+  }
+}
+
 @utility surface-grid {
   background-image:
     linear-gradient(to right, var(--color-border) 1px, transparent 1px),

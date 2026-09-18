@@ -23,6 +23,7 @@ import {
   ListChecks,
   FileText,
   Clock3,
+  Globe2,
 } from "lucide-react";
 
 import { getMyRole } from "@/lib/admin.functions";
@@ -158,6 +159,59 @@ function Brand() {
   );
 }
 
+function MemberMobileHeader({ onSettings, onSignOut }: { onSettings: () => void; onSignOut: () => void }) {
+  const date = new Intl.DateTimeFormat("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+
+  return (
+    <div className="grid h-[4.25rem] w-full grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center overflow-hidden rounded-[1.25rem] border bg-card px-3 shadow-panel lg:hidden">
+      <span className="min-w-0 truncate pr-3 text-xs text-foreground">{date}</span>
+      <span className="flex h-8 shrink-0 items-center gap-2 border-l px-3 text-sm font-semibold">
+        <Globe2 className="size-5 text-muted-foreground" /> ID
+      </span>
+      <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground" onClick={onSettings} aria-label="Pengaturan akun">
+        <Settings className="size-5" />
+      </Button>
+      <Button variant="ghost" size="icon" className="shrink-0 text-muted-foreground" onClick={onSignOut} aria-label="Keluar">
+        <LogOut className="size-5" />
+      </Button>
+    </div>
+  );
+}
+
+function MemberBottomNav() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  return (
+    <div className="fixed bottom-5 left-1/2 z-40 flex w-[23rem] max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-3 lg:hidden">
+      <nav className="grid h-[4.5rem] min-w-0 flex-1 grid-cols-4 items-center rounded-[2rem] border bg-card/95 px-3 shadow-glow backdrop-blur">
+        {MEMBER_NAV.map(({ to, label, icon: Icon }) => {
+          const active = isActivePath(pathname, to);
+          return (
+            <Link
+              key={to}
+              to={to}
+              aria-label={label}
+              className={cn(
+                "mx-auto grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors",
+                active && "border bg-background text-foreground shadow-panel",
+              )}
+            >
+              <Icon className="size-5" />
+            </Link>
+          );
+        })}
+      </nav>
+      <Link to="/settings" aria-label="Buka Telegram" className="grid size-14 shrink-0 place-items-center rounded-full bg-info text-info-foreground shadow-glow">
+        <Send className="size-6" />
+      </Link>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { theme, toggle } = useTheme();
@@ -252,10 +306,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
 
-        <header className={cn("sticky top-0 z-30 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 bg-background/85 px-4 backdrop-blur lg:px-6", adminLayout ? "h-[4.75rem] border-b py-1" : "h-20")}>
+        <header className={cn(
+          "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 lg:px-6",
+          adminLayout
+            ? "sticky top-0 z-30 h-[4.75rem] border-b bg-background/85 py-1 backdrop-blur"
+            : "fixed inset-x-0 top-0 z-50 h-[5.5rem] bg-transparent px-2 pt-2 lg:sticky lg:h-20 lg:bg-background/85 lg:px-6 lg:pt-0 lg:backdrop-blur",
+        )}> 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Buka menu">
+              <Button variant="ghost" size="icon" className={cn("lg:hidden", !adminLayout && "hidden")} aria-label="Buka menu">
                 <Menu className="size-5" />
               </Button>
             </SheetTrigger>
@@ -272,7 +331,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="hidden truncate text-sm font-semibold sm:inline">Admin</span>
             </Link>
           ) : (
-            <div className="mx-auto grid min-w-0 w-full max-w-3xl grid-cols-[minmax(0,1fr)_auto] items-center rounded-full border bg-card px-4 py-2.5 text-xs shadow-panel sm:px-5 sm:text-sm lg:absolute lg:left-1/2 lg:w-[min(48rem,calc(100%-25rem))] lg:-translate-x-1/2">
+            <div className="hidden mx-auto min-w-0 w-full max-w-3xl grid-cols-[minmax(0,1fr)_auto] items-center rounded-full border bg-card px-4 py-2.5 text-xs shadow-panel sm:px-5 sm:text-sm lg:absolute lg:left-1/2 lg:grid lg:w-[min(48rem,calc(100%-25rem))] lg:-translate-x-1/2">
               <div className="flex min-w-0 items-center gap-2.5 border-r pr-3 sm:gap-3 sm:pr-5">
                 <span className={cn("size-2 shrink-0 rounded-full", activeSession ? "bg-success" : "bg-muted-foreground")} />
                 <span className="truncate text-muted-foreground">
@@ -291,8 +350,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
 
+          {!adminLayout ? (
+            <div className="col-span-3 w-full lg:hidden">
+              <MemberMobileHeader onSettings={() => navigate({ to: "/settings" })} onSignOut={() => void signOut()} />
+            </div>
+          ) : null}
 
-          <div className="col-start-3 ml-auto flex items-center gap-2">
+
+          <div className={cn("col-start-3 ml-auto flex items-center gap-2", !adminLayout && "hidden lg:flex")}> 
             <Badge
               variant="outline"
               className={cn(
@@ -347,9 +412,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 
 
-        <main className={cn("w-full min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6", !adminLayout && "bg-secondary/40 lg:px-10")}>
+        <main className={cn("w-full min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6", !adminLayout && "bg-secondary/40 pb-32 pt-[6.25rem] lg:px-10 lg:pb-6 lg:pt-6")}> 
           {children}
         </main>
+        {!adminLayout ? <MemberBottomNav /> : null}
       </div>
     </div>
   );
@@ -365,11 +431,11 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-5 flex w-full min-w-0 flex-wrap items-end justify-between gap-3 sm:mb-6">
+    <div className="mb-6 flex w-full min-w-0 flex-wrap items-end justify-between gap-3 sm:mb-6">
       <div className="min-w-0 flex-1">
-        <h1 className="text-xl font-semibold tracking-tight break-words sm:text-2xl">{title}</h1>
+        <h1 className="text-[1.65rem] font-bold tracking-normal break-words sm:text-2xl">{title}</h1>
         {description ? (
-          <p className="mt-1 text-sm text-muted-foreground break-words">{description}</p>
+          <p className="mt-1.5 text-sm leading-6 text-muted-foreground break-words">{description}</p>
         ) : null}
       </div>
       {action ? <div className="flex w-full flex-wrap gap-2 sm:w-auto">{action}</div> : null}

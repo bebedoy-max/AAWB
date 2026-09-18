@@ -1,16 +1,16 @@
 import { useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Send, Smartphone, TrendingUp, AlertTriangle, Download, Pin, UserRound } from "lucide-react";
+import { Send, Smartphone, TrendingUp, AlertTriangle, Download, Pin, UserRound, QrCode, Wallet, Users, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/my-client";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatPhoneDisplay } from "@/lib/whatsapp";
 import { rupiah } from "@/lib/currency";
-import { getMyRewards } from "@/lib/rewards.functions";
+import { getMyReferral, getMyRewards } from "@/lib/rewards.functions";
 import type { QueuedMessage } from "@/types/wa";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -40,14 +40,14 @@ function StatCard({
 }) {
   return (
     <Card className="rounded-2xl border-border bg-member-panel shadow-panel transition-colors hover:border-primary/30">
-      <CardContent className="p-5">
+      <CardContent className="p-4 sm:p-5">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">{label}</p>
            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Icon className="size-4" />
           </div>
         </div>
-        <p className="mt-3 text-3xl font-semibold tracking-tight">{value}</p>
+         <p className="mt-3 text-2xl font-semibold tracking-normal sm:text-3xl">{value}</p>
         {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
       </CardContent>
     </Card>
@@ -57,11 +57,17 @@ function StatCard({
 function Dashboard() {
   const queryClient = useQueryClient();
   const fetchRewards = useServerFn(getMyRewards);
+  const fetchReferral = useServerFn(getMyReferral);
 
   const { data: rewards } = useQuery({
     queryKey: ["my-rewards"],
     queryFn: () => fetchRewards(),
     refetchInterval: 20_000,
+  });
+  const { data: referral } = useQuery({
+    queryKey: ["my-referral"],
+    queryFn: () => fetchReferral(),
+    refetchInterval: 30_000,
   });
 
   const { data: stats } = useQuery({
@@ -135,13 +141,13 @@ function Dashboard() {
 
   return (
     <>
-      <section className="mb-6 rounded-2xl bg-member-hero px-6 py-8 text-member-hero-foreground shadow-panel sm:px-8">
+      <section className="mb-6 rounded-[2rem] bg-foreground px-7 py-10 text-background shadow-panel sm:bg-member-hero sm:px-8 sm:text-member-hero-foreground">
         <div>
-          <h1 className="font-display text-3xl font-bold">Selamat datang!</h1>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-member-hero-foreground/70">Kelola aktivitas WhatsApp dan pantau seluruh perkembangan pengiriman dari sini.</p>
+          <h1 className="font-display text-[2rem] font-bold tracking-normal">Selamat datang!</h1>
+          <p className="mt-4 max-w-xl text-base leading-8 text-background/70 sm:mt-2 sm:text-sm sm:leading-6 sm:text-member-hero-foreground/70">Kelola aktivitas WhatsApp dan pantau seluruh perkembangan pengiriman dari sini.</p>
           <div className="mt-6 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-member-hero-foreground/20 bg-background/40 px-4 py-2 text-xs font-semibold">Masuk sebagai MEMBER</span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-xs font-semibold"><span className="size-2 rounded-full bg-primary" /> SISTEM AKTIF</span>
+             <span className="rounded-full border border-background/20 bg-background/5 px-4 py-2.5 text-xs font-semibold sm:border-member-hero-foreground/20 sm:bg-background/40">Masuk sebagai MEMBER</span>
+             <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold"><span className="size-2 rounded-full bg-primary" /> SISTEM AKTIF</span>
           </div>
         </div>
       </section>
@@ -162,7 +168,7 @@ function Dashboard() {
         </div>
       </section>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 [&>*:last-child]:col-span-1">
         <StatCard icon={TrendingUp} label="Total Penghasilan" value={rupiah(rewards?.total_earned ?? 0)} hint={`Penarikan ${rupiah(rewards?.total_withdrawn ?? 0)}`} />
         <StatCard icon={Send} label="Pesan Terkirim" value={String(stats?.sent ?? 0)} hint={`${stats?.pending ?? 0} dalam antrean`} />
         <StatCard
@@ -173,8 +179,32 @@ function Dashboard() {
         />
       </div>
 
+      <div className="mt-5 space-y-4 sm:hidden">
+        <Card className="rounded-2xl shadow-panel">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-xl bg-secondary text-primary"><QrCode className="size-5" /></div><div><p className="text-lg font-semibold">Hubungkan perangkat baru</p><p className="text-sm text-muted-foreground">Pindai QR untuk menambahkan nomor WhatsApp.</p></div></div>
+            <Button className="mt-5 w-full" asChild><Link to="/devices"><QrCode className="mr-2 size-5" /> Pindai nomor baru <ArrowRight className="ml-auto size-4" /></Link></Button>
+          </CardContent>
+        </Card>
 
-      <Card className="mt-5 overflow-hidden rounded-2xl border-border bg-member-panel shadow-panel">
+        <Card className="rounded-2xl shadow-panel">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase text-muted-foreground">Total saldo tersedia</p><p className="mt-4 text-3xl font-semibold">{rupiah(rewards?.balance ?? 0)}</p><p className="mt-1 text-xs text-muted-foreground">Minimum penarikan: {rupiah(rewards?.settings.min_withdrawal ?? 0)}</p></div><div className="grid size-11 place-items-center rounded-xl bg-warning text-warning-foreground"><Wallet className="size-5" /></div></div>
+            <div className="mt-4 rounded-xl border border-warning-border bg-warning-surface p-4"><p className="font-semibold text-warning-foreground">{rewards?.payout.number ? "Rekening terhubung" : "Rekening belum terhubung"}</p><p className="mt-1 text-xs text-warning-foreground">Atur rekening tujuan penarikan Anda.</p></div>
+            <Button className="mt-5 w-full" asChild><Link to="/rewards"><Wallet className="mr-2 size-5" /> Klaim saldo</Link></Button>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl shadow-panel">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><div className="grid size-11 shrink-0 place-items-center rounded-xl bg-secondary text-muted-foreground"><Users className="size-5" /></div><p className="text-lg font-semibold">Program Afiliasi</p></div><Button variant="ghost" size="sm" asChild><Link to="/referral">Lihat detail</Link></Button></div>
+            <div className="mt-5 rounded-xl border p-4"><p className="text-xs text-muted-foreground">Kode referal Anda</p><p className="mt-2 text-xl font-semibold">{referral?.code ?? "······"}</p></div>
+          </CardContent>
+        </Card>
+      </div>
+
+
+      <Card className="mt-5 hidden overflow-hidden rounded-2xl border-border bg-member-panel shadow-panel sm:block">
         <CardHeader className="border-b border-border pb-4">
           <CardTitle className="text-base">Aktivitas pengiriman terbaru</CardTitle>
         </CardHeader>

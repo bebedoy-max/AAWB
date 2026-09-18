@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Copy, Users, MessageSquare, Gift } from "lucide-react";
+import { Copy, Users, MessageSquare, Gift, Info, ChevronDown } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,18 +68,13 @@ function ReferralPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="overflow-hidden border-0 bg-foreground text-background shadow-panel lg:col-span-4">
+        <Card className="overflow-hidden rounded-[2rem] border-0 bg-foreground text-background shadow-panel lg:col-span-4">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Kode undangan Anda</CardTitle>
-            <CardDescription>
-              {rates.length
-                ? rates
-                    .map((r, i) => `Tingkat ${i + 1}: ${rupiah(r)} per pesan sukses`)
-                    .join(" · ")
-                : "Program afiliasi sedang tidak aktif."}
-            </CardDescription>
+            <CardDescription>Bagikan kode atau tautan ini kepada teman Anda.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
+            <div className="flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/10 p-4 text-sm leading-6 text-background"><Info className="mt-1 size-4 shrink-0 text-primary" /><span>{rates.length ? `Dapatkan komisi ${rupiah(rates[0])} untuk setiap pesan sukses yang dikirim oleh tim Anda.` : "Program afiliasi sedang tidak aktif."}</span></div>
             <div className="rounded-lg border border-background/20 bg-background/10 p-4">
               <p className="text-xs uppercase text-muted-foreground">Kode referal</p>
               <div className="mt-1 flex min-w-0 items-center gap-2">
@@ -113,7 +108,7 @@ function ReferralPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:col-span-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:col-span-8">
           {[
             { icon: Users, label: "Total tim", value: `${data?.total_team ?? 0} orang` },
             {
@@ -123,28 +118,29 @@ function ReferralPage() {
             },
             { icon: Gift, label: "Total bonus", value: rupiah(data?.total_bonus) },
           ].map(({ icon: Icon, label, value }) => (
-            <Card key={label} className={label === "Total bonus" ? "sm:col-span-2" : undefined}>
-              <CardContent className="p-5">
+            <Card key={label} className={label === "Total bonus" ? "col-span-2" : undefined}>
+              <CardContent className="p-4 sm:p-5">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">{label}</p>
                   <div className="flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
                     <Icon className="size-4" />
                   </div>
                 </div>
-                <p className="mt-3 text-2xl font-semibold tracking-tight">{value}</p>
+                <p className="mt-2 text-xl font-semibold tracking-normal sm:mt-3 sm:text-2xl">{value}</p>
               </CardContent>
             </Card>
           ))}
         </div>
       </div>
 
-      <Card className="mt-6 rounded-xl shadow-panel">
+      <Card className="mt-6 rounded-2xl shadow-panel">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Riwayat undangan</CardTitle>
+          <div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl bg-secondary"><Users className="size-5 text-muted-foreground" /></div><CardTitle className="text-xl">Riwayat undangan</CardTitle></div>
+          <Button variant="outline" className="mt-4 w-32 justify-between">Terbaru <ChevronDown className="size-4" /></Button>
         </CardHeader>
         <CardContent className="divide-y">
           {(data?.team ?? []).length === 0 ? (
-            <div className="py-10 text-center"><p className="text-sm font-medium">Belum ada anggota tim</p><p className="mt-1 text-xs text-muted-foreground">Bagikan kode atau tautan undangan Anda untuk mulai membangun tim.</p></div>
+             <div className="min-h-56 py-10 text-center"><p className="text-sm font-medium">Belum ada anggota tim</p><p className="mt-1 text-xs text-muted-foreground">Bagikan kode atau tautan undangan Anda untuk mulai membangun tim.</p></div>
           ) : (
             (data?.team ?? []).map((m) => (
               <div
