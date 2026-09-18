@@ -24,7 +24,7 @@ export const getTelegramStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<TelegramStatus> => {
     const { getBotUsername, isTelegramConfigured } = await import("@/lib/telegram.server");
-    const configured = isTelegramConfigured();
+    const configured = await isTelegramConfigured();
     const empty: TelegramStatus = {
       configured,
       connected: false,
@@ -59,7 +59,7 @@ export const startTelegramLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{ url: string; code: string; bot_username: string }> => {
     const { getBotUsername, isTelegramConfigured } = await import("@/lib/telegram.server");
-    if (!isTelegramConfigured()) {
+    if (!(await isTelegramConfigured())) {
       throw new Error("Bot Telegram aplikasi belum dikonfigurasi. Hubungi admin.");
     }
     const botUsername = await getBotUsername();

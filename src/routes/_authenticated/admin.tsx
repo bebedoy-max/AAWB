@@ -42,13 +42,16 @@ import {
   getGatewaySettings,
   getMemberDetail,
   getMyRole,
+  getTelegramSettings,
   listMembers,
   resetMemberPassword,
   saveGatewaySettings,
+  saveTelegramSettings,
   setMemberRole,
   setMemberWaName,
   setMemberWaPicture,
   testGateway,
+  testTelegramBot,
   type AppRole,
 } from "@/lib/admin.functions";
 import { AdminRewardSettings, AdminWithdrawals } from "@/components/admin-rewards";
@@ -282,6 +285,8 @@ function AdminPage() {
               </p>
             </CardContent>
           </Card>
+
+          <TelegramSettingsCard />
         </TabsContent>
         ) : null}
 
@@ -456,6 +461,104 @@ function AdminPage() {
 
       <MemberDetailDialog userId={detailUser} onClose={() => setDetailUser(null)} />
     </>
+  );
+}
+
+function TelegramSettingsCard() {
+  const queryClient = useQueryClient();
+  const fetchTg = useServerFn(getTelegramSettings);
+  const persistTg = useServerFn(saveTelegramSettings);
+  const runTgTest = useServerFn(testTelegramBot);
+
+  const [username, setUsername] = useState("");
+  const [token, setToken] = useState("");
+
+  const { data: tg } = useQuery({
+    queryKey: ["telegram-settings"],
+    queryFn: () => fetchTg(),
+  });
+
+  useEffect(() => {
+    if (tg) setUsername(tg.username);
+  }, [tg]);
+
+  const saveTg = useMutation({
+    mutationFn: (vars: { clearToken?: boolean }) =>
+      persistTg({ data: { token, username, clearToken: vars.clearToken === true } }),
+    onSuccess: () => {
+      setToken("");
+      toast.success("Pengaturan Telegram tersimpan");
+      queryClient.invalidateQueries({ queryKey: ["telegram-settings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const testTg = useMutation({
+    mutationFn: () => runTgTest(),
+    onSuccess: (res) => (res.ok ? toast.success(res.message) : toast.error(res.message)),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Bot Telegram</CardTitle>
+        <CardDescription>
+          Token dan username bot Telegram yang dipakai untuk menghubungkan akun Telegram pengguna.
+          Buat bot lewat @BotFather di Telegram.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="tg-username">Username bot</Label>
+            <Input
+              id="tg-username"
+              placeholder="nama_bot_anda"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tg-token">Token bot</Label>
+            <Input
+              id="tg-token"
+              type="password"
+              placeholder={
+                tg?.has_token
+                  ? `Tersimpan: ${tg.token_masked} — isi untuk mengganti`
+                  : "123456789:AA..."
+              }
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => saveTg.mutate({})} disabled={saveTg.isPending}>
+            Simpan
+          </Button>
+          <Button variant="outline" onClick={() => testTg.mutate()} disabled={testTg.isPending}>
+            <PlugZap className="mr-2 size-4" />
+            Uji bot
+          </Button>
+          {tg?.has_token ? (
+            <Button
+              variant="ghost"
+              onClick={() => saveTg.mutate({ clearToken: true })}
+              disabled={saveTg.isPending}
+            >
+              Hapus token
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Token disimpan di database dan tidak pernah ditampilkan kembali secara utuh. Setelah token
+          aktif, pengguna dapat menghubungkan akun Telegram mereka dari halaman Pengaturan.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
