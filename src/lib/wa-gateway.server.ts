@@ -426,6 +426,38 @@ function toChatId(to: string): string {
   return `${to.replace(/\D/g, "")}@c.us`;
 }
 
+/**
+ * Nama mesin WAHA untuk sesi ini (NOWEB/GOWS/WEBJS), di-cache singkat.
+ * Dipakai untuk memutuskan apakah gambar + tombol boleh dikirim sekaligus.
+ */
+const engineCache = new Map<string, { value: string; at: number }>();
+
+async function sessionEngine(id: string): Promise<string> {
+  const cached = engineCache.get(id);
+  if (cached && Date.now() - cached.at < 60_000) return cached.value;
+  let value = "";
+  try {
+    const res = await request(`/api/sessions/${encodeURIComponent(id)}`);
+    const body = (res.body ?? {}) as Record<string, unknown>;
+    const engine = body["engine"];
+    const raw =
+      typeof engine === "string"
+        ? engine
+        : engine && typeof engine === "object"
+          ? (engine as Record<string, unknown>)["engine"]
+          : body["config"] && typeof body["config"] === "object"
+            ? (body["config"] as Record<string, unknown>)["engine"]
+            : null;
+    value = typeof raw === "string" ? raw.toUpperCase() : "";
+  } catch {
+    value = "";
+  }
+  engineCache.set(id, { value, at: Date.now() });
+  return value;
+}
+
+
+
 export async function sendMessage(params: {
   sessionId: string;
   to: string;
@@ -477,9 +509,10 @@ export async function sendMessage(params: {
   };
 
   // WAHA Plus/NOWEB dapat mengirim gambar, caption, dan tombol dalam satu
-  // pesan melalui headerImage. Mesin lain akan masuk ke fallback lengkap.
+  // pesan melalui headerImage. Mesin lain (GOWS/WEBJS) menerima permintaan
+  // dengan HTTP 200 tetapi membuang gambarnya, jadi hanya NOWEB yang dicoba.
   if (buttons.length && mediaUrl && mediaType !== "text") {
-    if (mediaType === "image") {
+    if (mediaType === "image" && (await sessionEngine(params.sessionId)) === "NOWEB") {
       try {
         const raw = await call("/api/sendButtons", {
           method: "POST",
@@ -511,9 +544,10 @@ export async function sendMessage(params: {
       }
     }
 
+
     const fallbackCaption = [
       cleanText,
-      ...buttons.map((button) => `👉 ${button.text}: ${button.url}`),
+      ...buttons.map((button) => `${button.text}\n${button.url}`),
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -548,7 +582,7 @@ export async function sendMessage(params: {
       // kept at the position the user wrote them.
       const appended = [
         fallbackText,
-        ...(inline.length ? [] : buttons.map((b) => `\u{1F449} ${b.text}: ${b.url}`)),
+        ...(inline.length ? [] : buttons.map((b) => `${b.text}\n${b.url}`)),
         params.footerText ?? "",
       ]
         .filter(Boolean)

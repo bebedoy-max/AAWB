@@ -96,9 +96,13 @@ function NomorPage() {
   const add = useMutation({
     mutationFn: () => pushTargets({ data: { campaignId: targetCampaign, phones: pending } }),
     onSuccess: (res) => {
-      toast.success(
-        `${angka(res.added)} nomor ditambahkan${res.skipped ? `, ${angka(res.skipped)} duplikat dilewati` : ""}`,
-      );
+      if (!res.added) {
+        toast.info(`Semua nomor (${angka(res.skipped)}) sudah ada pada kampanye ini.`);
+      } else {
+        toast.success(
+          `${angka(res.added)} nomor ditambahkan${res.skipped ? `, ${angka(res.skipped)} duplikat dilewati` : ""}`,
+        );
+      }
       setRaw("");
       setImported([]);
       queryClient.invalidateQueries({ queryKey: ["admin-targets"] });

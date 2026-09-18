@@ -175,7 +175,12 @@ export async function processCampaignTick(
           to: item.recipient_phone,
           text: item.message_body,
           mediaUrl: campaign.media_url,
-          mediaType: campaign.media_type ?? null,
+          // Bila kampanye punya gambar tetapi jenis medianya tertinggal "text",
+          // gambar tetap dikirim (bukan berubah jadi pesan teks saja).
+          mediaType:
+            campaign.media_url && (!campaign.media_type || campaign.media_type === "text")
+              ? "image"
+              : (campaign.media_type ?? null),
           mediaFilename: campaign.media_filename ?? null,
           footerText: campaign.footer_text ?? null,
           buttons: campaign.buttons_json ?? null,

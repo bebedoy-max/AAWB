@@ -186,11 +186,14 @@ export function stripButtonTokens(content: string): string {
     .trim();
 }
 
-/** Isi pesan dengan token diganti tautan di posisi aslinya (mode cadangan). */
+/**
+ * Isi pesan dengan token diganti tautan di posisi aslinya (mode cadangan).
+ * Teks tombol ditulis apa adanya sesuai template, diikuti tautannya.
+ */
 export function inlineButtonsAsText(content: string): string {
   return (content ?? "")
     .replace(new RegExp(BUTTON_TOKEN_PATTERN.source, "gi"), (_m, t: string, u: string) =>
-      `\u{1F449} ${t.trim()}: ${u.trim()}`,
+      `${t.trim()}\n${u.trim()}`,
     )
     .replace(/\n{3,}/g, "\n\n")
     .trim();

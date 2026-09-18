@@ -101,12 +101,31 @@ export async function processBlastTick(
   async function campaignContent(campaignId: string | null): Promise<CampaignContent | null> {
     if (!campaignId) return null;
     if (campaignCache.has(campaignId)) return campaignCache.get(campaignId) ?? null;
-    const { data } = await supabase
-      .from("campaigns")
-      .select("message_body,media_url,media_type,media_filename,footer_text,buttons_json")
-      .eq("id", campaignId)
-      .maybeSingle();
-    const row = (data ?? null) as CampaignContent | null;
+    // Kampanye biasanya milik admin, sedangkan tick ini berjalan dengan akses
+    // member. Dengan klien member, RLS menyembunyikan baris kampanye sehingga
+    // gambar/tombol hilang dan hanya teks antrean yang terkirim. Karena itu isi
+    // kampanye dibaca memakai klien server berhak penuh (hanya baca konten).
+    const columns = "message_body,media_url,media_type,media_filename,footer_text,buttons_json";
+    let row: CampaignContent | null = null;
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data } = await (supabaseAdmin as unknown as typeof supabase)
+        .from("campaigns")
+        .select(columns)
+        .eq("id", campaignId)
+        .maybeSingle();
+      row = (data ?? null) as CampaignContent | null;
+    } catch {
+      row = null;
+    }
+    if (!row) {
+      const { data } = await supabase
+        .from("campaigns")
+        .select(columns)
+        .eq("id", campaignId)
+        .maybeSingle();
+      row = (data ?? null) as CampaignContent | null;
+    }
     campaignCache.set(campaignId, row);
     return row;
   }

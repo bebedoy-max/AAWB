@@ -356,7 +356,12 @@ export const addTargets = createServerFn({ method: "POST" })
       .limit(200000);
     const known = new Set(((existing ?? []) as any[]).map((r) => r.recipient_phone));
     const fresh = data.phones.filter((p) => !known.has(p));
-    if (!fresh.length) throw new Error("Semua nomor tersebut sudah ada pada kampanye ini.");
+    if (!fresh.length) {
+      // Bukan kegagalan: semua nomor memang sudah ada. Kembalikan hasil kosong
+      // agar UI menampilkan pesan, bukan layar error.
+      return { ok: true, added: 0, skipped: data.phones.length };
+    }
+
 
     const now = new Date().toISOString();
     const rows = fresh.map((phone) => ({

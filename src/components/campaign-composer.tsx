@@ -185,37 +185,31 @@ export function CampaignComposer({
                 placeholder="Ketik detail promosi Anda di sini. Emoji sangat disarankan 🔥 🎁 …"
                 className="bg-muted/40"
               />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">Klik tombol di kanan untuk sisip cepat:</p>
-                <div className="flex gap-2">
-                  <EmojiPicker onSelect={insertToken} />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 border-primary/30 text-xs text-primary"
-                    onClick={() => insertToken("{{name}}")}
-                  >
-                    <User className="mr-1 size-3" /> {"{{name}}"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 border-info/30 text-xs text-info"
-                    onClick={() => insertToken("{{phone}}")}
-                  >
-                    <Phone className="mr-1 size-3" /> {"{{phone}}"}
-                  </Button>
-                </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <EmojiPicker onSelect={insertToken} />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-primary/30 text-xs text-primary"
+                  onClick={() => insertToken("{{name}}")}
+                >
+                  <User className="mr-1 size-3" /> {"{{name}}"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-info/30 text-xs text-info"
+                  onClick={() => insertToken("{{phone}}")}
+                >
+                  <Phone className="mr-1 size-3" /> {"{{phone}}"}
+                </Button>
               </div>
             </div>
 
             <div className="rounded-xl border bg-info/5 p-4">
-              <p className="flex items-center gap-2 text-sm font-semibold text-info">
-                <Link2 className="size-4" /> Tombol Interaktif (Native Flow / CTA URL)
-              </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     Teks Tombol
@@ -284,12 +278,26 @@ export function CampaignComposer({
                           : "Mulai ketik pesan untuk melihat preview…"}
                       </p>
                       {ctaText.trim() || ctaUrl.trim() ? (
-                        <div className="mt-2 border-t border-black/10 pt-1.5 text-[11px] text-[#027EB5]">
-                          <span className="font-semibold">
-                            <Link2 className="mr-1 inline size-3" />
+                        <div className="mt-2 border-t border-black/10 pt-2">
+                          <span
+                            className={
+                              ctaUrl.trim()
+                                ? "flex cursor-pointer items-center justify-center gap-1 rounded-md bg-white/80 px-2 py-1.5 text-[11px] font-semibold text-[#027EB5] shadow-sm transition hover:bg-white"
+                                : "flex items-center justify-center gap-1 rounded-md bg-white/80 px-2 py-1.5 text-[11px] font-semibold text-[#027EB5] shadow-sm"
+                            }
+                            onClick={() => {
+                              const url = ctaUrl.trim();
+                              if (!url) return;
+                              window.open(
+                                /^https?:\/\//i.test(url) ? url : `https://${url}`,
+                                "_blank",
+                                "noopener,noreferrer",
+                              );
+                            }}
+                          >
+                            <Link2 className="size-3" />
                             {ctaText.trim() || "Buka Tautan"}
                           </span>
-                          {ctaUrl.trim() ? <span>: {ctaUrl.trim()}</span> : null}
                         </div>
                       ) : null}
                       <p className="mt-1 text-right text-[9px] text-muted-foreground">✓✓</p>
