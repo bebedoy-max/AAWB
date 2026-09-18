@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, Trash2, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/app-shell";
+import { PageHeader, useIsAdmin } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,7 @@ export const Route = createFileRoute("/_authenticated/projects")({
 });
 
 function ProjectsPage() {
+  const isAdmin = useIsAdmin();
   const queryClient = useQueryClient();
   const fetchProjects = useServerFn(listBlastProjects);
   const create = useServerFn(createBlastProject);
@@ -60,6 +61,8 @@ function ProjectsPage() {
     queryKey: ["blast-projects"],
     queryFn: () => fetchProjects(),
     refetchInterval: 8000,
+    enabled: isAdmin,
+    retry: false,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["blast-projects"] });
@@ -94,6 +97,17 @@ function ProjectsPage() {
     onSuccess: invalidate,
     onError: (e: Error) => toast.error(e.message),
   });
+
+  if (!isAdmin) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-sm font-medium">Akses ditolak</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Halaman Proyek Blast hanya untuk admin dan super admin.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <>

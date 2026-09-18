@@ -136,6 +136,24 @@ function Devices() {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const idleDevices = (sessions ?? []).filter(
+    (session) => session.status === "connected" && !session.blast_ready,
+  );
+
+  const startAll = useMutation({
+    mutationFn: async () => {
+      for (const session of idleDevices) {
+        await saveDeviceBlast({ data: { session_id: session.id, ready: true } });
+      }
+      return idleDevices.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
+      toast.success(`${count} perangkat diaktifkan`);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const { data: performance } = useQuery({
     queryKey: ["device-performance"],
     refetchInterval: 10_000,
@@ -395,10 +413,20 @@ function Devices() {
             <div className="min-w-0">
               <p className="text-xs font-medium text-muted-foreground">Data yang tersisa saat ini</p>
               <p className="mt-1 text-2xl font-semibold">{(poolAvailable ?? 0).toLocaleString("id-ID")}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">Sisa kontak dari kampanye yang sedang berjalan</p>
             </div>
           </div>
-          <Button className="w-full sm:w-auto" onClick={() => setAddOpen(true)} disabled={(sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-5" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => startAll.mutate()}
+              disabled={startAll.isPending || idleDevices.length === 0}
+            >
+              <Play className="mr-1 size-4" /> Start semua
+              <span className="ml-2 rounded-md bg-muted px-2 py-0.5 text-xs">{idleDevices.length}</span>
+            </Button>
+            <Button className="w-full sm:w-auto" onClick={() => setAddOpen(true)} disabled={(sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-5" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
+          </div>
         </CardContent>
       </Card>
 

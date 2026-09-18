@@ -44,19 +44,12 @@ export const Route = createFileRoute("/api/blast/tick")({
           return json({ error: "Perangkat tidak ditemukan" }, 404);
         }
 
-        // Perangkat mengirim bila saklar "siap blast" aktif, ATAU otomatis
-        // saat ada kampanye kolam yang sedang berjalan (deteksi otomatis:
-        // kampanye berjalan + perangkat aktif = pengiriman lanjut sendiri).
+        // Perangkat HANYA mengirim bila pemiliknya sudah menekan Start pada
+        // perangkat tersebut (saklar "siap blast" aktif). Tidak ada lagi
+        // pengiriman otomatis meskipun ada kampanye kolam yang berjalan.
         const sess = session as { blast_ready?: boolean | null; blast_speed?: string | null };
         if (!sess.blast_ready) {
-          const { count } = await (supabaseAdmin as unknown as typeof supabase)
-            .from("campaigns")
-            .select("id", { count: "exact", head: true })
-            .eq("is_pool", true)
-            .eq("status", "running");
-          if (!count) {
-            return json({ ok: true, running: false, claimed: 0, sent: 0, failed: 0, remaining: 0 });
-          }
+          return json({ ok: true, running: false, claimed: 0, sent: 0, failed: 0, remaining: 0 });
         }
 
         const { processBlastTick } = await import("@/lib/member-worker.server");
