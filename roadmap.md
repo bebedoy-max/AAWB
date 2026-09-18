@@ -70,3 +70,9 @@
 - [x] Fallback klaim jalur admin di pekerja blast tidak lagi menyaring kampanye kolam saja
 - [x] Pilihan kecepatan sebelum tombol Start semua; Start semua menerapkan kecepatan itu ke semua perangkat
 - [ ] Pengguna menjalankan db/migrations/014_unify_blast_queue.sql di SQL Editor Supabase
+
+## Pemulihan antrean perangkat
+- [x] Temukan antrean yang terkunci pada perangkat berhenti atau terputus
+- [x] Izinkan perangkat aktif mengambil alih antrean yang ditinggalkan
+- [x] Lepaskan kepemilikan antrean saat pesan dijadwalkan ulang
+- [ ] Pengguna menjalankan db/migrations/015_reclaim_abandoned_queue.sql di SQL Editor Supabase

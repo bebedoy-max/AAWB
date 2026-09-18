@@ -101,15 +101,28 @@ export async function processBlastTick(
         .eq("status", "running");
       const campaignIds = (runningCampaigns ?? []).map((row) => row.id);
       if (campaignIds.length) {
+        const activeSince = new Date(Date.now() - 90_000).toISOString();
+        const { data: activeSessions } = await supabase
+          .from("wa_sessions")
+          .select("id")
+          .eq("blast_ready", true)
+          .eq("status", "connected")
+          .gte("last_ping", activeSince);
+        const activeSessionIds = new Set((activeSessions ?? []).map((row) => row.id));
         const { data: candidates } = await supabase
           .from("message_queue")
-          .select("id")
-          .is("claimed_by", null)
-          .eq("status", "pending")
+          .select("id,claimed_by,session_id")
+          .in("status", ["pending", "processing"])
           .in("campaign_id", campaignIds)
           .order("created_at", { ascending: true })
-          .limit(CLAIM_SIZE);
-        const ids = (candidates ?? []).map((row) => row.id);
+          .limit(CLAIM_SIZE * 4);
+        const ids = (candidates ?? [])
+          .filter(
+            (row) =>
+              !row.claimed_by || !row.session_id || !activeSessionIds.has(row.session_id),
+          )
+          .slice(0, CLAIM_SIZE)
+          .map((row) => row.id);
         if (ids.length) {
           const { data: assigned } = await supabase
             .from("message_queue")
@@ -119,10 +132,9 @@ export async function processBlastTick(
               session_id: sessionId,
               claimed_at: new Date().toISOString(),
               scheduled_at: new Date().toISOString(),
+              status: "pending",
             })
             .in("id", ids)
-            .is("claimed_by", null)
-            .eq("status", "pending")
             .select("id");
           claimed = assigned?.length ?? 0;
         }
@@ -269,6 +281,10 @@ export async function processBlastTick(
               attempts,
               error_log: `${message} (percobaan ${attempts}/${MAX_ATTEMPTS})`,
               scheduled_at: new Date(Date.now() + RETRY_BASE_DELAY_MS * attempts).toISOString(),
+              claimed_by: null,
+              claimed_at: null,
+              session_id: null,
+              user_id: null,
             })
             .eq("id", item.id);
         } else {
