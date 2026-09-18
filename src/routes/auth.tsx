@@ -1,19 +1,9 @@
-<<<<<<< HEAD
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { BrandLogo } from "@/components/brand-logo";
-=======
-import { useEffect, useState } from "react";
-import { BrandLogo } from "@/components/brand-logo";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { MailCheck } from "lucide-react";
-import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/my-client";
-import { recordActivity } from "@/lib/activity-log.functions";
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -63,7 +53,6 @@ function AuthPage() {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [signupEmail, setSignupEmail] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -92,13 +81,8 @@ function AuthPage() {
       toast.error(authErrorMessage(error.message));
       return;
     }
-<<<<<<< HEAD
     await recordActivity({ data: { action: "login", detail: "Masuk dengan username" } }).catch(() => {});
     navigate({ to: await getPostLoginPath() });
-=======
-    await recordActivity({ data: { action: "login", detail: "Masuk dengan email" } }).catch(() => {});
-    navigate({ to: "/dashboard" });
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
   };
 
   const nextStep = async () => {
@@ -164,69 +148,12 @@ function AuthPage() {
       if (referralCode) localStorage.setItem("wblast_ref", referralCode);
       toast.success("Akun berhasil dibuat.");
       navigate({ to: "/dashboard" });
-<<<<<<< HEAD
     } catch (error) {
       toast.error(error instanceof Error ? authErrorMessage(error.message) : "Akun belum dapat dibuat.");
     } finally {
       setLoading(false);
-=======
-      return;
-    }
-    setSignupEmail(email);
-  };
-
-  const googleSignIn = async () => {
-    // Login/registrasi Google berjalan di Supabase milik sendiri, jadi provider
-    // Google harus diaktifkan di sana. Kode referal (bila ada) dibawa lewat
-    // penyimpanan lokal supaya tetap terpakai setelah kembali dari Google.
-    const code = ref.trim().toUpperCase();
-    if (code) localStorage.setItem("wblast_ref", code);
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        queryParams: { prompt: "select_account", access_type: "online" },
-      },
-    });
-    if (error) {
-      setLoading(false);
-      toast.error(
-        "Login Google belum bisa dipakai. Pastikan provider Google sudah aktif di database Anda.",
-      );
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
     }
   };
-
-
-  if (signupEmail) {
-    return (
-      <div className="flex min-h-screen items-center justify-center hero-gradient px-4 py-12">
-        <div className="w-full max-w-md">
-          <div className="mb-6 flex justify-center">
-            <BrandLogo className="h-32" />
-          </div>
-          <Card>
-            <CardContent className="space-y-4 p-8 text-center">
-              <MailCheck className="mx-auto size-10 text-primary" />
-              <div className="space-y-1">
-                <h1 className="text-base font-semibold">Periksa email Anda</h1>
-                <p className="text-sm text-muted-foreground">
-                  Kami telah mengirim tautan verifikasi ke{" "}
-                  <span className="font-medium text-foreground">{signupEmail}</span>. Silakan cek
-                  kotak masuk atau folder spam, lalu klik tautan di dalamnya untuk memverifikasi
-                  email Anda.
-                </p>
-              </div>
-              <Button className="w-full" onClick={() => navigate({ to: "/" })}>
-                OK
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="member-surface flex min-h-screen items-center justify-center bg-secondary/50 px-4 py-8">
@@ -266,114 +193,6 @@ function AuthPage() {
             </>
           )}
         </div>
-<<<<<<< HEAD
-=======
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Selamat datang kembali</CardTitle>
-            <CardDescription>Kelola ruang kerja broadcast WhatsApp Anda.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="signin">
-              <TabsList className="mb-4 grid w-full grid-cols-2">
-                <TabsTrigger value="signin">Masuk</TabsTrigger>
-                <TabsTrigger value="signup">Buat akun</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="signin" className="space-y-3">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!loading) signIn();
-                  }}
-                  className="space-y-3"
-                >
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Kata sandi</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  Masuk
-                </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="signup" className="space-y-3">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (!loading) signUp();
-                  }}
-                  className="space-y-3"
-                >
-                <div className="space-y-1.5">
-                  <Label htmlFor="org">Nama</Label>
-                  <Input
-                    id="org"
-                    value={org}
-                    onChange={(e) => setOrg(e.target.value)}
-                    placeholder="Nama lengkap Anda"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="email-up">Email</Label>
-                  <Input
-                    id="email-up"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password-up">Kata sandi</Label>
-                  <Input
-                    id="password-up"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="ref-up">Kode undangan (opsional)</Label>
-                  <Input
-                    id="ref-up"
-                    value={ref}
-                    onChange={(e) => setRef(e.target.value.toUpperCase())}
-                    placeholder="Misal: BH3GEB"
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  Buat akun
-                </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-
-            <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-              <span className="h-px flex-1 bg-border" /> atau <span className="h-px flex-1 bg-border" />
-            </div>
-            <Button variant="outline" className="w-full" onClick={googleSignIn}>
-              Lanjutkan dengan Google
-            </Button>
-          </CardContent>
-        </Card>
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
       </div>
     </div>
   );

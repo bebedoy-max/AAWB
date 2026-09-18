@@ -60,11 +60,7 @@ function VerifyPage() {
         // Tautan kadang dibuka dua kali; bila sesi sudah aktif, anggap berhasil.
         const { data } = await supabase.auth.getSession();
         if (data.session) {
-<<<<<<< HEAD
           navigate({ to: await getPostLoginPath(), replace: true });
-=======
-          navigate({ to: "/dashboard", replace: true });
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
           return;
         }
         setError(friendlyError(urlError));
@@ -84,11 +80,7 @@ function VerifyPage() {
           const { data } = await supabase.auth.getSession();
           if (data.session) {
             window.history.replaceState(null, "", window.location.pathname);
-<<<<<<< HEAD
             await finish();
-=======
-            finish();
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
             return;
           }
           setError(friendlyError(sessionError.message));
@@ -106,11 +98,7 @@ function VerifyPage() {
         if (exchangeError) {
           const { data } = await supabase.auth.getSession();
           if (data.session) {
-<<<<<<< HEAD
             await finish();
-=======
-            finish();
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
             return;
           }
           setError(friendlyError(exchangeError.message));

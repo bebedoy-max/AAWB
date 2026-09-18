@@ -38,12 +38,9 @@ export interface BlastProjectRow {
   id: string;
   name: string;
   message_body: string;
-<<<<<<< HEAD
   media_url: string | null;
   cta_text: string | null;
   cta_url: string | null;
-=======
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
   total_targets: number;
   sent: number;
   failed: number;
@@ -52,7 +49,6 @@ export interface BlastProjectRow {
   status: string;
 }
 
-<<<<<<< HEAD
 /** Pisahkan CTA yang disimpan di akhir pesan ("\n\nTeks: https://…"). */
 function splitCta(body: string): { message: string; cta_text: string | null; cta_url: string | null } {
   const m = body.match(/^([\s\S]*?)\n\n([^\n]*?):?\s*(https?:\/\/\S+)\s*$/);
@@ -69,8 +65,6 @@ function joinCta(message: string, ctaText?: string | null, ctaUrl?: string | nul
   return `${message}\n\n${text ? `${text}: ` : ""}${link}`;
 }
 
-=======
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
 async function rolesOf(supabase: any, userId: string): Promise<string[]> {
   const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   return ((data ?? []) as { role: string }[]).map((r) => r.role);
@@ -161,11 +155,7 @@ export const listBlastProjects = createServerFn({ method: "GET" })
 
     const { data: projects, error } = await admin
       .from("campaigns")
-<<<<<<< HEAD
       .select("id,name,message_body,media_url,total_targets,status,created_at")
-=======
-      .select("id,name,message_body,total_targets,status,created_at")
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
       .eq("is_pool", true)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -188,7 +178,6 @@ export const listBlastProjects = createServerFn({ method: "GET" })
       }
     }
 
-<<<<<<< HEAD
     return ((projects ?? []) as any[]).map((p) => {
       const { message, cta_text, cta_url } = splitCta(p.message_body ?? "");
       return {
@@ -204,23 +193,11 @@ export const listBlastProjects = createServerFn({ method: "GET" })
         ...(counts.get(p.id) ?? { sent: 0, failed: 0, pending: 0 }),
       };
     });
-=======
-    return ((projects ?? []) as any[]).map((p) => ({
-      id: p.id,
-      name: p.name,
-      message_body: p.message_body ?? "",
-      total_targets: p.total_targets ?? 0,
-      created_at: p.created_at,
-      status: p.status,
-      ...(counts.get(p.id) ?? { sent: 0, failed: 0, pending: 0 }),
-    }));
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
   });
 
 /** Buat proyek blast baru: pesan + daftar nomor yang sudah diformat. */
 export const createBlastProject = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-<<<<<<< HEAD
   .inputValidator(
     (input: {
       name: string;
@@ -242,19 +219,6 @@ export const createBlastProject = createServerFn({ method: "POST" })
       return { name, message, phones, mediaUrl };
     },
   )
-=======
-  .inputValidator((input: { name: string; message: string; phones: string[] }) => {
-    const name = (input.name ?? "").trim() || "Proyek tanpa nama";
-    const message = (input.message ?? "").trim();
-    if (!message) throw new Error("Pesan kampanye tidak boleh kosong.");
-    const phones = Array.from(
-      new Set((input.phones ?? []).map((p) => String(p).replace(/\D/g, "")).filter(Boolean)),
-    );
-    if (!phones.length) throw new Error("Tidak ada nomor tujuan yang valid.");
-    if (phones.length > 50000) throw new Error("Maksimal 50.000 nomor per proyek.");
-    return { name, message, phones };
-  })
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -266,14 +230,9 @@ export const createBlastProject = createServerFn({ method: "POST" })
         user_id: context.userId,
         name: data.name,
         message_body: data.message,
-<<<<<<< HEAD
         media_url: data.mediaUrl,
         is_pool: true,
         status: data.phones.length ? "running" : "draft",
-=======
-        is_pool: true,
-        status: "running",
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
         total_targets: data.phones.length,
         min_delay: 1,
         max_delay: 1,
@@ -302,7 +261,6 @@ export const createBlastProject = createServerFn({ method: "POST" })
     const { logActivity } = await import("@/lib/activity-log.server");
     await logActivity(context.userId, "project_create", `${data.name} — ${rows.length} nomor`);
 
-<<<<<<< HEAD
     return { ok: true, id: project.id as string, queued: rows.length, status: data.phones.length ? "running" : "draft" };
   });
 
@@ -350,9 +308,6 @@ export const updateBlastProject = createServerFn({ method: "POST" })
     const { logActivity } = await import("@/lib/activity-log.server");
     await logActivity(context.userId, "project_update", data.name);
     return { ok: true };
-=======
-    return { ok: true, id: project.id as string, queued: rows.length };
->>>>>>> d36e63154102d43dc2da41d8ccc12822fdaed149
   });
 
 /** Hapus proyek blast beserta antrean pesannya. */
