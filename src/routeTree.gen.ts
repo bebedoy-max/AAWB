@@ -14,19 +14,34 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as VerifikasiRouteImport } from './routes/verifikasi'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedBlastRouteImport } from './routes/_authenticated/blast'
 import { Route as AuthenticatedCampaignsRouteImport } from './routes/_authenticated/campaigns'
 import { Route as AuthenticatedContactsRouteImport } from './routes/_authenticated/contacts'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDevicesRouteImport } from './routes/_authenticated/devices'
+import { Route as AuthenticatedMonitorRouteImport } from './routes/_authenticated/monitor'
+import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedQueueRouteImport } from './routes/_authenticated/queue'
 import { Route as AuthenticatedReferralRouteImport } from './routes/_authenticated/referral'
 import { Route as AuthenticatedRewardsRouteImport } from './routes/_authenticated/rewards'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as AuthenticatedAdminKampanyeRouteImport } from './routes/_authenticated/admin.kampanye'
+import { Route as AuthenticatedAdminKlaimRouteImport } from './routes/_authenticated/admin.klaim'
+import { Route as AuthenticatedAdminLaporanRouteImport } from './routes/_authenticated/admin.laporan'
+import { Route as AuthenticatedAdminNomorRouteImport } from './routes/_authenticated/admin.nomor'
+import { Route as AuthenticatedAdminPengaturanRouteImport } from './routes/_authenticated/admin.pengaturan'
+import { Route as AuthenticatedAdminPenggunaRouteImport } from './routes/_authenticated/admin.pengguna'
+import { Route as AuthenticatedAdminTimRouteImport } from './routes/_authenticated/admin.tim'
+import { Route as ApiBlastTickRouteImport } from './routes/api/blast/tick'
 import { Route as ApiCampaignDispatchRouteImport } from './routes/api/campaign/dispatch'
 import { Route as ApiSessionIdRouteImport } from './routes/api/session/$id'
 import { Route as ApiPublicCronProcessQueueRouteImport } from './routes/api/public/cron/process-queue'
 import { Route as ApiPublicDbSplatRouteImport } from './routes/api/public/db/$'
+import { Route as ApiPublicTelegramWebhookRouteImport } from './routes/api/public/telegram/webhook'
+import { Route as ApiPublicWaInboundRouteImport } from './routes/api/public/wa/inbound'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +67,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBlastRoute = AuthenticatedBlastRouteImport.update({
+  id: '/blast',
+  path: '/blast',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedCampaignsRoute = AuthenticatedCampaignsRouteImport.update({
   id: '/campaigns',
   path: '/campaigns',
@@ -70,6 +90,16 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
 const AuthenticatedDevicesRoute = AuthenticatedDevicesRouteImport.update({
   id: '/devices',
   path: '/devices',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMonitorRoute = AuthenticatedMonitorRouteImport.update({
+  id: '/monitor',
+  path: '/monitor',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedQueueRoute = AuthenticatedQueueRouteImport.update({
@@ -97,6 +127,60 @@ const AuthenticatedTemplatesRoute = AuthenticatedTemplatesRouteImport.update({
   path: '/templates',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminKampanyeRoute =
+  AuthenticatedAdminKampanyeRouteImport.update({
+    id: '/kampanye',
+    path: '/kampanye',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminKlaimRoute = AuthenticatedAdminKlaimRouteImport.update({
+  id: '/klaim',
+  path: '/klaim',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminLaporanRoute =
+  AuthenticatedAdminLaporanRouteImport.update({
+    id: '/laporan',
+    path: '/laporan',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminNomorRoute = AuthenticatedAdminNomorRouteImport.update({
+  id: '/nomor',
+  path: '/nomor',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminPengaturanRoute =
+  AuthenticatedAdminPengaturanRouteImport.update({
+    id: '/pengaturan',
+    path: '/pengaturan',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminPenggunaRoute =
+  AuthenticatedAdminPenggunaRouteImport.update({
+    id: '/pengguna',
+    path: '/pengguna',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminTimRoute = AuthenticatedAdminTimRouteImport.update({
+  id: '/tim',
+  path: '/tim',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const ApiBlastTickRoute = ApiBlastTickRouteImport.update({
+  id: '/api/blast/tick',
+  path: '/api/blast/tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCampaignDispatchRoute = ApiCampaignDispatchRouteImport.update({
   id: '/api/campaign/dispatch',
   path: '/api/campaign/dispatch',
@@ -118,65 +202,120 @@ const ApiPublicDbSplatRoute = ApiPublicDbSplatRouteImport.update({
   path: '/api/public/db/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicTelegramWebhookRoute =
+  ApiPublicTelegramWebhookRouteImport.update({
+    id: '/api/public/telegram/webhook',
+    path: '/api/public/telegram/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWaInboundRoute = ApiPublicWaInboundRouteImport.update({
+  id: '/api/public/wa/inbound',
+  path: '/api/public/wa/inbound',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/verifikasi': typeof VerifikasiRoute
-  '/admin': typeof AuthenticatedAdminRoute
+  '/admin': typeof AuthenticatedAdminRouteWithChildren
+  '/blast': typeof AuthenticatedBlastRoute
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/contacts': typeof AuthenticatedContactsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/devices': typeof AuthenticatedDevicesRoute
+  '/monitor': typeof AuthenticatedMonitorRoute
+  '/projects': typeof AuthenticatedProjectsRoute
   '/queue': typeof AuthenticatedQueueRoute
   '/referral': typeof AuthenticatedReferralRoute
   '/rewards': typeof AuthenticatedRewardsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/templates': typeof AuthenticatedTemplatesRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/admin/klaim': typeof AuthenticatedAdminKlaimRoute
+  '/admin/laporan': typeof AuthenticatedAdminLaporanRoute
+  '/admin/nomor': typeof AuthenticatedAdminNomorRoute
+  '/admin/pengaturan': typeof AuthenticatedAdminPengaturanRoute
+  '/admin/pengguna': typeof AuthenticatedAdminPenggunaRoute
+  '/admin/tim': typeof AuthenticatedAdminTimRoute
+  '/api/blast/tick': typeof ApiBlastTickRoute
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
+  '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+  '/api/public/wa/inbound': typeof ApiPublicWaInboundRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/verifikasi': typeof VerifikasiRoute
-  '/admin': typeof AuthenticatedAdminRoute
+  '/blast': typeof AuthenticatedBlastRoute
   '/campaigns': typeof AuthenticatedCampaignsRoute
   '/contacts': typeof AuthenticatedContactsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/devices': typeof AuthenticatedDevicesRoute
+  '/monitor': typeof AuthenticatedMonitorRoute
+  '/projects': typeof AuthenticatedProjectsRoute
   '/queue': typeof AuthenticatedQueueRoute
   '/referral': typeof AuthenticatedReferralRoute
   '/rewards': typeof AuthenticatedRewardsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/templates': typeof AuthenticatedTemplatesRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/admin/klaim': typeof AuthenticatedAdminKlaimRoute
+  '/admin/laporan': typeof AuthenticatedAdminLaporanRoute
+  '/admin/nomor': typeof AuthenticatedAdminNomorRoute
+  '/admin/pengaturan': typeof AuthenticatedAdminPengaturanRoute
+  '/admin/pengguna': typeof AuthenticatedAdminPenggunaRoute
+  '/admin/tim': typeof AuthenticatedAdminTimRoute
+  '/api/blast/tick': typeof ApiBlastTickRoute
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
+  '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+  '/api/public/wa/inbound': typeof ApiPublicWaInboundRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/verifikasi': typeof VerifikasiRoute
-  '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
+  '/_authenticated/blast': typeof AuthenticatedBlastRoute
   '/_authenticated/campaigns': typeof AuthenticatedCampaignsRoute
   '/_authenticated/contacts': typeof AuthenticatedContactsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/devices': typeof AuthenticatedDevicesRoute
+  '/_authenticated/monitor': typeof AuthenticatedMonitorRoute
+  '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/queue': typeof AuthenticatedQueueRoute
   '/_authenticated/referral': typeof AuthenticatedReferralRoute
   '/_authenticated/rewards': typeof AuthenticatedRewardsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/_authenticated/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/_authenticated/admin/klaim': typeof AuthenticatedAdminKlaimRoute
+  '/_authenticated/admin/laporan': typeof AuthenticatedAdminLaporanRoute
+  '/_authenticated/admin/nomor': typeof AuthenticatedAdminNomorRoute
+  '/_authenticated/admin/pengaturan': typeof AuthenticatedAdminPengaturanRoute
+  '/_authenticated/admin/pengguna': typeof AuthenticatedAdminPenggunaRoute
+  '/_authenticated/admin/tim': typeof AuthenticatedAdminTimRoute
+  '/api/blast/tick': typeof ApiBlastTickRoute
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
+  '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+  '/api/public/wa/inbound': typeof ApiPublicWaInboundRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -185,38 +324,67 @@ export interface FileRouteTypes {
     | '/auth'
     | '/verifikasi'
     | '/admin'
+    | '/blast'
     | '/campaigns'
     | '/contacts'
     | '/dashboard'
     | '/devices'
+    | '/monitor'
+    | '/projects'
     | '/queue'
     | '/referral'
     | '/rewards'
     | '/settings'
     | '/templates'
+    | '/auth/callback'
+    | '/admin/kampanye'
+    | '/admin/klaim'
+    | '/admin/laporan'
+    | '/admin/nomor'
+    | '/admin/pengaturan'
+    | '/admin/pengguna'
+    | '/admin/tim'
+    | '/api/blast/tick'
     | '/api/campaign/dispatch'
     | '/api/session/$id'
+    | '/admin/'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
+    | '/api/public/telegram/webhook'
+    | '/api/public/wa/inbound'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/verifikasi'
-    | '/admin'
+    | '/blast'
     | '/campaigns'
     | '/contacts'
     | '/dashboard'
     | '/devices'
+    | '/monitor'
+    | '/projects'
     | '/queue'
     | '/referral'
     | '/rewards'
     | '/settings'
     | '/templates'
+    | '/auth/callback'
+    | '/admin/kampanye'
+    | '/admin/klaim'
+    | '/admin/laporan'
+    | '/admin/nomor'
+    | '/admin/pengaturan'
+    | '/admin/pengguna'
+    | '/admin/tim'
+    | '/api/blast/tick'
     | '/api/campaign/dispatch'
     | '/api/session/$id'
+    | '/admin'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
+    | '/api/public/telegram/webhook'
+    | '/api/public/wa/inbound'
   id:
     | '__root__'
     | '/'
@@ -224,30 +392,48 @@ export interface FileRouteTypes {
     | '/auth'
     | '/verifikasi'
     | '/_authenticated/admin'
+    | '/_authenticated/blast'
     | '/_authenticated/campaigns'
     | '/_authenticated/contacts'
     | '/_authenticated/dashboard'
     | '/_authenticated/devices'
+    | '/_authenticated/monitor'
+    | '/_authenticated/projects'
     | '/_authenticated/queue'
     | '/_authenticated/referral'
     | '/_authenticated/rewards'
     | '/_authenticated/settings'
     | '/_authenticated/templates'
+    | '/auth/callback'
+    | '/_authenticated/admin/kampanye'
+    | '/_authenticated/admin/klaim'
+    | '/_authenticated/admin/laporan'
+    | '/_authenticated/admin/nomor'
+    | '/_authenticated/admin/pengaturan'
+    | '/_authenticated/admin/pengguna'
+    | '/_authenticated/admin/tim'
+    | '/api/blast/tick'
     | '/api/campaign/dispatch'
     | '/api/session/$id'
+    | '/_authenticated/admin/'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
+    | '/api/public/telegram/webhook'
+    | '/api/public/wa/inbound'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
-  AuthRoute: typeof AuthRoute
+  AuthRoute: typeof AuthRouteWithChildren
   VerifikasiRoute: typeof VerifikasiRoute
+  ApiBlastTickRoute: typeof ApiBlastTickRoute
   ApiCampaignDispatchRoute: typeof ApiCampaignDispatchRoute
   ApiSessionIdRoute: typeof ApiSessionIdRoute
   ApiPublicCronProcessQueueRoute: typeof ApiPublicCronProcessQueueRoute
   ApiPublicDbSplatRoute: typeof ApiPublicDbSplatRoute
+  ApiPublicTelegramWebhookRoute: typeof ApiPublicTelegramWebhookRoute
+  ApiPublicWaInboundRoute: typeof ApiPublicWaInboundRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -287,6 +473,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/blast': {
+      id: '/_authenticated/blast'
+      path: '/blast'
+      fullPath: '/blast'
+      preLoaderRoute: typeof AuthenticatedBlastRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/campaigns': {
       id: '/_authenticated/campaigns'
       path: '/campaigns'
@@ -313,6 +506,20 @@ declare module '@tanstack/react-router' {
       path: '/devices'
       fullPath: '/devices'
       preLoaderRoute: typeof AuthenticatedDevicesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/monitor': {
+      id: '/_authenticated/monitor'
+      path: '/monitor'
+      fullPath: '/monitor'
+      preLoaderRoute: typeof AuthenticatedMonitorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/projects': {
+      id: '/_authenticated/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/queue': {
@@ -350,6 +557,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTemplatesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/kampanye': {
+      id: '/_authenticated/admin/kampanye'
+      path: '/kampanye'
+      fullPath: '/admin/kampanye'
+      preLoaderRoute: typeof AuthenticatedAdminKampanyeRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/klaim': {
+      id: '/_authenticated/admin/klaim'
+      path: '/klaim'
+      fullPath: '/admin/klaim'
+      preLoaderRoute: typeof AuthenticatedAdminKlaimRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/laporan': {
+      id: '/_authenticated/admin/laporan'
+      path: '/laporan'
+      fullPath: '/admin/laporan'
+      preLoaderRoute: typeof AuthenticatedAdminLaporanRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/nomor': {
+      id: '/_authenticated/admin/nomor'
+      path: '/nomor'
+      fullPath: '/admin/nomor'
+      preLoaderRoute: typeof AuthenticatedAdminNomorRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/pengaturan': {
+      id: '/_authenticated/admin/pengaturan'
+      path: '/pengaturan'
+      fullPath: '/admin/pengaturan'
+      preLoaderRoute: typeof AuthenticatedAdminPengaturanRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/pengguna': {
+      id: '/_authenticated/admin/pengguna'
+      path: '/pengguna'
+      fullPath: '/admin/pengguna'
+      preLoaderRoute: typeof AuthenticatedAdminPenggunaRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/tim': {
+      id: '/_authenticated/admin/tim'
+      path: '/tim'
+      fullPath: '/admin/tim'
+      preLoaderRoute: typeof AuthenticatedAdminTimRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/api/blast/tick': {
+      id: '/api/blast/tick'
+      path: '/api/blast/tick'
+      fullPath: '/api/blast/tick'
+      preLoaderRoute: typeof ApiBlastTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/campaign/dispatch': {
       id: '/api/campaign/dispatch'
       path: '/api/campaign/dispatch'
@@ -378,15 +655,57 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicDbSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/telegram/webhook': {
+      id: '/api/public/telegram/webhook'
+      path: '/api/public/telegram/webhook'
+      fullPath: '/api/public/telegram/webhook'
+      preLoaderRoute: typeof ApiPublicTelegramWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/wa/inbound': {
+      id: '/api/public/wa/inbound'
+      path: '/api/public/wa/inbound'
+      fullPath: '/api/public/wa/inbound'
+      preLoaderRoute: typeof ApiPublicWaInboundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminKampanyeRoute: typeof AuthenticatedAdminKampanyeRoute
+  AuthenticatedAdminKlaimRoute: typeof AuthenticatedAdminKlaimRoute
+  AuthenticatedAdminLaporanRoute: typeof AuthenticatedAdminLaporanRoute
+  AuthenticatedAdminNomorRoute: typeof AuthenticatedAdminNomorRoute
+  AuthenticatedAdminPengaturanRoute: typeof AuthenticatedAdminPengaturanRoute
+  AuthenticatedAdminPenggunaRoute: typeof AuthenticatedAdminPenggunaRoute
+  AuthenticatedAdminTimRoute: typeof AuthenticatedAdminTimRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
+}
+
+const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminKampanyeRoute: AuthenticatedAdminKampanyeRoute,
+  AuthenticatedAdminKlaimRoute: AuthenticatedAdminKlaimRoute,
+  AuthenticatedAdminLaporanRoute: AuthenticatedAdminLaporanRoute,
+  AuthenticatedAdminNomorRoute: AuthenticatedAdminNomorRoute,
+  AuthenticatedAdminPengaturanRoute: AuthenticatedAdminPengaturanRoute,
+  AuthenticatedAdminPenggunaRoute: AuthenticatedAdminPenggunaRoute,
+  AuthenticatedAdminTimRoute: AuthenticatedAdminTimRoute,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
+}
+
+const AuthenticatedAdminRouteWithChildren =
+  AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
+
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
+  AuthenticatedBlastRoute: typeof AuthenticatedBlastRoute
   AuthenticatedCampaignsRoute: typeof AuthenticatedCampaignsRoute
   AuthenticatedContactsRoute: typeof AuthenticatedContactsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDevicesRoute: typeof AuthenticatedDevicesRoute
+  AuthenticatedMonitorRoute: typeof AuthenticatedMonitorRoute
+  AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedQueueRoute: typeof AuthenticatedQueueRoute
   AuthenticatedReferralRoute: typeof AuthenticatedReferralRoute
   AuthenticatedRewardsRoute: typeof AuthenticatedRewardsRoute
@@ -395,11 +714,14 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+  AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
+  AuthenticatedBlastRoute: AuthenticatedBlastRoute,
   AuthenticatedCampaignsRoute: AuthenticatedCampaignsRoute,
   AuthenticatedContactsRoute: AuthenticatedContactsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDevicesRoute: AuthenticatedDevicesRoute,
+  AuthenticatedMonitorRoute: AuthenticatedMonitorRoute,
+  AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedQueueRoute: AuthenticatedQueueRoute,
   AuthenticatedReferralRoute: AuthenticatedReferralRoute,
   AuthenticatedRewardsRoute: AuthenticatedRewardsRoute,
@@ -410,15 +732,28 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface AuthRouteChildren {
+  AuthCallbackRoute: typeof AuthCallbackRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthCallbackRoute: AuthCallbackRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
-  AuthRoute: AuthRoute,
+  AuthRoute: AuthRouteWithChildren,
   VerifikasiRoute: VerifikasiRoute,
+  ApiBlastTickRoute: ApiBlastTickRoute,
   ApiCampaignDispatchRoute: ApiCampaignDispatchRoute,
   ApiSessionIdRoute: ApiSessionIdRoute,
   ApiPublicCronProcessQueueRoute: ApiPublicCronProcessQueueRoute,
   ApiPublicDbSplatRoute: ApiPublicDbSplatRoute,
+  ApiPublicTelegramWebhookRoute: ApiPublicTelegramWebhookRoute,
+  ApiPublicWaInboundRoute: ApiPublicWaInboundRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

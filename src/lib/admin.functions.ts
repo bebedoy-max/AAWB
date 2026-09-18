@@ -83,7 +83,7 @@ async function assertAdmin(context: any, superOnly = false): Promise<AppRole> {
 export const getGatewaySettings = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<GatewaySettings> => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await (supabaseAdmin as any)
       .from("app_settings")
@@ -110,7 +110,7 @@ export const saveGatewaySettings = createServerFn({ method: "POST" })
     return { url, apiKey: (input.apiKey ?? "").trim(), clearApiKey: Boolean(input.clearApiKey) };
   })
   .handler(async ({ data, context }) => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const patch: Record<string, unknown> = {
@@ -136,9 +136,93 @@ export const saveGatewaySettings = createServerFn({ method: "POST" })
 export const testGateway = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { pingGateway } = await import("@/lib/wa-gateway.server");
     return pingGateway();
+  });
+
+export interface TelegramSettings {
+  username: string;
+  token_masked: string;
+  has_token: boolean;
+  active: boolean;
+}
+
+/** Baca konfigurasi bot Telegram (token selalu dikembalikan tersamar). */
+export const getTelegramSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<TelegramSettings> => {
+    await assertAdmin(context, true);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await (supabaseAdmin as any)
+      .from("app_settings")
+      .select("telegram_bot_token,telegram_bot_username")
+      .eq("id", "global")
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const envToken = process.env["TELEGRAM_BOT_TOKEN"];
+    const token = envToken ?? data?.telegram_bot_token ?? null;
+    return {
+      username: data?.telegram_bot_username ?? "",
+      token_masked: maskKey(token),
+      has_token: Boolean(token),
+      active: Boolean(token),
+    };
+  });
+
+/** Simpan token & username bot Telegram. Token kosong = biarkan nilai lama. */
+export const saveTelegramSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { token: string; username: string; clearToken?: boolean }) => ({
+    token: (input?.token ?? "").trim(),
+    username: (input?.username ?? "").trim().replace(/^@/, ""),
+    clearToken: Boolean(input?.clearToken),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context, true);
+    if (process.env["TELEGRAM_BOT_TOKEN"]) {
+      throw new Error(
+        "Token bot sudah diatur lewat environment server, sehingga pengaturan di sini tidak akan dipakai.",
+      );
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const patch: Record<string, unknown> = {
+      id: "global",
+      telegram_bot_username: data.username || null,
+      updated_at: new Date().toISOString(),
+      updated_by: context.userId,
+    };
+    if (data.clearToken) patch["telegram_bot_token"] = null;
+    else if (data.token) patch["telegram_bot_token"] = data.token;
+
+    const { error } = await (supabaseAdmin as any)
+      .from("app_settings")
+      .upsert(patch, { onConflict: "id" });
+    if (error) throw new Error(error.message);
+    const { invalidateTelegramConfig } = await import("@/lib/telegram.server");
+    invalidateTelegramConfig();
+    return { ok: true };
+  });
+
+/** Uji token bot Telegram tersimpan dengan memanggil getMe. */
+export const testTelegramBot = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context, true);
+    const { invalidateTelegramConfig, callTelegram, isTelegramConfigured } = await import(
+      "@/lib/telegram.server"
+    );
+    invalidateTelegramConfig();
+    if (!(await isTelegramConfigured())) {
+      return { ok: false, message: "Token bot Telegram belum diisi." };
+    }
+    try {
+      const me = await callTelegram<{ username: string; first_name: string }>("getMe");
+      return { ok: true, message: `Bot aktif: @${me.username} (${me.first_name})` };
+    } catch (err) {
+      return { ok: false, message: (err as Error).message };
+    }
   });
 
 /** Daftar semua akun beserta perannya (super admin). */
@@ -168,6 +252,7 @@ export const listMembers = createServerFn({ method: "GET" })
     }
 
     return users.users
+      .filter((u) => highest(roleMap.get(u.id) ?? []) !== "super_admin")
       .map((u) => ({
         user_id: u.id,
         name:
@@ -196,8 +281,13 @@ export const setMemberRole = createServerFn({ method: "POST" })
   })
   .handler(async ({ data, context }) => {
     await assertAdmin(context, true);
-    if (data.userId === context.userId && data.role !== "super_admin") {
-      throw new Error("Anda tidak dapat menurunkan peran akun Anda sendiri.");
+    if (data.userId === context.userId) {
+      throw new Error("Anda tidak dapat mengubah peran akun Anda sendiri.");
+    }
+    const { supabaseAdmin: adminCheck } = await import("@/integrations/supabase/client.server");
+    const targetRoles = await rolesOf(adminCheck as any, data.userId);
+    if (highest(targetRoles) === "super_admin") {
+      throw new Error("Peran Super Admin tidak dapat diubah dari sini.");
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const del = await (supabaseAdmin as any).from("user_roles").delete().eq("user_id", data.userId);
@@ -206,6 +296,7 @@ export const setMemberRole = createServerFn({ method: "POST" })
       .from("user_roles")
       .insert({ user_id: data.userId, role: data.role });
     if (ins.error) throw new Error(ins.error.message);
+    await (await import("@/lib/activity-log.server")).logActivity(context.userId, "role_change", `Peran pengguna ${data.userId} diubah menjadi ${data.role}`);
     return { ok: true };
   });
 
@@ -239,6 +330,7 @@ export const resetMemberPassword = createServerFn({ method: "POST" })
       password: data.password,
     });
     if (error) throw new Error(error.message);
+    await (await import("@/lib/activity-log.server")).logActivity(context.userId, "password_reset", `Kata sandi pengguna ${data.userId} disetel ulang`);
     return { ok: true };
   });
 
@@ -258,6 +350,7 @@ export const deleteMember = createServerFn({ method: "POST" })
     await (supabaseAdmin as any).from("user_roles").delete().eq("user_id", data.userId);
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.userId);
     if (error) throw new Error(error.message);
+    await (await import("@/lib/activity-log.server")).logActivity(context.userId, "user_delete", `Pengguna ${data.userId} dihapus`);
     return { ok: true };
   });
 

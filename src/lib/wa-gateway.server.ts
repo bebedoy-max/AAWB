@@ -342,6 +342,47 @@ export async function sessionStatus(id: string): Promise<GatewaySessionState> {
   return state ?? { status: "disconnected", authStep: null, qr: null, phone: null, battery: null };
 }
 
+/**
+ * Recover an existing sending session without deleting its saved WhatsApp
+ * identity. This is intentionally separate from the pairing flow: deleting a
+ * FAILED session here would force the user to scan/pair the device again.
+ */
+export async function reconnectSession(id: string): Promise<GatewaySessionState> {
+  let state = await findSession(id);
+  if (!state || state.status === "connected") {
+    return state ?? { status: "disconnected", authStep: null, qr: null, phone: null, battery: null };
+  }
+
+  if (state.rawStatus === "FAILED") {
+    const stopped = await request(`/api/sessions/${encodeURIComponent(id)}/stop`, { method: "POST" });
+    if (stopped.status < 200 || (stopped.status >= 300 && stopped.status !== 404)) {
+      throw new GatewayError(
+        `Perangkat gagal dipulihkan: ${messageOf(stopped.body) || `HTTP ${stopped.status}`}`,
+        stopped.status >= 400 && stopped.status < 600 ? stopped.status : 502,
+      );
+    }
+  }
+
+  const started = await request(`/api/sessions/${encodeURIComponent(id)}/start`, { method: "POST" });
+  if (started.status < 200 || started.status >= 300) {
+    const message = messageOf(started.body);
+    if (!/already|working|starting/i.test(message)) {
+      throw new GatewayError(
+        `Perangkat gagal disambungkan kembali: ${message || `HTTP ${started.status}`}`,
+        started.status >= 400 && started.status < 600 ? started.status : 502,
+      );
+    }
+  }
+
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await sleep(1_000);
+    state = await findSession(id);
+    if (!state || state.status === "connected" || state.rawStatus === "FAILED") break;
+  }
+
+  return state ?? { status: "disconnected", authStep: null, qr: null, phone: null, battery: null };
+}
+
 export async function getPasskeyChallenge(id: string): Promise<Record<string, unknown>> {
   return call(`/api/${encodeURIComponent(id)}/auth/passkey/challenge`);
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Pause, Square, Plus, ChevronLeft, ChevronRight, Rocket } from "lucide-react";
+import { Play, Pause, Square, Plus, ChevronLeft, ChevronRight, Rocket, Trash2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { dispatchCampaign } from "@/lib/api-client";
@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
+
 import {
   Dialog,
   DialogContent,
@@ -55,6 +57,9 @@ const SPEED_OPTIONS = [
   { value: "siput", label: "Siput", description: "30–50 detik", min: 30, max: 50 },
 ] as const;
 
+/** Opsi Anti Ban hanya tersedia pada kecepatan lambat. */
+const ANTI_BAN_SPEEDS: readonly string[] = ["slow", "siput"];
+
 function Campaigns() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -66,9 +71,10 @@ function Campaigns() {
     template_id: "",
     min_delay: 4,
     max_delay: 6,
-    
+    anti_ban: false,
     scheduled_at: "",
   });
+
 
   const { data: sessions } = useQuery({
     queryKey: ["wa-sessions"],
@@ -91,8 +97,10 @@ function Campaigns() {
       return (data ?? []) as Template[];
     },
   });
+  const [tickNotes, setTickNotes] = useState<Record<string, string | null>>({});
   const { data: campaigns } = useQuery({
     queryKey: ["campaigns"],
+
     refetchInterval: 6000,
     queryFn: async () => {
       const { data } = await supabase
@@ -118,23 +126,43 @@ function Campaigns() {
     },
   });
 
-  // Worker tick: drives running campaigns through the dispatcher.
+  // Worker tick: drives running campaigns through the dispatcher without any
+  // automatic pausing. Ticks run back-to-back so the queue keeps draining from
+  // the first message to the last; only the campaign's own speed setting paces
+  // the sending. A device disconnect never stops the campaign.
   useEffect(() => {
-    const running = (campaigns ?? []).filter((c) => c.status === "running");
-    if (!running.length) return;
-    const timer = setInterval(async () => {
-      for (const c of running) {
-        try {
-          await dispatchCampaign({ campaign_id: c.id, action: "process" });
-        } catch {
-          /* retry next tick */
+    const runningIds = (campaigns ?? []).filter((c) => c.status === "running").map((c) => c.id);
+    if (!runningIds.length) return;
+    let cancelled = false;
+
+    const loop = async () => {
+      while (!cancelled) {
+        for (const id of runningIds) {
+          if (cancelled) return;
+          try {
+            const tick = await dispatchCampaign({ campaign_id: id, action: "process" });
+            setTickNotes((prev) => ({ ...prev, [id]: tick.error ?? null }));
+          } catch (err) {
+            setTickNotes((prev) => ({
+              ...prev,
+              [id]: err instanceof Error ? err.message : "Pengiriman tidak dapat dijalankan",
+            }));
+          }
         }
+        if (cancelled) return;
+        queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
+        queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
-      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-    }, 4000);
-    return () => clearInterval(timer);
+    };
+    void loop();
+
+    return () => {
+      cancelled = true;
+    };
   }, [campaigns, queryClient]);
+
+
 
   const create = useMutation({
     mutationFn: async () => {
@@ -150,9 +178,12 @@ function Campaigns() {
           min_delay: draft.min_delay,
           max_delay: draft.max_delay,
           batch_limit: 100000,
+          anti_ban: draft.anti_ban,
+
           scheduled_at: draft.scheduled_at ? new Date(draft.scheduled_at).toISOString() : null,
           status: "draft",
-        })
+        } as never)
+
         .select()
         .single();
       if (error) throw error;
@@ -170,10 +201,31 @@ function Campaigns() {
   });
 
   const control = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "pause" | "resume" | "abort" }) =>
+    mutationFn: ({ id, action }: { id: string; action: "pause" | "resume" | "abort" | "retry" }) =>
       dispatchCampaign({ campaign_id: id, action }),
-    onSuccess: () => {
+    onSuccess: (_res, vars) => {
+      if (vars.action === "retry") toast.success("Pesan yang gagal dimasukkan kembali ke antrean");
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error: queueError } = await supabase
+        .from("message_queue")
+        .delete()
+        .eq("campaign_id", id);
+      if (queueError) throw queueError;
+      const { error } = await supabase.from("campaigns").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Kampanye dihapus");
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -219,6 +271,12 @@ function Campaigns() {
                 <p className="mt-2 text-xs text-muted-foreground">
                   {p.sent} terkirim · {p.failed} gagal · {Math.max(0, p.total - p.sent - p.failed)} tersisa
                 </p>
+                {c.status === "running" && tickNotes[c.id] ? (
+                  <p className="mt-2 rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                    {tickNotes[c.id]}
+                  </p>
+                ) : null}
+
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button
                     size="sm"
@@ -243,6 +301,29 @@ function Campaigns() {
                     onClick={() => control.mutate({ id: c.id, action: "abort" })}
                   >
                     <Square className="mr-1 size-3.5" /> Batalkan
+                  </Button>
+                  {p.failed > 0 ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => control.mutate({ id: c.id, action: "retry" })}
+                    >
+                      <RotateCcw className="mr-1 size-3.5" /> Kirim ulang gagal
+                    </Button>
+                  ) : null}
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    disabled={c.status === "running" || remove.isPending}
+                    onClick={() => {
+                      if (window.confirm(`Hapus kampanye "${c.name}" beserta antrean pesannya?`)) {
+                        remove.mutate(c.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="mr-1 size-3.5" /> Hapus
                   </Button>
                 </div>
               </CardContent>
@@ -382,27 +463,59 @@ function Campaigns() {
                   onValueChange={(value) => {
                     const option = SPEED_OPTIONS.find((item) => item.value === value);
                     if (!option) return;
-                    setDraft({ ...draft, min_delay: option.min, max_delay: option.max });
+                    setDraft({
+                      ...draft,
+                      min_delay: option.min,
+                      max_delay: option.max,
+                      anti_ban: ANTI_BAN_SPEEDS.includes(option.value) ? draft.anti_ban : false,
+                    });
                   }}
                   className="gap-2"
                 >
-                  {SPEED_OPTIONS.map((option) => (
-                    <Label
-                      key={option.value}
-                      htmlFor={`speed-${option.value}`}
-                      className="flex cursor-pointer items-center gap-3 rounded-md border border-border px-3 py-2.5 transition-colors hover:bg-accent/50 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
-                    >
-                      <RadioGroupItem id={`speed-${option.value}`} value={option.value} />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold leading-5">{option.label}</span>
-                        <span className="block text-xs font-normal leading-5 text-muted-foreground">
-                          {option.description}
-                        </span>
-                      </span>
-                    </Label>
-                  ))}
+                  {SPEED_OPTIONS.map((option) => {
+                    const supportsAntiBan = ANTI_BAN_SPEEDS.includes(option.value);
+                    const active = selectedSpeed === option.value;
+                    return (
+                      <div
+                        key={option.value}
+                        className="rounded-md border border-border transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5"
+                      >
+                        <Label
+                          htmlFor={`speed-${option.value}`}
+                          className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-accent/50"
+                        >
+                          <RadioGroupItem id={`speed-${option.value}`} value={option.value} />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold leading-5">
+                              {option.label}
+                            </span>
+                            <span className="block text-xs font-normal leading-5 text-muted-foreground">
+                              {option.description}
+                            </span>
+                          </span>
+                          {supportsAntiBan ? (
+                            <span
+                              className="ml-auto flex cursor-pointer items-center gap-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Checkbox
+                                checked={active && draft.anti_ban}
+                                disabled={!active}
+                                onCheckedChange={(checked) =>
+                                  setDraft({ ...draft, anti_ban: checked === true })
+                                }
+                                className="h-[18px] w-[18px] rounded-[4px]"
+                              />
+                              <span className="text-sm font-medium leading-5">Anti Ban</span>
+                            </span>
+                          ) : null}
+                        </Label>
+                      </div>
+                    );
+                  })}
                 </RadioGroup>
               </div>
+
 
 
               <div className="space-y-1.5">

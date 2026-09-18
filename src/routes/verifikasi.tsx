@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getPostLoginPath } from "@/lib/post-login";
 
 export const Route = createFileRoute("/verifikasi")({
   head: () => ({
@@ -44,9 +45,9 @@ function VerifyPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const finish = () => {
+    const finish = async () => {
       toast.success("Email berhasil diverifikasi.");
-      navigate({ to: "/dashboard", replace: true });
+      navigate({ to: await getPostLoginPath(), replace: true });
     };
 
     const run = async () => {
@@ -56,6 +57,12 @@ function VerifyPage() {
       // Supabase may report a failure straight in the URL.
       const urlError = hash.get("error_description") ?? query.get("error_description");
       if (urlError) {
+        // Tautan kadang dibuka dua kali; bila sesi sudah aktif, anggap berhasil.
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          navigate({ to: await getPostLoginPath(), replace: true });
+          return;
+        }
         setError(friendlyError(urlError));
         return;
       }
@@ -69,11 +76,18 @@ function VerifyPage() {
           refresh_token: refreshToken,
         });
         if (sessionError) {
+          // Klien mungkin sudah memproses tautan ini otomatis — cek sesi dulu.
+          const { data } = await supabase.auth.getSession();
+          if (data.session) {
+            window.history.replaceState(null, "", window.location.pathname);
+            await finish();
+            return;
+          }
           setError(friendlyError(sessionError.message));
           return;
         }
         window.history.replaceState(null, "", window.location.pathname);
-        finish();
+        await finish();
         return;
       }
 
@@ -82,10 +96,15 @@ function VerifyPage() {
       if (code) {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session) {
+            await finish();
+            return;
+          }
           setError(friendlyError(exchangeError.message));
           return;
         }
-        finish();
+        await finish();
         return;
       }
 
@@ -95,6 +114,11 @@ function VerifyPage() {
         const type = (query.get("type") as OtpType | null) ?? "signup";
         const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: token, type });
         if (otpError) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session) {
+            finish();
+            return;
+          }
           setError(friendlyError(otpError.message));
           return;
         }
@@ -105,7 +129,7 @@ function VerifyPage() {
       // Already signed in (link opened twice) — just continue.
       const { data } = await supabase.auth.getSession();
       if (data.session) {
-        navigate({ to: "/dashboard", replace: true });
+        navigate({ to: await getPostLoginPath(), replace: true });
         return;
       }
 

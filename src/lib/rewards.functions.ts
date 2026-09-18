@@ -545,6 +545,7 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
       status: "pending",
     });
     if (error) return { ok: false, error: error.message };
+    await (await import("@/lib/activity-log.server")).logActivity(uid, "withdrawal_request", `Pengajuan penarikan Rp ${data.amount.toLocaleString("id-ID")}`);
     return { ok: true };
   });
 
@@ -750,5 +751,10 @@ export const setWithdrawalStatus = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .eq("status", "pending");
     if (error) throw new Error(error.message);
+    await (await import("@/lib/activity-log.server")).logActivity(
+      context.userId,
+      data.status === "approved" ? "withdrawal_approved" : "withdrawal_rejected",
+      `Penarikan ${data.id}${data.note ? ` — ${data.note}` : ""}`,
+    );
     return { ok: true };
   });

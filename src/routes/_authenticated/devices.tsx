@@ -15,6 +15,7 @@ import {
   Copy,
   ShieldCheck,
   ExternalLink,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -46,6 +47,7 @@ import { PhoneInput } from "@/components/phone-input";
 import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
 import type { SessionGatewayResponse, WaSession } from "@/types/wa";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/devices")({
   head: () => ({
@@ -104,6 +106,19 @@ function Devices() {
     },
   });
 
+  const { data: performance } = useQuery({
+    queryKey: ["device-performance"],
+    refetchInterval: 10_000,
+    queryFn: async () => {
+      const [sent, failed, pending] = await Promise.all([
+        supabase.from("message_queue").select("id", { count: "exact", head: true }).eq("status", "sent"),
+        supabase.from("message_queue").select("id", { count: "exact", head: true }).eq("status", "failed"),
+        supabase.from("message_queue").select("id", { count: "exact", head: true }).in("status", ["pending", "processing"]),
+      ]);
+      return { sent: sent.count ?? 0, failed: failed.count ?? 0, pending: pending.count ?? 0 };
+    },
+  });
+
   const activeQrSession = sessions?.find((s) => s.id === qrSessionId) ?? null;
 
   // Poll the gateway while the QR modal is open.
@@ -151,13 +166,20 @@ function Devices() {
     queryFn: () => checkGateway(),
   });
 
+  const MAX_DEVICES = 4;
+
   const createSession = useMutation({
     mutationFn: async () => {
+      if ((sessions?.length ?? 0) >= MAX_DEVICES) {
+        throw new Error(`Maksimal ${MAX_DEVICES} perangkat per akun.`);
+      }
       const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Sesi pengguna tidak ditemukan.");
       const { data, error } = await supabase
         .from("wa_sessions")
+
         .insert({
-          user_id: user.user!.id,
+          user_id: user.user.id,
           session_name: name.trim() || "Perangkat baru",
           status: "disconnected",
         })
@@ -285,13 +307,8 @@ function Devices() {
   return (
     <>
       <PageHeader
-        title="Perangkat"
-        description="Kelola perangkat WhatsApp yang terhubung melalui gateway."
-        action={
-          <Button onClick={() => setAddOpen(true)}>
-            <Plus className="mr-1 size-4" /> Tambah perangkat
-          </Button>
-        }
+        title="Pengirim WhatsApp"
+        description="Kelola perangkat WhatsApp Anda untuk pengiriman pesan."
       />
 
       {gateway && !gateway.configured && (
@@ -307,6 +324,25 @@ function Devices() {
           </CardContent>
         </Card>
       )}
+
+      <Card className="mb-6 rounded-xl shadow-panel">
+        <CardContent className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 p-5">
+          <div className="min-w-0"><p className="text-xs font-medium text-muted-foreground">Data yang tersisa saat ini</p><p className="mt-1 text-2xl font-semibold">{Math.max(0, MAX_DEVICES - (sessions?.length ?? 0))}</p></div>
+          <Button onClick={() => setAddOpen(true)} disabled={(sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-4" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
+        </CardContent>
+      </Card>
+
+      <div className="mb-4 flex items-center gap-2"><Activity className="size-4 text-primary" /><h2 className="font-semibold">Ringkasan Performa Blast</h2></div>
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {[
+          ["Slot Aktif", (sessions ?? []).filter((session) => session.status === "connected").length, "text-primary"],
+          ["Sukses (Semua)", performance?.sent ?? 0, "text-success"],
+          ["Gagal (Semua)", performance?.failed ?? 0, "text-destructive"],
+          ["Partisipasi Blast", performance?.pending ?? 0, "text-primary"],
+          ["Nomor Tertaut", (sessions ?? []).filter((session) => Boolean(session.phone_number)).length, "text-accent-foreground"],
+          ["Rata-rata Speed", 0, "text-warning-foreground"],
+        ].map(([label, value, tone]) => <Card key={String(label)} className="rounded-xl shadow-none"><CardContent className="p-4"><p className="min-h-8 text-xs text-muted-foreground">{label}</p><p className={cn("mt-2 text-2xl font-semibold", String(tone))}>{value}</p></CardContent></Card>)}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {(sessions ?? []).map((session) => (
@@ -383,10 +419,8 @@ function Devices() {
         ))}
 
         {sessions?.length === 0 ? (
-          <Card className="sm:col-span-2 xl:col-span-3">
-            <CardContent className="p-10 text-center text-sm text-muted-foreground">
-              Belum ada perangkat — tambahkan perangkat untuk mulai memasangkan nomor WhatsApp.
-            </CardContent>
+          <Card className="rounded-xl border-dashed shadow-none sm:col-span-2 xl:col-span-3">
+            <CardContent className="flex min-h-56 flex-col items-center justify-center p-10 text-center"><div className="grid size-14 place-items-center rounded-full bg-secondary"><Smartphone className="size-6 text-primary" /></div><p className="mt-4 font-semibold">Belum ada perangkat</p><p className="mt-1 text-sm text-muted-foreground">Tambahkan WhatsApp untuk mulai mengirim pesan.</p><Button className="mt-5" onClick={() => setAddOpen(true)}><Plus className="mr-1 size-4" /> Tambah perangkat</Button></CardContent>
           </Card>
         ) : null}
       </div>

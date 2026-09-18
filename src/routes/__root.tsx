@@ -79,17 +79,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "AAWB — Broadcast dan Otomatisasi WhatsApp" },
+      { title: "AAWB — Ruang Aktivitas Member" },
       {
         name: "description",
         content:
-          "Hubungkan perangkat WhatsApp, kelola kontak, buat templat, dan jalankan kampanye broadcast massal dengan aman.",
+          "Kelola aktivitas dan pantau perkembangan akun Anda dengan mudah.",
       },
-      { property: "og:title", content: "AAWB — Broadcast dan Otomatisasi WhatsApp" },
+      { property: "og:title", content: "AAWB — Ruang Aktivitas Member" },
       {
         property: "og:description",
         content:
-          "Hubungkan perangkat WhatsApp, kelola kontak, buat templat, dan jalankan kampanye broadcast massal dengan aman.",
+          "Kelola aktivitas dan pantau perkembangan akun Anda dengan mudah.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -103,7 +103,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Epilogue:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Urbanist:wght@500;600;700;800&display=swap",
       },
       { rel: "icon", href: "/favicon.png", type: "image/png" },
       { rel: "apple-touch-icon", href: "/favicon.png" },

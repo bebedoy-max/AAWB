@@ -74,6 +74,8 @@ export interface Campaign {
   min_delay: number;
   max_delay: number;
   batch_limit: number;
+  anti_ban?: boolean;
+
   scheduled_at: string | null;
   created_at: string;
 }
@@ -95,7 +97,7 @@ export interface QueuedMessage {
 /** Payload accepted by POST /api/campaign/dispatch. */
 export interface DispatchPayload {
   campaign_id: string;
-  action: "enqueue" | "process" | "pause" | "resume" | "abort";
+  action: "enqueue" | "process" | "pause" | "resume" | "abort" | "retry";
 }
 
 export interface DispatchResult {
@@ -106,6 +108,8 @@ export interface DispatchResult {
   failed?: number;
   status?: CampaignStatus;
   message?: string;
+  error?: string;
+
 }
 
 /** Payload sent to the WhatsApp gateway bridge (Baileys-compatible). */

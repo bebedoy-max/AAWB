@@ -11,6 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { Profile } from "@/types/wa";
+import {
+  disconnectTelegram,
+  getTelegramStatus,
+  startTelegramLink,
+} from "@/lib/telegram.functions";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -107,7 +112,85 @@ function Settings() {
           </CardContent>
         </Card>
 
+        <TelegramCard />
       </div>
     </>
+  );
+}
+
+function TelegramCard() {
+  const queryClient = useQueryClient();
+
+  const { data: status, isLoading } = useQuery({
+    queryKey: ["telegram-status"],
+    queryFn: () => getTelegramStatus(),
+    refetchInterval: (query) =>
+      (query.state.data as { connected?: boolean } | undefined)?.connected ? false : 5000,
+  });
+
+  const connect = useMutation({
+    mutationFn: () => startTelegramLink(),
+    onSuccess: (res) => {
+      window.open(res.url, "_blank", "noopener,noreferrer");
+      toast.info("Tekan START pada obrolan Telegram yang terbuka untuk menyelesaikan koneksi.");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const disconnect = useMutation({
+    mutationFn: () => disconnectTelegram(),
+    onSuccess: () => {
+      toast.success("Akun Telegram diputuskan");
+      queryClient.invalidateQueries({ queryKey: ["telegram-status"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Telegram</CardTitle>
+        <CardDescription>
+          Hubungkan akun Telegram Anda
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Memeriksa status…</p>
+        ) : !status?.configured ? (
+          <p className="text-sm text-muted-foreground">
+            Fitur Telegram belum diaktifkan oleh admin aplikasi.
+          </p>
+        ) : status.connected ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">
+                Tersambung{status.username ? ` sebagai @${status.username}` : ""}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {status.first_name ?? "Akun Telegram"} · ID {status.chat_id}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => disconnect.mutate()}
+              disabled={disconnect.isPending}
+            >
+              Putuskan
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Belum tersambung. Tekan tombol di bawah, lalu tekan START pada obrolan Telegram yang
+              terbuka. Status di halaman ini akan berubah otomatis.
+            </p>
+            <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
+              Hubungkan Telegram
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

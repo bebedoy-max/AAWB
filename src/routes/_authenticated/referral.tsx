@@ -63,12 +63,12 @@ function ReferralPage() {
   return (
     <>
       <PageHeader
-        title="Referal"
-        description="Undang orang lain menjadi blaster dan dapatkan bonus otomatis dari setiap pesan sukses mereka."
+        title="Referral Affiliate"
+        description="Undang teman bergabung dan dapatkan bonus otomatis dari setiap aktivitas berhasil mereka."
       />
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-1">
+      <div className="grid gap-4 lg:grid-cols-12">
+        <Card className="overflow-hidden border-0 bg-foreground text-background shadow-panel lg:col-span-4">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Kode undangan Anda</CardTitle>
             <CardDescription>
@@ -76,15 +76,15 @@ function ReferralPage() {
                 ? rates
                     .map((r, i) => `Tingkat ${i + 1}: ${rupiah(r)} per pesan sukses`)
                     .join(" · ")
-                : "Program referal sedang tidak aktif."}
+                : "Program afiliasi sedang tidak aktif."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="rounded-xl border bg-accent/40 p-4">
+            <div className="rounded-lg border border-background/20 bg-background/10 p-4">
               <p className="text-xs uppercase text-muted-foreground">Kode referal</p>
               <div className="mt-1 flex min-w-0 items-center gap-2">
                 <p className="min-w-0 flex-1 truncate text-xl font-semibold tracking-widest sm:text-2xl">
-                  {data?.code ?? "······"}
+                   {data?.code ?? "······"}
                 </p>
                 <Button
                   size="icon"
@@ -96,7 +96,7 @@ function ReferralPage() {
                 </Button>
               </div>
             </div>
-            <div className="rounded-xl border p-4">
+            <div className="rounded-lg border border-background/20 p-4">
               <p className="text-xs uppercase text-muted-foreground">Tautan cepat</p>
               <div className="mt-1 flex items-center gap-2">
                 <p className="min-w-0 flex-1 truncate text-sm">{fullLink || "—"}</p>
@@ -113,7 +113,7 @@ function ReferralPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 sm:grid-cols-3 lg:col-span-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:col-span-8">
           {[
             { icon: Users, label: "Total tim", value: `${data?.total_team ?? 0} orang` },
             {
@@ -123,7 +123,7 @@ function ReferralPage() {
             },
             { icon: Gift, label: "Total bonus", value: rupiah(data?.total_bonus) },
           ].map(({ icon: Icon, label, value }) => (
-            <Card key={label}>
+            <Card key={label} className={label === "Total bonus" ? "sm:col-span-2" : undefined}>
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">{label}</p>
@@ -138,17 +138,15 @@ function ReferralPage() {
         </div>
       </div>
 
-      <Card className="mt-4">
+      <Card className="mt-6 rounded-xl shadow-panel">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Riwayat undangan</CardTitle>
         </CardHeader>
         <CardContent className="divide-y">
           {(data?.team ?? []).length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Belum ada anggota tim referal.
-            </p>
+            <div className="py-10 text-center"><p className="text-sm font-medium">Belum ada anggota tim</p><p className="mt-1 text-xs text-muted-foreground">Bagikan kode atau tautan undangan Anda untuk mulai membangun tim.</p></div>
           ) : (
-            data!.team.map((m) => (
+            (data?.team ?? []).map((m) => (
               <div
                 key={m.user_id}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3 sm:flex-nowrap"

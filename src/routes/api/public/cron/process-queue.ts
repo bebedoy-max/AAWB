@@ -32,7 +32,7 @@ export const Route = createFileRoute("/api/public/cron/process-queue")({
 
         const results: Record<string, unknown>[] = [];
         for (const campaign of campaigns ?? []) {
-          const tick = await processCampaignTick(supabaseAdmin, campaign, 10);
+          const tick = await processCampaignTick(supabaseAdmin, campaign, 200);
           results.push({ campaign_id: campaign.id, ...tick });
         }
 

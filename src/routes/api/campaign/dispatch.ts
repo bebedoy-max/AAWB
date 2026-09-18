@@ -1,15 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { json, unauthorized, userClientFromRequest } from "@/lib/supabase-user.server";
-import { buildMessageBody, randomDelay, sanitizePhone } from "@/lib/whatsapp";
+import { buildMessageBody, sanitizePhone, sendDelaySeconds } from "@/lib/whatsapp";
+import {
+  antiBanBatchSize,
+  antiBanDelaySeconds,
+  antiBanLongPauseSeconds,
+  shuffle,
+  varyMessage,
+} from "@/lib/anti-ban";
 import type { CampaignStatus } from "@/types/wa";
 
 const payloadSchema = z.object({
   campaign_id: z.string().uuid(),
-  action: z.enum(["enqueue", "process", "pause", "resume", "abort"]),
+  action: z.enum(["enqueue", "process", "pause", "resume", "abort", "retry"]),
 });
 
-const BATCH_PER_TICK = 5;
+const BATCH_PER_TICK = 200;
+
+
 
 /**
  * Campaign dispatcher. `enqueue` materialises the audience into
@@ -35,7 +44,32 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
         if (campaignError) return json({ error: campaignError.message }, 400);
         if (!campaign) return json({ error: "Kampanye tidak ditemukan" }, 404);
 
+        if (action === "retry") {
+          // Kirim ulang semua pesan yang gagal atau tersangkut di "processing".
+          const { error: retryError } = await supabase
+            .from("message_queue")
+            .update({
+              status: "pending",
+              attempts: 0,
+              error_log: null,
+              scheduled_at: new Date().toISOString(),
+            })
+            .eq("campaign_id", campaign_id)
+            .in("status", ["failed", "processing"]);
+          if (retryError) return json({ error: retryError.message }, 400);
+          await supabase.from("campaigns").update({ status: "running" }).eq("id", campaign_id);
+          return json({ ok: true, status: "running" });
+        }
+
         if (action === "pause" || action === "resume" || action === "abort") {
+          const { data: authData } = await supabase.auth.getUser();
+          const { logActivity } = await import("@/lib/activity-log.server");
+          await logActivity(
+            authData?.user?.id,
+            action === "pause" ? "blast_pause" : action === "resume" ? "blast_resume" : "blast_abort",
+            `Kampanye ${campaign.name ?? campaign_id}`,
+          );
+
           const status: CampaignStatus =
             action === "pause" ? "paused" : action === "resume" ? "running" : "failed";
           await supabase.from("campaigns").update({ status }).eq("id", campaign_id);
@@ -58,6 +92,8 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
             await supabase.from("campaigns").update({ status: "running" }).eq("id", campaign_id);
             return json({ ok: true, queued: 0, status: "running", message: "Sudah masuk antrean" });
           }
+
+          const antiBan = Boolean((campaign as unknown as Record<string, unknown>)["anti_ban"]);
 
           let query = supabase.from("contacts").select("id,name,phone,metadata_json");
           if (campaign.group_id) query = query.eq("group_id", campaign.group_id);
@@ -83,21 +119,56 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
             if (tpl) template = { ...template, ...(tpl as unknown as typeof template) };
           }
 
+          // Anti Ban: buang nomor yang sudah masuk daftar penyaringan
+          // (pernah membalas STOP/BERHENTI/UNSUB atau nomor tidak aktif).
+          let audience = contacts;
+          if (antiBan) {
+            const { data: suppressed } = await supabase
+              .from("suppression_list")
+              .select("phone")
+              .limit(100000);
+            const blocked = new Set(
+              ((suppressed ?? []) as Array<{ phone: string }>).map((r) => r.phone),
+            );
+            audience = audience.filter((c) => !blocked.has(sanitizePhone(c.phone)));
+            if (!audience.length) {
+              return json(
+                { error: "Semua nomor pada daftar ini ada di daftar penyaringan Anti Ban" },
+                400,
+              );
+            }
+            // Urutan pengiriman diacak, bukan berurutan sesuai daftar.
+            audience = shuffle(audience);
+          }
+
           const startAt = campaign.scheduled_at ? new Date(campaign.scheduled_at) : new Date();
           let cursor = startAt.getTime();
+          let batchRemaining = antiBan ? antiBanBatchSize() : 0;
 
-          const rows = contacts.map((contact) => {
+          const rows = audience.map((contact) => {
             const meta = (contact.metadata_json ?? {}) as Record<string, string>;
-            cursor += randomDelay(campaign.min_delay, campaign.max_delay) * 1000;
+            if (antiBan) {
+              // Jeda acak antar pesan.
+              cursor += antiBanDelaySeconds(campaign.min_delay, campaign.max_delay) * 1000;
+              batchRemaining -= 1;
+              if (batchRemaining <= 0) {
+                // Jeda panjang acak 2–5 menit sebelum batch berikutnya.
+                cursor += antiBanLongPauseSeconds() * 1000;
+                batchRemaining = antiBanBatchSize();
+              }
+            } else {
+              cursor += sendDelaySeconds(campaign.min_delay, campaign.max_delay) * 1000;
+            }
+            const body = buildMessageBody(template.content, {
+              name: contact.name,
+              phone: sanitizePhone(contact.phone),
+              ...meta,
+            });
             return {
               user_id: campaign.user_id,
               campaign_id,
               recipient_phone: sanitizePhone(contact.phone),
-              message_body: buildMessageBody(template.content, {
-                name: contact.name,
-                phone: sanitizePhone(contact.phone),
-                ...meta,
-              }),
+              message_body: antiBan ? varyMessage(body) : body,
               status: "pending" as const,
               scheduled_at: new Date(cursor).toISOString(),
             };
@@ -109,7 +180,9 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
           await supabase
             .from("campaigns")
             .update({
-              status: campaign.scheduled_at ? "paused" : "running",
+              // Scheduled rows already carry their own due time. Keep the
+              // campaign active so workers begin automatically at that time.
+              status: "running",
               total_targets: rows.length,
               media_url: template.media_url,
               media_type: template.media_type ?? "text",
@@ -119,8 +192,18 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
             } as never)
             .eq("id", campaign_id);
 
+          {
+            const { data: authData } = await supabase.auth.getUser();
+            const { logActivity } = await import("@/lib/activity-log.server");
+            await logActivity(
+              authData?.user?.id,
+              "blast_start",
+              `Kampanye ${campaign.name ?? campaign_id} — ${rows.length} pesan masuk antrean`,
+            );
+          }
           return json({ ok: true, queued: rows.length, status: "running" });
         }
+
 
         // action === "process": one rate-limited worker tick against the real gateway.
         const { processCampaignTick } = await import("@/lib/queue-worker.server");
@@ -136,6 +219,8 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
             media_filename: (campaign as unknown as Record<string, never>)["media_filename"] ?? null,
             footer_text: (campaign as unknown as Record<string, never>)["footer_text"] ?? null,
             buttons_json: (campaign as unknown as Record<string, never>)["buttons_json"] ?? null,
+            anti_ban: Boolean((campaign as unknown as Record<string, unknown>)["anti_ban"]),
+
           },
           BATCH_PER_TICK,
         );

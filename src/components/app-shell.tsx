@@ -8,19 +8,23 @@ import {
   LayoutDashboard,
   Smartphone,
   Users,
-  FileText,
   Send,
-  ListChecks,
   Settings,
   Menu,
   Moon,
   Sun,
   LogOut,
-  ChevronRight,
   ShieldCheck,
   Wallet,
-  Gift,
+  HandCoins,
+  Network,
+  Home,
+  CalendarDays,
+  ListChecks,
+  FileText,
+  Clock3,
 } from "lucide-react";
+
 import { getMyRole } from "@/lib/admin.functions";
 import { attachReferral } from "@/lib/rewards.functions";
 
@@ -40,38 +44,57 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-const NAV = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/devices", label: "Perangkat", icon: Smartphone },
-  { to: "/contacts", label: "Kontak & Grup", icon: Users },
-  { to: "/templates", label: "Template Pesan", icon: FileText },
-  { to: "/campaigns", label: "Kampanye", icon: Send },
-  { to: "/queue", label: "Antrean & Log", icon: ListChecks },
-  { to: "/rewards", label: "Saldo & Reward", icon: Wallet },
-  { to: "/referral", label: "Referal", icon: Gift },
-  { to: "/settings", label: "Pengaturan", icon: Settings },
+/** Menu member utama mengikuti alur ringkas pada referensi. */
+const MEMBER_NAV = [
+  { to: "/dashboard", label: "Beranda", icon: Home },
+  { to: "/devices", label: "WhatsApp", icon: Smartphone },
+  { to: "/rewards", label: "Klaim Saldo", icon: HandCoins },
+  { to: "/referral", label: "Tim Afiliasi", icon: Network },
 ] as const;
 
-const ADMIN_NAV = { to: "/admin", label: "Admin", icon: ShieldCheck } as const;
+/** Menu utama admin (bar horizontal, mengikuti rancangan konsol admin). */
+const ADMIN_NAV = [
+  { to: "/admin", label: "Ringkasan", icon: LayoutDashboard },
+  { to: "/admin/pengguna", label: "Pengguna", icon: Users },
+  { to: "/admin/kampanye", label: "Kampanye", icon: Send },
+  { to: "/admin/nomor", label: "Data Nomor", icon: ListChecks },
+  { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
+  { to: "/admin/tim", label: "Tim Admin", icon: ShieldCheck },
+  { to: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
+] as const;
 
-function useIsAdmin(): boolean {
+export function useIsAdmin(): boolean {
   const fetchRole = useServerFn(getMyRole);
   const { data } = useQuery({
     queryKey: ["my-role"],
-    queryFn: () => fetchRole(),
+    queryFn: async () => {
+      const { data: s } = await supabase.auth.getSession();
+      if (!s.session?.access_token) {
+        return { role: "member", is_admin: false, is_super_admin: false, setup_required: false };
+      }
+      return fetchRole();
+    },
+    retry: false,
     staleTime: 60_000,
   });
   return Boolean(data?.is_admin);
 }
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+function isActivePath(pathname: string, to: string): boolean {
+  if (to === "/admin") return pathname === "/admin" || pathname === "/admin/";
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+function NavLinks({ onNavigate, adminMode = false }: { onNavigate?: () => void; adminMode?: boolean }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = useIsAdmin();
-  const items = isAdmin ? [...NAV, ADMIN_NAV] : [...NAV];
+  const items = adminMode || isAdmin ? [...ADMIN_NAV] : [...MEMBER_NAV];
+
   return (
-    <nav className="flex flex-col gap-1 px-3">
+    <nav className="flex flex-col gap-1 px-3 pb-6">
       {items.map(({ to, label, icon: Icon }) => {
-        const active = pathname === to;
+        const active = isActivePath(pathname, to);
         return (
           <Link
             key={to}
@@ -93,11 +116,44 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+/** Bar navigasi horizontal khusus konsol admin. */
+function AdminTopNav() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  return (
+    <div className="border-b bg-card">
+      <div className="mx-auto flex max-w-[1400px] items-center justify-center gap-2 overflow-x-auto px-3 py-2 lg:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {ADMIN_NAV.map(({ to, label, icon: Icon }) => {
+          const active = isActivePath(pathname, to);
+          return (
+            <Link
+              key={to}
+              to={to}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <Icon className="size-4" />
+              {label}
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 
 function Brand() {
   return (
-    <div className="flex items-center px-5 pt-5 pb-1">
-      <BrandLogo className="h-24 max-w-full" />
+    <div className="grid grid-cols-[52px_minmax(0,1fr)] items-center border-b px-4 py-5">
+      <BrandLogo className="h-9 w-10 object-cover object-left" />
+      <div className="min-w-0 border-l pl-4">
+        <p className="text-sm font-bold leading-tight">Member</p>
+        <p className="text-base font-semibold leading-tight text-primary">Dashboard</p>
+      </div>
     </div>
   );
 }
@@ -106,13 +162,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState<string>("");
+  const [account, setAccount] = useState({ username: "member", name: "Member" });
+  const [clock, setClock] = useState(new Date());
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const linkReferral = useServerFn(attachReferral);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ""));
+    supabase.auth.getUser().then(({ data }) => {
+      const metadata = data.user?.user_metadata as { username?: string; organization_name?: string } | undefined;
+      setAccount({
+        username: metadata?.username ?? data.user?.email?.split("@")[0] ?? "member",
+        name: metadata?.organization_name ?? "Member",
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(new Date()), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   // Kaitkan kode undangan setelah akun aktif (termasuk yang harus konfirmasi
@@ -157,7 +225,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
   });
 
-  const current = [...NAV, ADMIN_NAV].find((n) => n.to === pathname);
+  // Konsol admin memakai tata letak bar atas horizontal (seperti referensi),
+  // sedangkan area member tetap memakai sidebar.
+  const adminLayout = pathname === "/admin" || pathname.startsWith("/admin/");
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -165,16 +235,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen w-full max-w-full overflow-x-hidden bg-background">
-      <aside className="hidden w-64 shrink-0 border-r bg-sidebar lg:block">
-        <div className="sticky top-0">
-          <Brand />
-          <NavLinks />
-        </div>
-      </aside>
+    <div className={cn("flex min-h-screen w-full max-w-full overflow-x-hidden bg-background", !adminLayout && "member-surface")}>
+      {adminLayout ? null : (
+        <aside className="hidden w-60 shrink-0 border-r bg-sidebar lg:block">
+          <div className="sticky top-0 flex h-screen flex-col">
+            <Brand />
+            <p className="px-6 pb-2 pt-2 text-[10px] font-bold uppercase text-muted-foreground">Menu utama</p>
+            <NavLinks />
+            <div className="mt-auto border-t p-5">
+              <p className="truncate text-sm font-bold">{account.name}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">@{account.username}</p>
+            </div>
+          </div>
+        </aside>
+      )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur lg:px-6">
+
+        <header className={cn("sticky top-0 z-30 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 bg-background/85 px-4 backdrop-blur lg:px-6", adminLayout ? "h-[4.75rem] border-b py-1" : "h-20")}>
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Buka menu">
@@ -184,21 +262,41 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SheetContent side="left" className="w-64 bg-sidebar p-0">
               <SheetTitle className="sr-only">Navigasi</SheetTitle>
               <Brand />
-              <NavLinks onNavigate={() => setOpen(false)} />
+              <NavLinks adminMode={adminLayout} onNavigate={() => setOpen(false)} />
             </SheetContent>
           </Sheet>
 
-          <div className="flex min-w-0 items-center gap-1.5 text-sm">
-            <span className="text-muted-foreground">AAWB</span>
-            <ChevronRight className="size-3.5 text-muted-foreground" />
-            <span className="truncate font-medium">{current?.label ?? "Ringkasan"}</span>
-          </div>
+          {adminLayout ? (
+            <Link to="/admin" className="flex min-w-0 items-center gap-2">
+              <BrandLogo className="h-[4.5rem] max-w-[300px] shrink-0" />
+              <span className="hidden truncate text-sm font-semibold sm:inline">Admin</span>
+            </Link>
+          ) : (
+            <div className="mx-auto grid min-w-0 w-full max-w-3xl grid-cols-[minmax(0,1fr)_auto] items-center rounded-full border bg-card px-4 py-2.5 text-xs shadow-panel sm:px-5 sm:text-sm lg:absolute lg:left-1/2 lg:w-[min(48rem,calc(100%-25rem))] lg:-translate-x-1/2">
+              <div className="flex min-w-0 items-center gap-2.5 border-r pr-3 sm:gap-3 sm:pr-5">
+                <span className={cn("size-2 shrink-0 rounded-full", activeSession ? "bg-success" : "bg-muted-foreground")} />
+                <span className="truncate text-muted-foreground">
+                  {activeSession ? `${activeSession.session_name} aktif` : "Tidak ada perangkat terhubung"}
+                </span>
+              </div>
+              <div className="flex min-w-0 items-center gap-2 pl-3 sm:gap-3 sm:pl-5">
+                <CalendarDays className="hidden size-4 shrink-0 text-primary sm:block" />
+                <span className="hidden truncate text-muted-foreground md:inline">
+                  {new Intl.DateTimeFormat("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date())}
+                </span>
+                <span className="hidden text-muted-foreground md:inline">•</span>
+                <Clock3 className="size-4 shrink-0 text-primary" />
+                <span className="shrink-0 font-semibold tabular-nums">{clock.toLocaleTimeString("id-ID")}</span>
+              </div>
+            </div>
+          )}
 
-          <div className="ml-auto flex items-center gap-2">
+
+          <div className="col-start-3 ml-auto flex items-center gap-2">
             <Badge
               variant="outline"
               className={cn(
-                "hidden gap-1.5 sm:inline-flex",
+                "hidden gap-1.5",
                 activeSession ? "border-primary/40 text-primary" : "text-muted-foreground",
               )}
             >
@@ -222,17 +320,19 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Button variant="ghost" size="icon" aria-label="Menu akun">
                   <Avatar className="size-8">
                     <AvatarFallback className="bg-accent text-accent-foreground text-xs">
-                      {email.slice(0, 2).toUpperCase() || "WB"}
+                      {account.username.slice(0, 2).toUpperCase() || "MB"}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
-                  {email || "Sudah masuk"}
+                  @{account.username}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate({ to: "/settings" })}>
+                <DropdownMenuItem
+                  onClick={() => navigate({ to: adminLayout ? "/admin/pengaturan" : "/settings" })}
+                >
                   <Settings className="mr-2 size-4" /> Pengaturan
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={signOut}>
@@ -243,7 +343,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="w-full min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6">
+        {adminLayout ? <AdminTopNav /> : null}
+
+
+
+        <main className={cn("w-full min-w-0 flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6", !adminLayout && "bg-secondary/40 lg:px-10")}>
           {children}
         </main>
       </div>

@@ -1,0 +1,139 @@
+/**
+ * Tabel log aktivitas pengguna & admin untuk halaman Admin.
+ * Aktivitas Super Admin tidak dicatat, jadi tidak akan muncul di sini.
+ */
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { RefreshCw, ScrollText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { listActivityLog, type ActivityRow } from "@/lib/activity-log.functions";
+
+const ACTION_LABEL: Record<string, string> = {
+  login: "Masuk",
+  logout: "Keluar",
+  role_change: "Ubah peran",
+  password_reset: "Reset kata sandi",
+  user_delete: "Hapus pengguna",
+  blast_start: "Mulai blast",
+  blast_pause: "Jeda blast",
+  blast_resume: "Lanjutkan blast",
+  blast_abort: "Batalkan blast",
+  blast_retry: "Kirim ulang blast",
+  withdrawal_request: "Ajukan penarikan",
+  withdrawal_approved: "Setujui penarikan",
+  withdrawal_rejected: "Tolak penarikan",
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: "Admin",
+  member: "Member",
+  super_admin: "Super Admin",
+};
+
+function formatTime(value: string): string {
+  const d = new Date(value);
+  return d.toLocaleString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function AdminActivityLog() {
+  const fetchLog = useServerFn(listActivityLog);
+  const [q, setQ] = useState("");
+
+  const { data, isLoading, isFetching, refetch, error } = useQuery({
+    queryKey: ["activity-log"],
+    queryFn: () => fetchLog(),
+  });
+
+  const rows = useMemo(() => {
+    const list: ActivityRow[] = data ?? [];
+    const needle = q.trim().toLowerCase();
+    if (!needle) return list;
+    return list.filter((r) =>
+      [r.actor_email, r.action, ACTION_LABEL[r.action], r.detail, r.actor_role]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(needle)),
+    );
+  }, [data, q]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ScrollText className="size-4" />
+              User Log
+            </CardTitle>
+            <CardDescription>
+              Aktivitas pengguna dan admin, terbaru di atas. Aktivitas Super Admin tidak dicatat.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cari email atau aktivitas"
+              className="w-44 sm:w-60"
+            />
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCw className={isFetching ? "size-4 animate-spin" : "size-4"} />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {error ? (
+          <p className="py-6 text-center text-sm text-destructive">{(error as Error).message}</p>
+        ) : isLoading ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Memuat…</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase text-muted-foreground">
+                  <th className="py-2 pr-4 font-medium">Waktu</th>
+                  <th className="py-2 pr-4 font-medium">Pengguna</th>
+                  <th className="py-2 pr-4 font-medium">Peran</th>
+                  <th className="py-2 pr-4 font-medium">Aktivitas</th>
+                  <th className="py-2 font-medium">Keterangan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b last:border-0">
+                    <td className="whitespace-nowrap py-2 pr-4 text-muted-foreground">
+                      {formatTime(r.created_at)}
+                    </td>
+                    <td className="py-2 pr-4">{r.actor_email ?? "—"}</td>
+                    <td className="py-2 pr-4">
+                      <Badge variant="outline">{ROLE_LABEL[r.actor_role] ?? r.actor_role}</Badge>
+                    </td>
+                    <td className="py-2 pr-4 font-medium">{ACTION_LABEL[r.action] ?? r.action}</td>
+                    <td className="py-2 text-muted-foreground">{r.detail ?? "—"}</td>
+                  </tr>
+                ))}
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-muted-foreground">
+                      Belum ada aktivitas tercatat.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
