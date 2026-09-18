@@ -37,13 +37,13 @@ export function CampaignAutoRunner() {
         session_id: string | null;
         is_pool: boolean | null;
       }>;
-      if (!running.length) return;
 
       const refresh = () => {
         queryClient.invalidateQueries({ queryKey: ["campaigns"] });
         queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
         queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
         queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+        queryClient.invalidateQueries({ queryKey: ["member-blast-state"] });
       };
 
       // Kampanye yang terikat satu perangkat tertentu.
@@ -62,17 +62,22 @@ export function CampaignAutoRunner() {
         refresh();
       }
 
-      // Kampanye kolam: periksa semua perangkat. Tick server memverifikasi
-      // status gateway nyata dan menyelaraskan status DB, sehingga perangkat
-      // yang baru tersambung langsung bekerja dan status lama tidak dianggap aktif.
-      const hasPool = running.some((c) => c.is_pool && !c.session_id);
-      if (!hasPool) return;
-
+      // Perangkat yang sudah ditekan Start selalu diperiksa, tanpa melihat
+      // jenis kampanye. Daftar kampanye di atas bisa kosong untuk member
+      // (kampanye milik admin tersembunyi oleh aturan akses), sehingga syarat
+      // "kampanye kolam" dulu membuat blast tidak pernah jalan sendiri.
+      // Server-lah yang memutuskan ada pekerjaan atau tidak.
       const { data: devices } = await supabase
         .from("wa_sessions")
-        .select("id,status");
+        .select("id,status,blast_ready");
 
-      for (const device of (devices ?? []) as Array<{ id: string }>) {
+      const readyDevices = ((devices ?? []) as unknown as Array<{
+        id: string;
+        status: string | null;
+        blast_ready: boolean | null;
+      }>).filter((device) => device.blast_ready);
+
+      for (const device of readyDevices) {
         if (stopped) return;
         if (busyDevices.has(device.id)) continue;
         busyDevices.add(device.id);
