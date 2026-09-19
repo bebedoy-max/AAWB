@@ -79,13 +79,14 @@ export async function processCampaignTick(
   }
 
   if (!campaign.session_id) {
-    await supabase.from("campaigns").update({ status: "failed" }).eq("id", campaign.id);
+    // Kampanye kolam: tidak terikat satu perangkat, dikerjakan oleh perangkat
+    // Worker's lewat jalur blast member. Jangan pernah ditandai gagal di sini.
     return {
       processed: 0,
       sent: 0,
       failed: 0,
-      status: "failed",
-      error: "Tidak ada perangkat WhatsApp yang dipilih untuk kampanye ini",
+      status: "running",
+      error: "Kampanye kolam — dikerjakan oleh perangkat Worker's",
     };
   }
 

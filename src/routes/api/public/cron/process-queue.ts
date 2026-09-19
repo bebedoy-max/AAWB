@@ -32,6 +32,8 @@ export const Route = createFileRoute("/api/public/cron/process-queue")({
 
         const results: Record<string, unknown>[] = [];
         for (const campaign of campaigns ?? []) {
+          // Kampanye kolam (tanpa perangkat khusus) dikerjakan perangkat Worker's.
+          if (!campaign.session_id) continue;
           const tick = await processCampaignTick(supabaseAdmin, campaign, 200);
           results.push({ campaign_id: campaign.id, ...tick });
         }
