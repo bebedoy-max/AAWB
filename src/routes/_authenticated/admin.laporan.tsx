@@ -66,17 +66,16 @@ type ReportRow = {
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Menunggu",
-  processing: "Diproses",
   sent: "Berhasil",
   failed: "Gagal",
 };
 
 const STATUS_STYLE: Record<string, string> = {
   pending: "border-warning/40 text-warning",
-  processing: "border-info/40 text-info",
   sent: "border-success/40 text-success",
   failed: "border-destructive/40 text-destructive",
 };
+
 
 function csvCell(value: string): string {
   return `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
@@ -130,7 +129,9 @@ function LaporanPage() {
   });
 
   const rows = useMemo(() => {
-    const list = data?.rows ?? [];
+    // Status "processing" tidak ditampilkan: belum pasti terkirim.
+    const list = (data?.rows ?? []).filter((r) => r.status !== "processing");
+
     let filtered = list;
     if (dateMode === "month") {
       const now = new Date();

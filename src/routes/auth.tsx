@@ -91,10 +91,21 @@ function AuthPage() {
     }
     setLoading(true);
     const isEmail = identifier.includes("@");
-    const { error } = await supabase.auth.signInWithPassword({
-      email: isEmail ? identifier : usernameEmail(normalized),
+    const loginEmail = isEmail ? identifier.toLowerCase() : usernameEmail(normalized);
+    let { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
       password: isEmail ? password : memberPassword(password),
     });
+    if (error && isEmail && error.message.toLowerCase().includes("invalid login credentials")) {
+      // Akun yang dulunya dibuat lewat pendaftaran worker menyimpan kata sandi
+      // dengan akhiran internal — coba bentuk itu sebelum menolak.
+      const retry = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: memberPassword(password),
+      });
+      error = retry.error;
+    }
+
     if (error) {
       setLoading(false);
       toast.error(authErrorMessage(error.message));

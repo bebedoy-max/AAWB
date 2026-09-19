@@ -601,6 +601,9 @@ export const resetTargets = createServerFn({ method: "POST" })
     return { ok: true, removed: Number(count ?? 0) };
   });
 
+/** Batas waktu sebuah pesan boleh berstatus "processing" sebelum dianggap gagal. */
+const PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
+
 /** Laporan pengiriman per kampanye. */
 export const listReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -612,14 +615,31 @@ export const listReport = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
+    // Pesan yang tersangkut di "processing" lebih lama dari batas waktu
+    // dianggap GAGAL — jangan pernah dihitung sebagai terkirim.
+    try {
+      await admin
+        .from("message_queue")
+        .update({
+          status: "failed",
+          error_log: "Gagal: melewati batas waktu 5 menit tanpa konfirmasi terkirim",
+        })
+        .eq("status", "processing")
+        .lt("created_at", new Date(Date.now() - PROCESSING_TIMEOUT_MS).toISOString());
+    } catch {
+      /* pembersihan bersifat best-effort */
+    }
+
     let query = admin
       .from("message_queue")
       .select("id,campaign_id,session_id,user_id,recipient_phone,message_body,status,error_log,sent_at,created_at")
+      .neq("status", "processing")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
     const { data: rows, error } = await query;
     if (error) throw new Error(error.message);
+
 
     const { data: sessions } = await admin
       .from("wa_sessions")
@@ -656,7 +676,8 @@ export const listReport = createServerFn({ method: "POST" })
       }),
       sent: list.filter((r) => r.status === "sent").length,
       failed: list.filter((r) => r.status === "failed").length,
-      ready: list.filter((r) => r.status === "pending" || r.status === "processing").length,
+      ready: list.filter((r) => r.status === "pending").length,
+
     };
   });
 
