@@ -198,7 +198,19 @@ export async function processBlastTick(
       message_body: string;
       attempts: number;
     }>;
-    if (!queue.length) break;
+    if (!queue.length) {
+      // Tidak ada sisa untuk perangkat ini: ambil lagi dari kolam kampanye
+      // berjalan. Pengiriman TIDAK pernah dihentikan di sini — selama masih
+      // ada kampanye aktif, perangkat terus mencari pekerjaan.
+      const { data: more } = await supabase.rpc("claim_blast_batch", {
+        _session_id: sessionId,
+        _limit: CLAIM_SIZE,
+      });
+      const got = Number(more ?? 0);
+      claimed += got;
+      if (!got) await sleep(1500);
+      continue;
+    }
 
     for (const item of queue) {
       if (Date.now() - startedAt >= TICK_BUDGET_MS) break;
@@ -291,19 +303,20 @@ export async function processBlastTick(
           failed += 1;
         }
         if (!deliveryUnknown && /perangkat whatsapp|session status|error 463|koneksi perangkat/i.test(message)) {
+          // Coba sambungkan ulang lalu LANJUT mengirim. Tidak ada penghentian
+          // di tengah jalan; kalau masih putus, siklus berikutnya mencoba lagi.
           const again = await ensureConnected(supabase, sessionId);
           if (!again.connected) {
             note = "Perangkat terputus — pengiriman dilanjutkan otomatis setelah tersambung";
-            break;
+            await sleep(1500);
+          } else {
+            note = undefined;
           }
         }
-        if (note) break;
       }
 
       await sleep(speedDelayMs(speed));
     }
-
-    if (note) break;
   }
 
   // Kampanye yang seluruh nomornya sudah diproses otomatis ditandai selesai.

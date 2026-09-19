@@ -38,6 +38,7 @@ import { Route as AuthenticatedAdminTimRouteImport } from './routes/_authenticat
 import { Route as ApiBlastTickRouteImport } from './routes/api/blast/tick'
 import { Route as ApiCampaignDispatchRouteImport } from './routes/api/campaign/dispatch'
 import { Route as ApiSessionIdRouteImport } from './routes/api/session/$id'
+import { Route as ApiPublicCronBlastDevicesRouteImport } from './routes/api/public/cron/blast-devices'
 import { Route as ApiPublicCronProcessQueueRouteImport } from './routes/api/public/cron/process-queue'
 import { Route as ApiPublicDbSplatRouteImport } from './routes/api/public/db/$'
 import { Route as ApiPublicTelegramWebhookRouteImport } from './routes/api/public/telegram/webhook'
@@ -191,6 +192,12 @@ const ApiSessionIdRoute = ApiSessionIdRouteImport.update({
   path: '/api/session/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCronBlastDevicesRoute =
+  ApiPublicCronBlastDevicesRouteImport.update({
+    id: '/api/public/cron/blast-devices',
+    path: '/api/public/cron/blast-devices',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicCronProcessQueueRoute =
   ApiPublicCronProcessQueueRouteImport.update({
     id: '/api/public/cron/process-queue',
@@ -243,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/api/public/cron/blast-devices': typeof ApiPublicCronBlastDevicesRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
@@ -276,6 +284,7 @@ export interface FileRoutesByTo {
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
+  '/api/public/cron/blast-devices': typeof ApiPublicCronBlastDevicesRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
@@ -312,6 +321,7 @@ export interface FileRoutesById {
   '/api/campaign/dispatch': typeof ApiCampaignDispatchRoute
   '/api/session/$id': typeof ApiSessionIdRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/api/public/cron/blast-devices': typeof ApiPublicCronBlastDevicesRoute
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
@@ -348,6 +358,7 @@ export interface FileRouteTypes {
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/admin/'
+    | '/api/public/cron/blast-devices'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
     | '/api/public/telegram/webhook'
@@ -381,6 +392,7 @@ export interface FileRouteTypes {
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/admin'
+    | '/api/public/cron/blast-devices'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
     | '/api/public/telegram/webhook'
@@ -416,6 +428,7 @@ export interface FileRouteTypes {
     | '/api/campaign/dispatch'
     | '/api/session/$id'
     | '/_authenticated/admin/'
+    | '/api/public/cron/blast-devices'
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
     | '/api/public/telegram/webhook'
@@ -430,6 +443,7 @@ export interface RootRouteChildren {
   ApiBlastTickRoute: typeof ApiBlastTickRoute
   ApiCampaignDispatchRoute: typeof ApiCampaignDispatchRoute
   ApiSessionIdRoute: typeof ApiSessionIdRoute
+  ApiPublicCronBlastDevicesRoute: typeof ApiPublicCronBlastDevicesRoute
   ApiPublicCronProcessQueueRoute: typeof ApiPublicCronProcessQueueRoute
   ApiPublicDbSplatRoute: typeof ApiPublicDbSplatRoute
   ApiPublicTelegramWebhookRoute: typeof ApiPublicTelegramWebhookRoute
@@ -641,6 +655,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/cron/blast-devices': {
+      id: '/api/public/cron/blast-devices'
+      path: '/api/public/cron/blast-devices'
+      fullPath: '/api/public/cron/blast-devices'
+      preLoaderRoute: typeof ApiPublicCronBlastDevicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/cron/process-queue': {
       id: '/api/public/cron/process-queue'
       path: '/api/public/cron/process-queue'
@@ -750,6 +771,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBlastTickRoute: ApiBlastTickRoute,
   ApiCampaignDispatchRoute: ApiCampaignDispatchRoute,
   ApiSessionIdRoute: ApiSessionIdRoute,
+  ApiPublicCronBlastDevicesRoute: ApiPublicCronBlastDevicesRoute,
   ApiPublicCronProcessQueueRoute: ApiPublicCronProcessQueueRoute,
   ApiPublicDbSplatRoute: ApiPublicDbSplatRoute,
   ApiPublicTelegramWebhookRoute: ApiPublicTelegramWebhookRoute,

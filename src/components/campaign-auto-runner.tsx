@@ -6,102 +6,101 @@ import { blastTick, dispatchCampaign } from "@/lib/api-client";
 /**
  * Pekerja kampanye global.
  *
- * Selama ada kampanye berstatus "berjalan", komponen ini terus memeriksa
- * perangkat lewat server setiap beberapa detik. Begitu perangkat aktif,
- * pengiriman langsung lanjut sendiri — admin tidak perlu menekan
- * jeda/lanjut, dan tidak harus membuka halaman Kampanye.
+ * Setiap perangkat yang sudah ditekan Start punya alur pengiriman sendiri yang
+ * berjalan TERUS-MENERUS tanpa jeda tambahan: begitu satu putaran selesai,
+ * putaran berikutnya langsung dimulai. Pengiriman hanya berhenti bila worker
+ * menekan Stop pada perangkat itu, data habis, atau kampanye dihentikan admin.
  *
- * Hanya satu tab yang boleh menjalankan pekerja ini (navigator.locks),
- * dan hanya satu pengiriman per perangkat pada satu waktu, supaya
- * sambungan WhatsApp tidak dipakai ganda.
+ * Perangkat yang sedang terputus tidak dimatikan — sambungan dicoba ulang
+ * otomatis dan pengiriman lanjut sendiri setelah tersambung.
+ *
+ * Hanya satu tab yang boleh menjalankan pekerja ini (navigator.locks), dan
+ * hanya satu alur per perangkat, supaya sambungan WhatsApp tidak dipakai ganda.
  */
 export function CampaignAutoRunner() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     let stopped = false;
-    const busyDevices = new Set<string>();
+    const deviceLoops = new Set<string>();
 
-    const runOnce = async () => {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session) return;
-
-      const { data: campaigns } = await supabase
-        .from("campaigns")
-        .select("id,session_id,status,is_pool")
-        .eq("status", "running")
-        .limit(20);
-
-      const running = (campaigns ?? []) as unknown as Array<{
-        id: string;
-        session_id: string | null;
-        is_pool: boolean | null;
-      }>;
-
-      const refresh = () => {
-        queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-        queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
-        queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
-        queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
-        queryClient.invalidateQueries({ queryKey: ["member-blast-state"] });
-      };
-
-      // Kampanye yang terikat satu perangkat tertentu.
-      for (const campaign of running) {
-        if (stopped) return;
-        const deviceId = campaign.session_id;
-        if (!deviceId || busyDevices.has(deviceId)) continue;
-        busyDevices.add(deviceId);
-        try {
-          await dispatchCampaign({ campaign_id: campaign.id, action: "process" });
-        } catch {
-          /* gangguan sementara: dicoba lagi pada siklus berikutnya */
-        } finally {
-          busyDevices.delete(deviceId);
-        }
-        refresh();
-      }
-
-      // Perangkat yang sudah ditekan Start selalu diperiksa, tanpa melihat
-      // jenis kampanye. Daftar kampanye di atas bisa kosong untuk member
-      // (kampanye milik admin tersembunyi oleh aturan akses), sehingga syarat
-      // "kampanye kolam" dulu membuat blast tidak pernah jalan sendiri.
-      // Server-lah yang memutuskan ada pekerjaan atau tidak.
-      const { data: devices } = await supabase
-        .from("wa_sessions")
-        .select("id,status,blast_ready");
-
-      const readyDevices = ((devices ?? []) as unknown as Array<{
-        id: string;
-        status: string | null;
-        blast_ready: boolean | null;
-      }>).filter((device) => device.blast_ready);
-
-      // Semua perangkat dijalankan BERSAMAAN. Sebelumnya dijalankan bergiliran,
-      // sehingga perangkat ke-2 sampai ke-4 menunggu giliran dan terlihat
-      // seperti berhenti sendiri di tengah blast.
-      await Promise.all(
-        readyDevices.map(async (device) => {
-          if (stopped || busyDevices.has(device.id)) return;
-          busyDevices.add(device.id);
-          try {
-            await blastTick(device.id);
-          } catch {
-            /* gangguan sementara: dicoba lagi pada siklus berikutnya */
-          } finally {
-            busyDevices.delete(device.id);
-          }
-          refresh();
-        }),
-      );
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
+      queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["member-blast-state"] });
     };
 
-    const loop = async () => {
+    // Alur pengiriman satu perangkat: berputar terus selama saklar "siap blast"
+    // pada perangkat itu masih menyala.
+    const runDevice = async (deviceId: string) => {
+      if (deviceLoops.has(deviceId)) return;
+      deviceLoops.add(deviceId);
+      try {
+        while (!stopped) {
+          try {
+            await blastTick(deviceId);
+          } catch {
+            /* gangguan sementara: langsung dicoba lagi */
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+          refresh();
+
+          const { data: row } = await supabase
+            .from("wa_sessions")
+            .select("blast_ready")
+            .eq("id", deviceId)
+            .maybeSingle();
+          if (!row || !(row as { blast_ready?: boolean | null }).blast_ready) break;
+        }
+      } finally {
+        deviceLoops.delete(deviceId);
+      }
+    };
+
+    // Pengawas: mencari kampanye berjalan dan perangkat aktif, lalu memastikan
+    // setiap perangkat aktif punya alur pengiriman yang hidup.
+    const supervise = async () => {
       while (!stopped) {
-        await runOnce();
-        // Jeda sesingkat mungkin: jeda antar pesan sudah diatur oleh pilihan
-        // kecepatan worker, bukan oleh pemeriksa ini.
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        try {
+          const { data: session } = await supabase.auth.getSession();
+          if (session.session) {
+            const { data: campaigns } = await supabase
+              .from("campaigns")
+              .select("id,session_id,status")
+              .eq("status", "running")
+              .limit(20);
+
+            // Kampanye yang terikat satu perangkat tertentu tetap didorong.
+            for (const campaign of (campaigns ?? []) as unknown as Array<{
+              id: string;
+              session_id: string | null;
+            }>) {
+              if (stopped) return;
+              if (!campaign.session_id || deviceLoops.has(campaign.session_id)) continue;
+              try {
+                await dispatchCampaign({ campaign_id: campaign.id, action: "process" });
+              } catch {
+                /* gangguan sementara */
+              }
+            }
+
+            const { data: devices } = await supabase
+              .from("wa_sessions")
+              .select("id,blast_ready");
+
+            for (const device of (devices ?? []) as unknown as Array<{
+              id: string;
+              blast_ready: boolean | null;
+            }>) {
+              if (device.blast_ready) void runDevice(device.id);
+            }
+          }
+        } catch {
+          /* gangguan sementara */
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     };
 
@@ -109,11 +108,11 @@ export function CampaignAutoRunner() {
       navigator.locks
         .request("aawb-campaign-auto-worker", { ifAvailable: true }, async (lock) => {
           if (!lock) return;
-          await loop();
+          await supervise();
         })
         .catch(() => undefined);
     } else {
-      void loop();
+      void supervise();
     }
 
     return () => {
