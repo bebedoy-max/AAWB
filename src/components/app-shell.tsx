@@ -336,9 +336,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Brand />
             <p className="px-6 pb-2 pt-2 text-[10px] font-bold uppercase text-muted-foreground">Menu utama</p>
             <NavLinks />
-            <div className="mt-auto border-t p-5">
-              <p className="truncate text-sm font-bold">{account.name}</p>
-              <p className="mt-1 truncate text-xs text-muted-foreground">@{account.username}</p>
+            <div className="mt-auto border-t p-3">
+              <Link
+                to="/pengaturan-akun"
+                className="block rounded-xl px-2 py-2 transition-colors hover:bg-sidebar-accent"
+                title="Buka pengaturan akun"
+              >
+                <p className="truncate text-sm font-bold">{account.name}</p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">@{account.username}</p>
+              </Link>
             </div>
           </div>
         </aside>

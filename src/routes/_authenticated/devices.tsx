@@ -58,6 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { WaProfilePanel } from "@/components/wa-profile-panel";
 import { PhoneInput } from "@/components/phone-input";
 import { BLAST_SPEEDS } from "@/lib/blast-speed";
 import { getBlastState, setDeviceBlast } from "@/lib/blast.functions";
@@ -228,12 +229,6 @@ function Devices() {
   });
   const poolAvailable = blastState?.pool_available ?? 0;
 
-  const copyProfileName = async () => {
-    const { data } = await supabase.auth.getUser();
-    const metadata = data.user?.user_metadata as { organization_name?: string; username?: string } | undefined;
-    await navigator.clipboard.writeText(metadata?.organization_name ?? metadata?.username ?? "Worker's");
-    toast.success("Nama profil disalin");
-  };
 
   const createSession = useMutation({
     mutationFn: async () => {
@@ -378,23 +373,9 @@ function Devices() {
         description="Kelola perangkat WhatsApp Anda untuk pengiriman pesan."
       />
 
-      <section className="mb-6 rounded-2xl border border-warning-border bg-warning-surface p-5 shadow-panel sm:hidden">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 size-6 shrink-0 text-warning" />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-bold text-warning-foreground">PERHATIAN: ATUR PROFIL</h2>
-            <p className="mt-2 text-sm leading-6 text-warning-foreground">Gunakan nama dan foto profil yang ditentukan sebelum mulai mengirim pesan.</p>
-            <div className="mt-4 rounded-xl border border-warning-border bg-background/25 p-3 text-xs font-semibold leading-5 text-warning-foreground"><Pin className="mr-2 inline size-3.5 text-warning" />Jika mengerjakan data, simpan bukti aktivitas sesuai arahan admin.</div>
-            <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
-              <div className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-warning/70 bg-member-panel"><UserRound className="size-5 text-foreground/70" /></div>
-              <div className="grid grid-cols-2 gap-2">
-                <Button size="sm" asChild><a href="/aawb-wordmark.png" download="foto-profil-aawb.png"><Download className="mr-1 size-4" /> Unduh Foto</a></Button>
-                <Button size="sm" variant="outline" onClick={() => void copyProfileName()}>Salin Nama</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <div className="sm:hidden">
+        <WaProfilePanel compact />
+      </div>
 
       {gateway && !gateway.configured && (
         <Card className="mb-4 border-destructive/40 bg-destructive/5">

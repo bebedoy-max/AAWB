@@ -1,20 +1,26 @@
-# Perbaikan pairing perangkat via kode
+# Profil WhatsApp Global
 
-## Temuan
-Gateway aktif memakai WAHA 2026.8.2 dengan mesin **NOWEB**. Kode aplikasi sudah memakai endpoint dan format nomor yang benar. Namun, perubahan keamanan WhatsApp terbaru dapat meminta tahap passkey setelah kode dimasukkan. Di WAHA, tahap ini belum didukung oleh NOWEB; dukungan tersedia pada mesin GOWS. Itu menjelaskan mengapa QR berhasil tetapi pairing kode ditolak setelah kode diterima.
+## Hasil yang dibangun
+- Tambahkan bagian **Profil WhatsApp** di Pengaturan Admin untuk mengatur satu nama dan satu foto profil global.
+- Simpan nama dan foto tersebut di pengaturan global agar semua worker menerima sumber yang sama.
+- Dashboard worker menampilkan foto serta nama aktual dari pengaturan admin, bukan logo/nama akun worker bawaan.
+- Tombol **Unduh foto profil** mengunduh foto yang ditetapkan admin dan **Salin nama profil** menyalin nama tersebut.
+- Tambahkan tombol **Terapkan ke semua perangkat** yang memasang nama dan foto secara nyata ke seluruh perangkat WhatsApp milik worker yang sedang terhubung.
+- Tampilkan hasil penerapan: jumlah perangkat berhasil, gagal, dan perangkat offline yang dilewati.
 
-## Perubahan aplikasi
-- Baca versi, mesin, dan status pairing langsung dari gateway.
-- Jangan menampilkan kode yang diketahui tidak dapat diselesaikan pada mesin NOWEB ketika alur membutuhkan passkey.
-- Tampilkan status khusus dan petunjuk yang tepat jika WhatsApp meminta passkey, alih-alih terus menunggu atau meminta kode baru.
-- Pertahankan QR sebagai opsi yang tetap berfungsi.
-- Tambahkan pemeriksaan sesudah kode dibuat agar dialog otomatis mendeteksi berhasil, gagal, kedaluwarsa, atau membutuhkan passkey.
-
-## Perubahan gateway yang diperlukan
-- Ubah `WHATSAPP_DEFAULT_ENGINE` dari `NOWEB` menjadi `GOWS`, lalu mulai ulang WAHA.
-- Sesi baru yang dibuat setelah perubahan akan memakai GOWS. Sesi lama tidak akan diputus atau dihapus otomatis oleh aplikasi.
+## Teknis
+- Tambahkan dua kolom pada `app_settings`: nama profil dan data foto profil, melalui migrasi baru tanpa mengubah tabel lain.
+- Foto divalidasi sebagai JPEG/PNG/WEBP dengan batas ukuran yang aman, lalu disimpan sebagai data gambar global supaya dapat diteruskan langsung ke layanan WhatsApp.
+- Fungsi baca profil tersedia untuk semua akun yang sudah masuk; fungsi simpan tetap khusus admin/super admin.
+- Fungsi penerapan worker memverifikasi identitas pemanggil, mengambil hanya sesi miliknya, lalu memanggil endpoint profil WhatsApp yang sudah tersedia untuk setiap sesi berstatus `connected`.
+- Tidak ada ID pemilik dari browser yang dipercaya; kepemilikan perangkat ditentukan dari sesi login.
+- Pertahankan layout dashboard dan alur perangkat yang ada; hanya isi panel profil dan kontrol Pengaturan Admin yang ditambahkan.
 
 ## Verifikasi
-- Pastikan pemeriksaan gateway membaca WAHA 2026.8.2 dan mesin aktif.
-- Uji pembuatan kode pada sesi baru.
-- Pastikan UI mengikuti status sampai `WORKING`, atau memberi pesan passkey yang spesifik tanpa menyatakan pairing berhasil.
+- Pastikan admin dapat menyimpan, memuat ulang, dan melihat kembali nama/foto.
+- Pastikan worker dapat mengunduh foto dan menyalin nama admin.
+- Uji penerapan terhadap seluruh perangkat terhubung dan pastikan perangkat offline tidak membuat seluruh proses gagal.
+- Jalankan pemeriksaan tipe dan cek tampilan admin/dashboard tanpa error.
+
+## Langkah setelah kode selesai
+- Jalankan migrasi SQL baru pada database Supabase milik Anda sebelum penyimpanan profil digunakan.

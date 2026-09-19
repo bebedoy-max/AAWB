@@ -20,6 +20,7 @@ import { Route as AuthenticatedContactsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDevicesRouteImport } from './routes/_authenticated/devices'
 import { Route as AuthenticatedMonitorRouteImport } from './routes/_authenticated/monitor'
+import { Route as AuthenticatedPengaturanAkunRouteImport } from './routes/_authenticated/pengaturan-akun'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedQueueRouteImport } from './routes/_authenticated/queue'
 import { Route as AuthenticatedReferralRouteImport } from './routes/_authenticated/referral'
@@ -98,6 +99,12 @@ const AuthenticatedMonitorRoute = AuthenticatedMonitorRouteImport.update({
   path: '/monitor',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPengaturanAkunRoute =
+  AuthenticatedPengaturanAkunRouteImport.update({
+    id: '/pengaturan-akun',
+    path: '/pengaturan-akun',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
@@ -232,6 +239,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/devices': typeof AuthenticatedDevicesRoute
   '/monitor': typeof AuthenticatedMonitorRoute
+  '/pengaturan-akun': typeof AuthenticatedPengaturanAkunRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/queue': typeof AuthenticatedQueueRoute
   '/referral': typeof AuthenticatedReferralRoute
@@ -266,6 +274,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/devices': typeof AuthenticatedDevicesRoute
   '/monitor': typeof AuthenticatedMonitorRoute
+  '/pengaturan-akun': typeof AuthenticatedPengaturanAkunRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/queue': typeof AuthenticatedQueueRoute
   '/referral': typeof AuthenticatedReferralRoute
@@ -303,6 +312,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/devices': typeof AuthenticatedDevicesRoute
   '/_authenticated/monitor': typeof AuthenticatedMonitorRoute
+  '/_authenticated/pengaturan-akun': typeof AuthenticatedPengaturanAkunRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/queue': typeof AuthenticatedQueueRoute
   '/_authenticated/referral': typeof AuthenticatedReferralRoute
@@ -340,6 +350,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/devices'
     | '/monitor'
+    | '/pengaturan-akun'
     | '/projects'
     | '/queue'
     | '/referral'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/devices'
     | '/monitor'
+    | '/pengaturan-akun'
     | '/projects'
     | '/queue'
     | '/referral'
@@ -410,6 +422,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/devices'
     | '/_authenticated/monitor'
+    | '/_authenticated/pengaturan-akun'
     | '/_authenticated/projects'
     | '/_authenticated/queue'
     | '/_authenticated/referral'
@@ -527,6 +540,13 @@ declare module '@tanstack/react-router' {
       path: '/monitor'
       fullPath: '/monitor'
       preLoaderRoute: typeof AuthenticatedMonitorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/pengaturan-akun': {
+      id: '/_authenticated/pengaturan-akun'
+      path: '/pengaturan-akun'
+      fullPath: '/pengaturan-akun'
+      preLoaderRoute: typeof AuthenticatedPengaturanAkunRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/projects': {
@@ -726,6 +746,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDevicesRoute: typeof AuthenticatedDevicesRoute
   AuthenticatedMonitorRoute: typeof AuthenticatedMonitorRoute
+  AuthenticatedPengaturanAkunRoute: typeof AuthenticatedPengaturanAkunRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedQueueRoute: typeof AuthenticatedQueueRoute
   AuthenticatedReferralRoute: typeof AuthenticatedReferralRoute
@@ -742,6 +763,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDevicesRoute: AuthenticatedDevicesRoute,
   AuthenticatedMonitorRoute: AuthenticatedMonitorRoute,
+  AuthenticatedPengaturanAkunRoute: AuthenticatedPengaturanAkunRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedQueueRoute: AuthenticatedQueueRoute,
   AuthenticatedReferralRoute: AuthenticatedReferralRoute,

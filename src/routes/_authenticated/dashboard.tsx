@@ -1,18 +1,33 @@
-import { useEffect } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, type ReactNode } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Send, Smartphone, TrendingUp, AlertTriangle, Download, Pin, UserRound, QrCode, Wallet, Users, ArrowRight, Copy } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+import { Send, Smartphone, TrendingUp, AlertTriangle, Download, Pin, UserRound, QrCode, Wallet, Users, ArrowRight, Copy, Plus, KeyRound, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/my-client";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatPhoneDisplay } from "@/lib/whatsapp";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/phone-input";
+import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
+import { getSessionState, requestPairingCode, sessionAction } from "@/lib/api-client";
+import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
 import { rupiah } from "@/lib/currency";
 import { getMyReferral, getMyRewards } from "@/lib/rewards.functions";
 import { getSupportTelegram } from "@/lib/admin.functions";
-import type { QueuedMessage } from "@/types/wa";
+import { WaProfilePanel } from "@/components/wa-profile-panel";
+import type { QueuedMessage, SessionGatewayResponse, WaSession } from "@/types/wa";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -33,14 +48,16 @@ function StatCard({
   label,
   value,
   hint,
+  action,
 }: {
   icon: typeof Send;
   label: string;
   value: string;
   hint?: string;
+  action?: ReactNode;
 }) {
   return (
-    <Card className="rounded-2xl border-border bg-member-panel shadow-panel transition-colors hover:border-primary/30">
+    <Card className="relative rounded-2xl border-border bg-member-panel shadow-panel transition-colors hover:border-primary/30">
       <CardContent className="p-4 sm:p-5">
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">{label}</p>
@@ -50,6 +67,7 @@ function StatCard({
         </div>
          <p className="mt-3 text-2xl font-semibold tracking-normal sm:text-3xl">{value}</p>
         {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+        {action ? <div className="absolute bottom-4 right-4 sm:bottom-5 sm:right-5">{action}</div> : null}
       </CardContent>
     </Card>
   );
@@ -57,6 +75,14 @@ function StatCard({
 
 function Dashboard() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate({ from: "/dashboard" });
+  const [addDeviceOpen, setAddDeviceOpen] = useState(false);
+  const [deviceName, setDeviceName] = useState("");
+  const [pairingSession, setPairingSession] = useState<SessionGatewayResponse | null>(null);
+  const [pairingMode, setPairingMode] = useState<"qr" | "code">("qr");
+  const [codeCountry, setCodeCountry] = useState(DEFAULT_COUNTRY_ISO);
+  const [codePhone, setCodePhone] = useState("");
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
   const fetchRewards = useServerFn(getMyRewards);
   const fetchReferral = useServerFn(getMyReferral);
 
@@ -147,13 +173,85 @@ function Dashboard() {
     toast.success("Link referal disalin");
   };
 
-  const copyProfileName = async () => {
-    const { data } = await supabase.auth.getUser();
-    const metadata = data.user?.user_metadata as { organization_name?: string; username?: string } | undefined;
-    const profileName = metadata?.organization_name ?? metadata?.username ?? "Worker's";
-    await navigator.clipboard.writeText(profileName);
-    toast.success("Nama profil disalin");
-  };
+
+  const createDevice = useMutation({
+    mutationFn: async () => {
+      if ((stats?.devices ?? 0) >= 4) {
+        throw new Error("Maksimal 4 perangkat per akun.");
+      }
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error("Sesi pengguna tidak ditemukan.");
+      const { data, error } = await supabase
+        .from("wa_sessions")
+        .insert({
+          user_id: userData.user.id,
+          session_name: deviceName.trim() || "Perangkat baru",
+          status: "disconnected",
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      const session = data as WaSession;
+      return sessionAction(session.id, "start");
+    },
+    onSuccess: async (session) => {
+      setAddDeviceOpen(false);
+      setDeviceName("");
+      setPairingMode("qr");
+      setPairingCode(null);
+      setPairingSession(session);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["wa-sessions"] }),
+      ]);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const refreshPairing = useMutation({
+    mutationFn: async () => {
+      if (!pairingSession) throw new Error("Perangkat belum dipilih.");
+      return sessionAction(pairingSession.id, "start");
+    },
+    onSuccess: (session) => setPairingSession(session),
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const pairWithCode = useMutation({
+    mutationFn: async () => {
+      if (!pairingSession) throw new Error("Perangkat belum dipilih.");
+      const phone = sanitizePhone(codePhone, countryByIso(codeCountry).dial);
+      if (phone.length < 8) throw new Error("Masukkan nomor WhatsApp yang valid.");
+      return requestPairingCode(pairingSession.id, phone);
+    },
+    onSuccess: (result) => setPairingCode(result.code),
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  useEffect(() => {
+    if (!pairingSession) return;
+    const sessionId = pairingSession.id;
+    const timer = window.setInterval(async () => {
+      try {
+        const state = await getSessionState(sessionId);
+        setPairingSession(state);
+        if (state.status === "connected") {
+          window.clearInterval(timer);
+          toast.success("Perangkat berhasil terhubung");
+          setPairingSession(null);
+          setPairingCode(null);
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
+            queryClient.invalidateQueries({ queryKey: ["wa-sessions"] }),
+          ]);
+          await navigate({ to: "/devices" });
+        }
+      } catch {
+        // Tetap memantau ketika gateway sedang memperbarui sesi.
+      }
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [pairingSession?.id, navigate, queryClient]);
 
   return (
     <>
@@ -168,21 +266,7 @@ function Dashboard() {
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-warning-border bg-warning-surface p-5 shadow-panel sm:p-6">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-bold text-warning">PERHATIAN: ATUR PROFIL</h2>
-            <p className="mt-1 text-sm text-foreground/85">Gunakan nama dan foto profil yang ditentukan sebelum mulai mengirim pesan.</p>
-            <div className="mt-4 rounded-lg border border-warning-border bg-background/25 p-3 text-xs font-semibold text-warning-foreground"><Pin className="mr-2 inline size-3.5 text-warning" />Jika mengerjakan data, simpan bukti aktivitas sesuai arahan admin.</div>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-               <div className="grid size-11 shrink-0 place-items-center rounded-full border-2 border-warning/70 bg-member-panel"><UserRound className="size-5 text-foreground/70" /></div>
-              <Button size="sm" asChild><a href="/aawb-wordmark.png" download="foto-profil-aawb.png"><Download className="mr-1.5 size-4" /> Unduh foto profil</a></Button>
-              <Button size="sm" variant="outline" onClick={() => void copyProfileName()}>Salin nama profil</Button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <WaProfilePanel />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 [&>*:last-child]:col-span-1">
         <StatCard icon={TrendingUp} label="Total Penghasilan" value={rupiah(rewards?.total_earned ?? 0)} hint={`Penarikan ${rupiah(rewards?.total_withdrawn ?? 0)}`} />
@@ -195,6 +279,15 @@ function Dashboard() {
             (stats?.devices ?? 0) === 0
               ? "Belum ada perangkat terdaftar"
               : `${Math.max(0, (stats?.devices ?? 0) - (stats?.sessions ?? 0))} perangkat offline`
+          }
+          action={
+            <Button
+              size="sm"
+              onClick={() => setAddDeviceOpen(true)}
+              disabled={(stats?.devices ?? 0) >= 4}
+            >
+              <Plus className="size-4" /> Tambah Perangkat
+            </Button>
           }
         />
       </div>
@@ -318,6 +411,143 @@ function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={addDeviceOpen} onOpenChange={setAddDeviceOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tambah perangkat WhatsApp</DialogTitle>
+            <DialogDescription>
+              Beri nama perangkat, lalu lanjutkan proses pemasangan WhatsApp.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="dashboard-device-name">Nama perangkat</Label>
+            <Input
+              id="dashboard-device-name"
+              value={deviceName}
+              onChange={(event) => setDeviceName(event.target.value)}
+              placeholder="Nomor penjualan 1"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !createDevice.isPending) createDevice.mutate();
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={() => createDevice.mutate()} disabled={createDevice.isPending}>
+              {createDevice.isPending ? "Membuat…" : "OK"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pairingSession)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPairingSession(null);
+            setPairingCode(null);
+            setCodePhone("");
+            void Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
+              queryClient.invalidateQueries({ queryKey: ["wa-sessions"] }),
+            ]).then(() => navigate({ to: "/devices" }));
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pasangkan perangkat WhatsApp</DialogTitle>
+            <DialogDescription>
+              Pindai QR atau pilih pemasangan melalui kode. Halaman WhatsApp terbuka otomatis setelah terhubung.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pairingMode === "qr" ? (
+            <div className="space-y-4">
+              {pairingSession?.qr_string ? (
+                pairingSession.qr_string.startsWith("data:image") ? (
+                  <div className="flex justify-center rounded-lg bg-background p-3">
+                    <img src={pairingSession.qr_string} alt="QR pemasangan WhatsApp" className="size-56" />
+                  </div>
+                ) : (
+                  <div className="flex justify-center rounded-lg bg-background p-3">
+                    <QRCodeSVG value={pairingSession.qr_string} size={224} level="M" />
+                  </div>
+                )
+              ) : (
+                <div className="flex h-56 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+                  Menunggu kode QR dari gateway…
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Status pemasangan</span>
+                <StatusBadge status={pairingSession?.status ?? "connecting"} />
+              </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => refreshPairing.mutate()}
+                disabled={refreshPairing.isPending}
+              >
+                <RefreshCw className="size-4" /> Perbarui QR
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setPairingMode("code")}
+              >
+                <KeyRound className="size-4" /> Pasangkan via kode
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Nomor WhatsApp</Label>
+                <PhoneInput
+                  country={codeCountry}
+                  onCountryChange={setCodeCountry}
+                  value={codePhone}
+                  onChange={setCodePhone}
+                />
+              </div>
+              {pairingCode ? (
+                <div className="space-y-2 rounded-lg border bg-muted/40 p-4 text-center">
+                  <p className="text-xs text-muted-foreground">Kode pemasangan</p>
+                  <p className="font-mono text-2xl font-semibold tracking-[0.3em]">{pairingCode}</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(pairingCode);
+                      toast.success("Kode disalin");
+                    }}
+                  >
+                    <Copy className="size-4" /> Salin kode
+                  </Button>
+                </div>
+              ) : null}
+              <Button
+                className="w-full"
+                onClick={() => pairWithCode.mutate()}
+                disabled={pairWithCode.isPending || Boolean(pairingCode)}
+              >
+                {pairingCode ? "Menunggu perangkat terhubung" : "Minta kode pemasangan"}
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  setPairingMode("qr");
+                  setPairingCode(null);
+                }}
+              >
+                <QrCode className="size-4" /> Kembali ke QR
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

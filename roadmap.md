@@ -82,3 +82,9 @@
 - [x] Simpan dan terapkan tema global untuk halaman admin dan worker.
 - [x] Verifikasi ketujuh token tema pada Ringkasan Sistem dan Beranda worker (render penuh menunggu sesi pengujian tersedia).
 - [ ] Pengguna menjalankan db/migrations/017_global_app_theme.sql di SQL Editor Supabase.
+
+## Tambah perangkat dari dashboard worker
+
+- [x] Tambahkan tombol Tambah Perangkat di pojok kanan bawah kartu Perangkat Terhubung tanpa mengubah tinggi kartu.
+- [x] Tampilkan QR dan pilihan pairing via kode setelah nama perangkat dibuat.
+- [x] Arahkan ke menu WhatsApp hanya setelah perangkat berhasil terhubung.

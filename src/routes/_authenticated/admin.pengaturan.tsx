@@ -15,6 +15,7 @@ import {
   Send,
   Palette,
   UserRound,
+  Image as ImageIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import {
   testGateway,
   testTelegramBot,
 } from "@/lib/admin.functions";
+import { getWaProfileSettings, saveWaProfileSettings } from "@/lib/wa-profile.functions";
 import { AdminRewardSettings } from "@/components/admin-rewards";
 import { AdminActivityLog } from "@/components/admin-activity-log";
 import { useMyRole } from "./admin";
@@ -62,7 +64,8 @@ type SectionId =
   | "log"
   | "akun"
   | "tampilan"
-  | "telegram-akun";
+  | "telegram-akun"
+  | "profil-wa";
 
 const SECTIONS: {
   id: SectionId;
@@ -78,6 +81,7 @@ const SECTIONS: {
   { id: "akun", label: "Akun", hint: "Nama & email", icon: UserRound },
   { id: "tampilan", label: "Tampilan", hint: "Tema warna", icon: Palette },
   { id: "telegram-akun", label: "Telegram CS", hint: "Kontak bantuan pengguna", icon: MessageCircle },
+  { id: "profil-wa", label: "Profil WhatsApp", hint: "Nama & foto global", icon: ImageIcon },
 ];
 
 function PengaturanPage() {
@@ -131,6 +135,7 @@ function PengaturanPage() {
           {active === "akun" ? <AkunPanel /> : null}
           {active === "tampilan" ? <TampilanPanel /> : null}
           {active === "telegram-akun" ? <TelegramAkunPanel /> : null}
+          {active === "profil-wa" ? <ProfilWhatsAppPanel /> : null}
         </div>
       </div>
     </>
@@ -509,6 +514,128 @@ function TelegramAkunPanel() {
               </Button>
             ) : null}
           </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ProfilWhatsAppPanel() {
+  const queryClient = useQueryClient();
+  const fetchProfile = useServerFn(getWaProfileSettings);
+  const persistProfile = useServerFn(saveWaProfileSettings);
+
+  const [name, setName] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
+
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ["wa-profile-settings"],
+    queryFn: () => fetchProfile(),
+  });
+
+  useEffect(() => {
+    if (profile && !touched) {
+      setName(profile.name ?? "");
+      setPhoto(profile.photo ?? null);
+    }
+  }, [profile, touched]);
+
+  const pickPhoto = (file: File) => {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Format foto harus JPEG, PNG, atau WEBP.");
+      return;
+    }
+    if (file.size > 1_500_000) {
+      toast.error("Ukuran foto maksimal 1,5 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setTouched(true);
+      setPhoto(typeof reader.result === "string" ? reader.result : null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const save = useMutation({
+    mutationFn: () =>
+      persistProfile({
+        data: {
+          name,
+          photo: photo && photo.startsWith("data:") ? photo : null,
+          clearPhoto: photo === null,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Profil WhatsApp global tersimpan");
+      setTouched(false);
+      queryClient.invalidateQueries({ queryKey: ["wa-profile-settings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Panel
+      title="Profil WhatsApp"
+      description="Nama dan foto profil yang wajib dipakai seluruh Worker's pada akun WhatsApp perangkat mereka."
+    >
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Memuat…</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-full border bg-muted">
+              {photo ? (
+                <img src={photo} alt="Foto profil global" className="size-full object-cover" />
+              ) : (
+                <UserRound className="size-7 text-muted-foreground" />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Input
+                id="wa-profile-photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) pickPhoto(file);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">JPEG, PNG, atau WEBP. Maksimal 1,5 MB.</p>
+              {photo ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setTouched(true);
+                    setPhoto(null);
+                  }}
+                >
+                  Hapus foto
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="space-y-1.5 sm:max-w-md">
+            <Label htmlFor="wa-profile-name">Nama profil</Label>
+            <Input
+              id="wa-profile-name"
+              placeholder="contoh: Layanan Pelanggan AAWB"
+              maxLength={25}
+              value={name}
+              onChange={(e) => {
+                setTouched(true);
+                setName(e.target.value);
+              }}
+            />
+            <p className="text-xs text-muted-foreground">Maksimal 25 karakter, sesuai batas WhatsApp.</p>
+          </div>
+
+          <Button onClick={() => save.mutate()} disabled={save.isPending}>
+            Simpan profil
+          </Button>
         </div>
       )}
     </Panel>
