@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Loader2, Mail, RefreshCw, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { Loader2, Mail, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -23,11 +23,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { setMemberRole, type AppRole } from "@/lib/admin.functions";
 import {
-  listPromotableUsers,
   listStaff,
   requestStaffEmailChange,
 } from "@/lib/admin-console.functions";
@@ -60,29 +58,20 @@ function TimPage() {
   const isSuper = Boolean(me?.is_super_admin);
 
   const fetchStaff = useServerFn(listStaff);
-  const fetchCandidates = useServerFn(listPromotableUsers);
   const changeRole = useServerFn(setMemberRole);
   const changeEmail = useServerFn(requestStaffEmailChange);
 
-  const [open, setOpen] = useState(false);
-  const [candidate, setCandidate] = useState("");
-  const [role, setRole] = useState<AppRole>("admin");
   const [emailTarget, setEmailTarget] = useState<{ user_id: string; name: string } | null>(null);
   const [emailValue, setEmailValue] = useState("");
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["admin-staff"],
     queryFn: () => fetchStaff(),
-    // Pantau status verifikasi email secara berkala.
+    // Pantau hanya bila ada permintaan ganti email yang belum diverifikasi.
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((s) => !s.email_verified) ? 15000 : false,
+      (query.state.data ?? []).some((s) => s.email_pending) ? 15000 : false,
   });
 
-  const { data: candidates } = useQuery({
-    queryKey: ["admin-promotable"],
-    enabled: isSuper && open,
-    queryFn: () => fetchCandidates(),
-  });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
@@ -94,8 +83,6 @@ function TimPage() {
     mutationFn: (vars: { userId: string; role: AppRole }) => changeRole({ data: vars }),
     onSuccess: () => {
       toast.success("Peran berhasil diperbarui");
-      setOpen(false);
-      setCandidate("");
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -123,74 +110,10 @@ function TimPage() {
         title="Tim Manajer"
         description="Daftar admin dan super admin yang memiliki akses ke konsol ini."
         action={
-          <>
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
-              Muat ulang
-            </Button>
-            {isSuper ? (
-              <Dialog open={open} onOpenChange={setOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm">
-                    <UserPlus className="mr-2 size-4" />
-                    Angkat admin
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Angkat pengguna menjadi admin</DialogTitle>
-                    <DialogDescription>
-                      Pilih Worker's yang akan diberi akses konsol admin.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label>Pengguna</Label>
-                      <Select value={candidate} onValueChange={setCandidate}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih Worker's" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(candidates ?? []).map((c) => (
-                            <SelectItem key={c.user_id} value={c.user_id}>
-                              {c.name} — {c.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Peran</Label>
-                      <Select value={role} onValueChange={(v) => setRole(v as AppRole)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin" disabled={adminPenuh}>
-                            Admin {adminPenuh ? "(kuota penuh)" : ""}
-                          </SelectItem>
-                          <SelectItem value="super_admin" disabled={superPenuh}>
-                            Super Admin {superPenuh ? "(kuota penuh)" : ""}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="ghost" onClick={() => setOpen(false)}>
-                      Batal
-                    </Button>
-                    <Button
-                      disabled={!candidate || update.isPending}
-                      onClick={() => update.mutate({ userId: candidate, role })}
-                    >
-                      Simpan
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            ) : null}
-          </>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
+            Muat ulang
+          </Button>
         }
       />
 
@@ -256,32 +179,34 @@ function TimPage() {
                     {isSuper ? (
                       <Button
                         size="sm"
-                        variant={s.email_verified ? "outline" : "secondary"}
-                        disabled={!s.email_verified}
+                        variant={s.email_pending ? "secondary" : "outline"}
+                        disabled={s.email_pending}
                         onClick={() => {
                           setEmailTarget({ user_id: s.user_id, name: s.name });
                           setEmailValue(s.needs_real_email ? "" : s.email);
                         }}
                       >
-                        {s.email_verified ? (
-                          <>
-                            <Mail className="mr-2 size-4" />
-                            Ubah email
-                          </>
-                        ) : (
+                        {s.email_pending ? (
                           <>
                             <Loader2 className="mr-2 size-4 animate-spin" />
                             Menunggu verifikasi
                           </>
+                        ) : (
+                          <>
+                            <Mail className="mr-2 size-4" />
+                            Ubah email
+                          </>
                         )}
                       </Button>
-                    ) : s.email_verified ? (
-                      <Badge variant="outline">Terverifikasi</Badge>
-                    ) : (
+                    ) : s.email_pending ? (
                       <Badge variant="secondary">
                         <Loader2 className="mr-1 size-3 animate-spin" />
                         Menunggu verifikasi
                       </Badge>
+                    ) : s.needs_real_email ? (
+                      <Badge variant="outline">Belum ditautkan</Badge>
+                    ) : (
+                      <Badge variant="outline">Terverifikasi</Badge>
                     )}
                   </Td>
                 </tr>

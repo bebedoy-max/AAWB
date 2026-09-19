@@ -236,9 +236,10 @@ export const listStaff = createServerFn({ method: "GET" })
           role: highest(roleMap.get(u.id) ?? []),
           created_at: u.created_at,
           pending_email: pending,
-          // Menunggu verifikasi jika ada perubahan email tertunda atau email
-          // asli belum dikonfirmasi.
-          email_verified: !isPlaceholder && Boolean(u.email_confirmed_at) && !pending,
+          // Hanya "menunggu verifikasi" bila memang ada permintaan ganti email
+          // yang belum dikonfirmasi pemiliknya.
+          email_pending: Boolean(pending),
+          email_verified: !pending,
           needs_real_email: isPlaceholder,
         };
       })
