@@ -1,5 +1,5 @@
 /** Tim manajer: daftar admin & super admin dan pengelolaan perannya. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -64,14 +64,31 @@ function TimPage() {
   const [emailTarget, setEmailTarget] = useState<{ user_id: string; name: string } | null>(null);
   const [emailValue, setEmailValue] = useState("");
 
+
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["admin-staff"],
     queryFn: () => fetchStaff(),
     // Pantau hanya bila ada permintaan ganti email yang belum diverifikasi.
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((s) => s.email_pending) ? 15000 : false,
+      (query.state.data ?? []).some((s) => s.email_pending) ? 5000 : false,
   });
 
+  // Penghitung mundur masa berlaku tautan (3 menit).
+  const hasPending = (data ?? []).some((s) => s.email_pending);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!hasPending) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [hasPending]);
+
+  const sisaWaktu = (iso: string | null) => {
+    if (!iso) return null;
+    const ms = Date.parse(iso) - now;
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    const total = Math.ceil(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  };
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
@@ -89,15 +106,25 @@ function TimPage() {
   });
 
   const sendEmail = useMutation({
-    mutationFn: (vars: { userId: string; email: string }) => changeEmail({ data: vars }),
+    mutationFn: (vars: { userId: string; email: string }) =>
+      changeEmail({
+        data: {
+          ...vars,
+          origin: typeof window === "undefined" ? "" : window.location.origin,
+        },
+      }),
     onSuccess: () => {
-      toast.success("Email diperbarui. Menunggu verifikasi dari pemilik email.");
+      toast.success(
+        "Tautan verifikasi dikirim ke email baru. Berlaku 3 menit — cek juga folder spam/junk.",
+      );
+
       setEmailTarget(null);
       setEmailValue("");
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   const admins = (data ?? []).filter((s) => s.role === "admin").length;
   const supers = (data ?? []).filter((s) => s.role === "super_admin").length;
@@ -138,7 +165,7 @@ function TimPage() {
                 <Th>Email</Th>
                 <Th>Bergabung</Th>
                 <Th>Peran</Th>
-                <Th>Email asli</Th>
+                <Th>Action</Th>
               </tr>
             </thead>
             <tbody>
@@ -176,7 +203,7 @@ function TimPage() {
                     )}
                   </Td>
                   <Td>
-                    {isSuper ? (
+                    {s.user_id === me?.user_id ? (
                       <Button
                         size="sm"
                         variant={s.email_pending ? "secondary" : "outline"}
@@ -190,6 +217,7 @@ function TimPage() {
                           <>
                             <Loader2 className="mr-2 size-4 animate-spin" />
                             Menunggu verifikasi
+                            {sisaWaktu(s.expires_at) ? ` (${sisaWaktu(s.expires_at)})` : ""}
                           </>
                         ) : (
                           <>
@@ -209,6 +237,7 @@ function TimPage() {
                       <Badge variant="outline">Terverifikasi</Badge>
                     )}
                   </Td>
+
                 </tr>
               ))}
             </tbody>
@@ -232,9 +261,10 @@ function TimPage() {
           <DialogHeader>
             <DialogTitle>Ubah email {emailTarget?.name}</DialogTitle>
             <DialogDescription>
-              Masukkan email asli. Tautan verifikasi dikirim ke alamat tersebut dan tombol akan
-              terkunci sampai email terverifikasi.
+              Masukkan email asli. Email lama tetap dipakai sampai pemilik alamat baru membuka
+              tautan verifikasi yang dikirim ke alamat tersebut.
             </DialogDescription>
+
           </DialogHeader>
           <div className="space-y-1.5">
             <Label>Email baru</Label>
@@ -262,6 +292,8 @@ function TimPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </>
+
   );
 }

@@ -217,6 +217,9 @@ export const listAdminUsers = createServerFn({ method: "GET" })
   });
 
 /** Daftar admin & super admin (tim manajer). */
+/** Masa berlaku permintaan ganti email: 3 menit. */
+export const EMAIL_CHANGE_TTL_MS = 3 * 60 * 1000;
+
 export const listStaff = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -224,74 +227,174 @@ export const listStaff = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
     const { users, roleMap, nameMap } = await loadDirectory(admin);
-    return users
-      .map((u) => {
-        const email = (u.email ?? "") as string;
-        const pending = (u.new_email ?? null) as string | null;
-        const isPlaceholder = !email || email.endsWith("@member.aawb.local");
-        return {
-          user_id: u.id,
-          name: displayName(u, nameMap),
-          email: email || "(tanpa email)",
-          role: highest(roleMap.get(u.id) ?? []),
-          created_at: u.created_at,
-          pending_email: pending,
-          // Hanya "menunggu verifikasi" bila memang ada permintaan ganti email
-          // yang belum dikonfirmasi pemiliknya.
-          email_pending: Boolean(pending),
-          email_verified: !pending,
-          needs_real_email: isPlaceholder,
-        };
-      })
+    const now = Date.now();
+
+    const rows = users.map((u) => {
+      const email = (u.email ?? "") as string;
+      const meta = (u.user_metadata ?? {}) as Record<string, any>;
+      const requestedAt = meta["email_change_requested_at"]
+        ? Date.parse(String(meta["email_change_requested_at"]))
+        : NaN;
+      const rawPending = (u.new_email ?? null) as string | null;
+      // Permintaan dianggap kedaluwarsa bila lewat 3 menit (atau tidak punya
+      // catatan waktu sama sekali).
+      const expired =
+        Boolean(rawPending) && (!Number.isFinite(requestedAt) || now - requestedAt > EMAIL_CHANGE_TTL_MS);
+      const pending = expired ? null : rawPending;
+      const isPlaceholder = !email || email.endsWith("@member.aawb.local");
+      return {
+        user_id: u.id,
+        name: displayName(u, nameMap),
+        email: email || "(tanpa email)",
+        role: highest(roleMap.get(u.id) ?? []),
+        created_at: u.created_at,
+        pending_email: pending,
+        expires_at:
+          pending && Number.isFinite(requestedAt)
+            ? new Date(requestedAt + EMAIL_CHANGE_TTL_MS).toISOString()
+            : null,
+        // Hanya "menunggu verifikasi" bila memang ada permintaan ganti email
+        // yang belum dikonfirmasi pemiliknya dan belum kedaluwarsa.
+        email_pending: Boolean(pending),
+        email_verified: !pending,
+        needs_real_email: isPlaceholder,
+        _expired: expired,
+        _currentEmail: email,
+      };
+    });
+
+    // Bersihkan permintaan yang sudah kedaluwarsa (best-effort).
+    await Promise.all(
+      rows
+        .filter((r) => r._expired && r._currentEmail)
+        .map(async (r) => {
+          try {
+            await admin.auth.admin.updateUserById(r.user_id, {
+              email: r._currentEmail,
+              email_confirm: true,
+              user_metadata: { email_change_requested_at: null, email_change_target: null },
+            });
+          } catch {
+            /* abaikan, status tetap dianggap kedaluwarsa di UI */
+          }
+        }),
+    );
+
+    return rows
+      .map(({ _expired, _currentEmail, ...r }) => r)
       .filter((u) => u.role !== "member")
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
   });
 
-/** Minta perubahan email seorang admin/super admin. Email baru wajib diverifikasi. */
+/**
+ * Minta perubahan email AKUN SENDIRI (admin / super admin).
+ * Supabase mengirim tautan verifikasi ke alamat baru lewat SMTP proyek.
+ * Email lama tetap berlaku sampai tautan itu dibuka pemilik alamat baru.
+ */
 export const requestStaffEmailChange = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { userId: string; email: string }) => {
+  .inputValidator((input: { userId: string; email: string; origin?: string }) => {
     if (!input?.userId) throw new Error("Pengguna tidak valid.");
     const email = String(input.email ?? "").trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new Error("Format email tidak valid.");
     if (email.endsWith("@member.aawb.local")) throw new Error("Gunakan email asli, bukan email internal.");
-    return { userId: input.userId, email };
+    const origin = String(input.origin ?? "").trim();
+    return { userId: input.userId, email, origin: /^https?:\/\//.test(origin) ? origin : "" };
   })
-  .handler(async ({ data, context }): Promise<{ ok: true; link: string | null }> => {
-    await assertAdmin(context, true);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const admin = supabaseAdmin as any;
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ ok: true; sent: boolean; pending_email: string; expires_at: string }> => {
+      await assertAdmin(context, true);
 
-    const roles = await rolesOf(admin, data.userId);
-    if (highest(roles) === "member") {
-      throw new Error("Hanya admin atau super admin yang perlu menautkan email asli.");
-    }
+      if (data.userId !== context.userId) {
+        throw new Error("Anda hanya bisa mengubah email akun Anda sendiri.");
+      }
 
-    const { error } = await admin.auth.admin.updateUserById(data.userId, {
-      email: data.email,
-      email_confirm: false,
-    });
-    if (error) throw new Error(error.message);
+      const { getRequest } = await import("@tanstack/react-start/server");
+      const token = (getRequest()?.headers.get("authorization") ?? "").replace("Bearer ", "");
+      if (!token) throw new Error("Sesi tidak ditemukan. Silakan masuk ulang.");
 
-    // Tautan verifikasi; bisa dikirim manual bila email otomatis belum aktif.
-    let link: string | null = null;
-    try {
-      const { data: linkData } = await admin.auth.admin.generateLink({
-        type: "magiclink",
-        email: data.email,
+      const url = process.env["MY_SUPABASE_URL"] ?? process.env["SUPABASE_URL"] ?? "";
+      const apikey =
+        process.env["MY_SUPABASE_PUBLISHABLE_KEY"] ?? process.env["SUPABASE_PUBLISHABLE_KEY"] ?? "";
+      if (!url || !apikey) throw new Error("Konfigurasi Supabase tidak lengkap.");
+
+      const redirectTo = data.origin ? `${data.origin}/verifikasi` : "";
+      const endpoint = `${url.replace(/\/$/, "")}/auth/v1/user${
+        redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ""
+      }`;
+
+      const res = await fetch(endpoint, {
+        method: "PUT",
+        headers: {
+          apikey,
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: data.email }),
       });
-      link = linkData?.properties?.action_link ?? null;
-    } catch {
-      link = null;
-    }
 
-    await (await import("@/lib/activity-log.server")).logActivity(
-      context.userId,
-      "email_change",
-      `Email pengguna ${data.userId} diubah menjadi ${data.email} (menunggu verifikasi)`,
-    );
-    return { ok: true, link };
-  });
+      const bodyText = await res.text();
+
+      if (!res.ok) {
+        console.error(`[email_change] ${res.status}: ${bodyText}`);
+        let msg = "Gagal mengirim tautan verifikasi.";
+        try {
+          const parsed = JSON.parse(bodyText);
+          msg = parsed.msg || parsed.message || parsed.error_description || msg;
+        } catch {
+          /* biarkan pesan default */
+        }
+        if (res.status === 429) {
+          msg = "Terlalu sering meminta tautan. Tunggu beberapa menit lalu coba lagi.";
+        }
+        throw new Error(msg);
+      }
+
+      // Pastikan permintaan benar-benar tercatat di Auth (new_email terisi).
+      let pendingEmail = "";
+      try {
+        pendingEmail = String(JSON.parse(bodyText)?.new_email ?? "");
+      } catch {
+        /* abaikan */
+      }
+      if (!pendingEmail) {
+        throw new Error(
+          "Permintaan ganti email tidak tercatat. Pastikan pengiriman email (SMTP) aktif di Auth.",
+        );
+      }
+
+      const requestedAt = new Date().toISOString();
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      try {
+        await (supabaseAdmin as any).auth.admin.updateUserById(context.userId, {
+          user_metadata: {
+            email_change_requested_at: requestedAt,
+            email_change_target: data.email,
+          },
+        });
+      } catch (e) {
+        console.error("[email_change] gagal menyimpan waktu permintaan", e);
+      }
+
+      await (await import("@/lib/activity-log.server")).logActivity(
+        context.userId,
+        "email_change",
+        `Permintaan ganti email sendiri ke ${data.email} (menunggu verifikasi)`,
+      );
+
+      return {
+        ok: true,
+        sent: true,
+        pending_email: pendingEmail,
+        expires_at: new Date(Date.parse(requestedAt) + EMAIL_CHANGE_TTL_MS).toISOString(),
+      };
+    },
+  );
+
+
 
 /** Kandidat pengguna yang bisa diangkat menjadi admin. */
 export const listPromotableUsers = createServerFn({ method: "GET" })

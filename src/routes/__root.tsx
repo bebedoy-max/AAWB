@@ -16,7 +16,7 @@ import { Toaster } from "../components/ui/sonner";
 import { CampaignAutoRunner } from "../components/campaign-auto-runner";
 import { supabase } from "../integrations/supabase/my-client";
 import { getGlobalAppTheme } from "../lib/admin.functions";
-import { applyAppTheme, type AppThemeId } from "../lib/app-theme";
+import { applyAppTheme, DEFAULT_APP_THEME, type AppThemeId } from "../lib/app-theme";
 
 function NotFoundComponent() {
   return (
@@ -79,7 +79,14 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  loader: () => getGlobalAppTheme(),
+  // Tema hanya kosmetik: kegagalan jaringan tidak boleh membuat halaman blank.
+  loader: async (): Promise<{ theme: AppThemeId }> => {
+    try {
+      return await getGlobalAppTheme();
+    } catch {
+      return { theme: DEFAULT_APP_THEME };
+    }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },

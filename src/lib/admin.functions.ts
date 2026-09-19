@@ -153,6 +153,7 @@ export const getMyRole = createServerFn({ method: "GET" })
       const roles = await rolesOf(context.supabase as any, context.userId);
       const role = highest(roles);
       return {
+        user_id: context.userId,
         role,
         is_admin: role !== "member",
         is_super_admin: role === "super_admin",
@@ -160,11 +161,13 @@ export const getMyRole = createServerFn({ method: "GET" })
       };
     } catch {
       return {
+        user_id: context.userId,
         role: "member" as AppRole,
         is_admin: false,
         is_super_admin: false,
         setup_required: true,
       };
+
     }
   });
 

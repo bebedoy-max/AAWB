@@ -35,7 +35,7 @@ export const Route = createFileRoute("/auth")({
 
 function authErrorMessage(message: string): string {
   const value = message.toLowerCase();
-  if (value.includes("invalid login credentials")) return "Username atau kata sandi salah.";
+  if (value.includes("invalid login credentials")) return "Username/email atau kata sandi salah.";
   if (value.includes("rate limit")) return "Terlalu banyak percobaan. Coba kembali beberapa saat lagi.";
   return "Terjadi kendala. Silakan coba lagi.";
 }
@@ -66,24 +66,35 @@ function AuthPage() {
   const validUsername = /^[a-z0-9_]{4,24}$/.test(normalized);
 
   const signIn = async () => {
-    if (!username.trim() || password.length < 4) {
-      toast.error("Username dan kata sandi minimal 4 karakter.");
+    const identifier = username.trim();
+    if (!identifier || password.length < 4) {
+      toast.error("Username/email dan kata sandi minimal 4 karakter.");
       return;
     }
     setLoading(true);
-    const isLegacyEmail = username.includes("@");
+    const isEmail = identifier.includes("@");
     const { error } = await supabase.auth.signInWithPassword({
-      email: isLegacyEmail ? username.trim() : usernameEmail(normalized),
-      password: isLegacyEmail ? password : memberPassword(password),
+      email: isEmail ? identifier : usernameEmail(normalized),
+      password: isEmail ? password : memberPassword(password),
     });
     if (error) {
       setLoading(false);
       toast.error(authErrorMessage(error.message));
       return;
     }
-    await recordActivity({ data: { action: "login", detail: "Masuk dengan username" } }).catch(() => {});
-    navigate({ to: await getPostLoginPath() });
+    const target = await getPostLoginPath();
+    if (!isEmail && target === "/admin") {
+      await supabase.auth.signOut();
+      setLoading(false);
+      toast.error("Admin dan super admin wajib masuk memakai email terdaftar dan kata sandi.");
+      return;
+    }
+    await recordActivity({
+      data: { action: "login", detail: isEmail ? "Masuk dengan email" : "Masuk dengan username" },
+    }).catch(() => {});
+    navigate({ to: target });
   };
+
 
   const nextStep = async () => {
     if (step === 1) {
@@ -168,7 +179,7 @@ function AuthPage() {
                 <p className="mt-1 text-sm text-muted-foreground">Masuk untuk melanjutkan perjalanan Anda.</p>
               </div>
               <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!loading) void signIn(); }}>
-                <div className="space-y-1.5"><Label htmlFor="username">Username</Label><Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="username Anda" /></div>
+                <div className="space-y-1.5"><Label htmlFor="username">Username atau email</Label><Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="username (worker) atau email (admin)" /><p className="text-xs text-muted-foreground">Admin dan super admin wajib masuk dengan email terdaftar.</p></div>
                 <div className="space-y-1.5"><Label htmlFor="password">Kata sandi</Label><div className="relative"><Input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="pr-10" /><Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword((value) => !value)} aria-label="Tampilkan kata sandi">{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</Button></div></div>
                 <Button type="submit" className="w-full" disabled={loading}>Masuk <ArrowRight className="ml-1 size-4" /></Button>
               </form>
