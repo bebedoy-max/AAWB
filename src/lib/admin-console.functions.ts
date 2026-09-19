@@ -697,7 +697,9 @@ export const listReport = createServerFn({ method: "POST" })
 
     let query = admin
       .from("message_queue")
-      .select("id,campaign_id,session_id,user_id,recipient_phone,message_body,status,error_log,sent_at,created_at")
+      .select(
+        "id,campaign_id,session_id,user_id,claimed_by,recipient_phone,message_body,status,error_log,sent_at,created_at",
+      )
       .neq("status", "processing")
       .order("created_at", { ascending: false })
       .limit(1000);
@@ -708,8 +710,19 @@ export const listReport = createServerFn({ method: "POST" })
 
     const { data: sessions } = await admin
       .from("wa_sessions")
-      .select("id,session_name,phone_number");
-    const sessionById = new Map(((sessions ?? []) as any[]).map((s) => [s.id, s]));
+      .select("id,user_id,session_name,phone_number,status,updated_at");
+    const sessionList = (sessions ?? []) as any[];
+    const sessionById = new Map(sessionList.map((s) => [s.id, s]));
+    // Untuk data lama yang belum menyimpan perangkat pengirim: pakai nomor
+    // perangkat milik pengirim (utamakan yang tersambung dan terbaru).
+    const sessionByUser = new Map<string, any>();
+    for (const s of [...sessionList].sort((a, b) => {
+      const rank = (x: any) => (x.status === "connected" ? 0 : 1);
+      if (rank(a) !== rank(b)) return rank(a) - rank(b);
+      return String(b.updated_at ?? "").localeCompare(String(a.updated_at ?? ""));
+    })) {
+      if (s.user_id && s.phone_number && !sessionByUser.has(s.user_id)) sessionByUser.set(s.user_id, s);
+    }
 
     const campaignIds = Array.from(new Set(((rows ?? []) as any[]).map((r) => r.campaign_id).filter(Boolean)));
     const { data: campaignRows } = campaignIds.length
@@ -723,7 +736,10 @@ export const listReport = createServerFn({ method: "POST" })
     const list = (rows ?? []) as any[];
     return {
       rows: list.map((r) => {
-        const s = r.session_id ? sessionById.get(r.session_id) : null;
+        const s =
+          (r.session_id ? sessionById.get(r.session_id) : null) ??
+          sessionByUser.get(r.claimed_by ?? r.user_id) ??
+          null;
         return {
           id: r.id,
           campaign_id: r.campaign_id,

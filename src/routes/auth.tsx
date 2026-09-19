@@ -17,6 +17,7 @@ import {
   memberPassword,
   normalizeUsername,
   registerMember,
+  requestPasswordResetViaTelegram,
   usernameEmail,
 } from "@/lib/member-auth.functions";
 
@@ -57,6 +58,30 @@ function AuthPage() {
   const [otpEmail, setOtpEmail] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
   const [otpLoading, setOtpLoading] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotId, setForgotId] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const requestReset = useServerFn(requestPasswordResetViaTelegram);
+
+  const submitForgot = async () => {
+    setForgotLoading(true);
+    try {
+      const res = await requestReset({ data: { identifier: forgotId } });
+      if (res.sent) {
+        toast.success("Kata sandi sementara sudah dikirim ke Telegram Anda.");
+        setForgotOpen(false);
+        setForgotId("");
+      } else {
+        toast.error(
+          "Tidak ada akun dengan Telegram tersambung untuk data itu. Periksa kembali, atau hubungi admin.",
+        );
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Permintaan gagal. Coba lagi.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -244,6 +269,9 @@ function AuthPage() {
               <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!loading) void signIn(); }}>
                 <div className="space-y-1.5"><Label htmlFor="username">Username atau email</Label><Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></div>
                 <div className="space-y-1.5"><Label htmlFor="password">Kata sandi</Label><div className="relative"><Input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="pr-10" /><Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword((value) => !value)} aria-label="Tampilkan kata sandi">{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</Button></div></div>
+                <div className="flex justify-end">
+                  <button type="button" className="text-sm font-semibold text-primary" onClick={() => setForgotOpen(true)}>Lupa kata sandi?</button>
+                </div>
                 <Button type="submit" className="w-full" disabled={loading}>Masuk <ArrowRight className="ml-1 size-4" /></Button>
               </form>
               <p className="mt-5 text-center text-sm text-muted-foreground">Belum punya akun? <button type="button" className="font-semibold text-primary" onClick={() => { setMode("register"); setStep(1); }}>Daftar sekarang</button></p>
@@ -301,6 +329,39 @@ function AuthPage() {
           >
             Kirim ulang kode
           </button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={forgotOpen} onOpenChange={(open) => { setForgotOpen(open); if (!open) setForgotId(""); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Lupa kata sandi</DialogTitle>
+            <DialogDescription>
+              Masukkan username akun Anda atau username Telegram Anda. Kata sandi sementara akan
+              dikirim oleh bot ke akun Telegram yang sudah Anda sambungkan.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => { event.preventDefault(); if (!forgotLoading && forgotId.trim().length >= 3) void submitForgot(); }}
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="forgot-id">Username akun atau username Telegram</Label>
+              <Input
+                id="forgot-id"
+                autoFocus
+                value={forgotId}
+                onChange={(event) => setForgotId(event.target.value)}
+                placeholder="contoh: wagi atau @wagiman"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={forgotLoading || forgotId.trim().length < 3}>
+              {forgotLoading ? "Mengirim…" : "Kirim ke Telegram"}
+            </Button>
+          </form>
+          <p className="text-center text-xs text-muted-foreground">
+            Belum menyambungkan Telegram? Hubungi admin untuk menyetel ulang kata sandi Anda.
+          </p>
         </DialogContent>
       </Dialog>
     </div>

@@ -754,7 +754,7 @@ export const setWithdrawalStatus = createServerFn({ method: "POST" })
       })
       .eq("id", data.id)
       .eq("status", "pending")
-      .select("user_id,amount")
+      .select("user_id,amount,provider,method,account_name,account_number")
       .maybeSingle();
     if (error) throw new Error(error.message);
     await (await import("@/lib/activity-log.server")).logActivity(
@@ -764,12 +764,44 @@ export const setWithdrawalStatus = createServerFn({ method: "POST" })
     );
     if (row?.user_id) {
       const nominal = new Intl.NumberFormat("id-ID").format(Number(row.amount ?? 0));
+
+      // Nama pemilik rekening disamarkan: hanya huruf pertama setiap kata.
+      const maskName = (value: string | null): string =>
+        (value ?? "")
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((word) => `${word[0]?.toUpperCase() ?? ""}${"•".repeat(Math.max(word.length - 1, 1))}`)
+          .join(" ") || "—";
+      // Nomor rekening disamarkan: hanya 4 digit terakhir.
+      const maskNumber = (value: string | null): string => {
+        const digits = (value ?? "").replace(/\s+/g, "");
+        return digits ? `••••${digits.slice(-4)}` : "—";
+      };
+
+      // Nama member: username akun aplikasi, atau username Telegram bila ada.
+      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(row.user_id);
+      const fromEmail = (userData?.user?.email ?? "").split("@")[0] ?? "";
+      const { data: tg } = await (supabaseAdmin as any)
+        .from("telegram_links")
+        .select("username")
+        .eq("user_id", row.user_id)
+        .maybeSingle();
+      const member = fromEmail || tg?.username || "member";
+
+      const bank = row.provider || row.method || "—";
+      const detail =
+        `👤 <b>Member:</b> @${member}\n` +
+        `💵 <b>Nominal:</b> Rp ${nominal}\n` +
+        `🏦 <b>Bank:</b> ${bank} a/n ${maskName(row.account_name)}\n` +
+        `🔢 <b>Rekening:</b> ${maskNumber(row.account_number)}`;
+
       const { notifyUserTelegram } = await import("@/lib/telegram.server");
       await notifyUserTelegram(
         row.user_id,
         data.status === "approved"
-          ? `✅ <b>Penarikan disetujui</b>\nNominal: Rp ${nominal}\nDana sedang diproses ke rekening tujuan Anda.${data.note ? `\nCatatan: ${data.note}` : ""}`
-          : `❌ <b>Penarikan ditolak</b>\nNominal: Rp ${nominal}${data.note ? `\nAlasan: ${data.note}` : ""}`,
+          ? `🎉 <b>Withdrawal Berhasil!</b>\n${detail}\n✅ <b>Status:</b> Sukses ditransfer${data.note ? `\n📝 <b>Catatan:</b> ${data.note}` : ""}`
+          : `⚠️ <b>Withdrawal Ditolak</b>\n${detail}\n❌ <b>Status:</b> Ditolak${data.note ? `\n📝 <b>Alasan:</b> ${data.note}` : ""}`,
       );
     }
     return { ok: true };

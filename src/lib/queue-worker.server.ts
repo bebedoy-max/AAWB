@@ -194,6 +194,8 @@ export async function processCampaignTick(
             attempts,
             sent_at: new Date().toISOString(),
             error_log: null,
+            // Simpan perangkat pengirim agar nomor pengirim muncul di laporan.
+            session_id: sessionId,
           })
           .eq("id", item.id);
         try {
