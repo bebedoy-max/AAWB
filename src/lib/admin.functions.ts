@@ -4,6 +4,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { DEFAULT_APP_THEME, isAppThemeId, type AppThemeId } from "@/lib/app-theme";
 
 export type AppRole = "super_admin" | "admin" | "member";
 
@@ -22,6 +23,50 @@ export interface GatewaySettings {
   has_api_key: boolean;
   updated_at: string | null;
 }
+
+/** Tema warna global yang berlaku untuk seluruh akun. */
+export const getGlobalAppTheme = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<{ theme: AppThemeId }> => {
+    const { data, error } = await (context.supabase as any)
+      .from("app_settings")
+      .select("app_theme")
+      .eq("id", "global")
+      .maybeSingle();
+    // Kolom app_theme mungkin belum ada (migrasi belum dijalankan) -> pakai default.
+    if (error) return { theme: DEFAULT_APP_THEME };
+    return { theme: isAppThemeId(data?.app_theme) ? data.app_theme : DEFAULT_APP_THEME };
+  });
+
+/** Simpan tema warna global. Hanya admin dan super admin. */
+export const saveGlobalAppTheme = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { theme: unknown }) => {
+    if (!isAppThemeId(input?.theme)) throw new Error("Tema tidak valid.");
+    return { theme: input.theme };
+  })
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin as any).from("app_settings").upsert(
+      {
+        id: "global",
+        app_theme: data.theme,
+        updated_at: new Date().toISOString(),
+        updated_by: context.userId,
+      },
+      { onConflict: "id" },
+    );
+    if (error) {
+      if (/app_theme/.test(error.message)) {
+        throw new Error(
+          "Penyimpanan tema belum aktif. Jalankan db/migrations/017_global_app_theme.sql di SQL Editor Supabase.",
+        );
+      }
+      throw new Error(error.message);
+    }
+    return { ok: true, theme: data.theme };
+  });
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 

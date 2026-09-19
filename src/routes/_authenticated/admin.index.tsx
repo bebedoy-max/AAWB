@@ -40,6 +40,16 @@ import {
 } from "@/components/admin-ui";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
+  head: () => ({
+    meta: [
+      { title: "Ringkasan Sistem — AAWB" },
+      { name: "description", content: "Pantau kondisi Worker's, perangkat, dan kampanye AAWB." },
+      { property: "og:title", content: "Ringkasan Sistem — AAWB" },
+      { property: "og:description", content: "Pantau kondisi Worker's, perangkat, dan kampanye AAWB." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: RingkasanPage,
 });
 

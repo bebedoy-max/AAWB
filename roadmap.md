@@ -76,3 +76,9 @@
 - [x] Izinkan perangkat aktif mengambil alih antrean yang ditinggalkan
 - [x] Lepaskan kepemilikan antrean saat pesan dijadwalkan ulang
 - [ ] Pengguna menjalankan db/migrations/015_reclaim_abandoned_queue.sql di SQL Editor Supabase
+
+## Pengaturan tema warna global
+- [x] Tambahkan tujuh tema warna dan pemilih Tampilan pada Pengaturan admin.
+- [x] Simpan dan terapkan tema global untuk halaman admin dan worker.
+- [x] Verifikasi ketujuh token tema pada Ringkasan Sistem dan Beranda worker (render penuh menunggu sesi pengujian tersedia).
+- [ ] Pengguna menjalankan db/migrations/017_global_app_theme.sql di SQL Editor Supabase.

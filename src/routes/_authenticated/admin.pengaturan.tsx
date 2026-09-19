@@ -13,6 +13,7 @@ import {
   PlugZap,
   ScrollText,
   Send,
+  Palette,
   UserRound,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -24,8 +25,10 @@ import { supabase } from "@/integrations/supabase/my-client";
 import type { Profile } from "@/types/wa";
 import {
   getGatewaySettings,
+  getGlobalAppTheme,
   getTelegramSettings,
   saveGatewaySettings,
+  saveGlobalAppTheme,
   saveTelegramSettings,
   testGateway,
   testTelegramBot,
@@ -39,8 +42,19 @@ import { AdminRewardSettings } from "@/components/admin-rewards";
 import { AdminActivityLog } from "@/components/admin-activity-log";
 import { useMyRole } from "./admin";
 import { AdminPageTitle, Panel } from "@/components/admin-ui";
+import { APP_THEMES, applyAppTheme, DEFAULT_APP_THEME, type AppThemeId } from "@/lib/app-theme";
 
 export const Route = createFileRoute("/_authenticated/admin/pengaturan")({
+  head: () => ({
+    meta: [
+      { title: "Pengaturan Sistem — AAWB" },
+      { name: "description", content: "Kelola konfigurasi sistem dan tema warna global AAWB." },
+      { property: "og:title", content: "Pengaturan Sistem — AAWB" },
+      { property: "og:description", content: "Kelola konfigurasi sistem dan tema warna global AAWB." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: PengaturanPage,
 });
 
@@ -50,6 +64,7 @@ type SectionId =
   | "reward"
   | "log"
   | "akun"
+  | "tampilan"
   | "telegram-akun";
 
 const SECTIONS: {
@@ -64,6 +79,7 @@ const SECTIONS: {
   { id: "reward", label: "Reward & Keuangan", hint: "Nilai reward, referal", icon: Coins, superOnly: true },
   { id: "log", label: "User Log", hint: "Aktivitas pengguna", icon: ScrollText },
   { id: "akun", label: "Akun", hint: "Nama & email", icon: UserRound },
+  { id: "tampilan", label: "Tampilan", hint: "Tema warna", icon: Palette },
   { id: "telegram-akun", label: "Telegram Saya", hint: "Koneksi notifikasi", icon: MessageCircle },
 ];
 
@@ -116,10 +132,72 @@ function PengaturanPage() {
           {active === "reward" && isSuper ? <AdminRewardSettings /> : null}
           {active === "log" ? <AdminActivityLog /> : null}
           {active === "akun" ? <AkunPanel /> : null}
+          {active === "tampilan" ? <TampilanPanel /> : null}
           {active === "telegram-akun" ? <TelegramAkunPanel /> : null}
         </div>
       </div>
     </>
+  );
+}
+
+function TampilanPanel() {
+  const queryClient = useQueryClient();
+  const fetchTheme = useServerFn(getGlobalAppTheme);
+  const persistTheme = useServerFn(saveGlobalAppTheme);
+  const { data } = useQuery({
+    queryKey: ["global-app-theme"],
+    queryFn: () => fetchTheme(),
+  });
+  const selected = data?.theme ?? DEFAULT_APP_THEME;
+
+  const save = useMutation({
+    mutationFn: (theme: AppThemeId) => persistTheme({ data: { theme } }),
+    onMutate: async (theme) => {
+      await queryClient.cancelQueries({ queryKey: ["global-app-theme"] });
+      const previous = queryClient.getQueryData<{ theme: AppThemeId }>(["global-app-theme"]);
+      queryClient.setQueryData(["global-app-theme"], { theme });
+      applyAppTheme(theme);
+      return { previous };
+    },
+    onSuccess: (_result, theme) => toast.success(`Tema ${APP_THEMES.find((item) => item.id === theme)?.name ?? ""} diterapkan`),
+    onError: (error: Error, _theme, context) => {
+      const previous = context?.previous?.theme ?? DEFAULT_APP_THEME;
+      queryClient.setQueryData(["global-app-theme"], { theme: previous });
+      applyAppTheme(previous);
+      toast.error(error.message);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["global-app-theme"] }),
+  });
+
+  return (
+    <Panel title="Tampilan" description="Pilih tema warna global untuk seluruh Admin dan Worker's.">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" role="radiogroup" aria-label="Tema warna global">
+        {APP_THEMES.map((theme) => (
+          <label
+            key={theme.id}
+            className={cn(
+              "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors",
+              selected === theme.id ? "border-primary bg-primary/10" : "hover:bg-muted",
+            )}
+          >
+            <input
+              type="radio"
+              name="app-theme"
+              value={theme.id}
+              checked={selected === theme.id}
+              onChange={() => save.mutate(theme.id)}
+              disabled={save.isPending}
+              className="size-4 accent-primary"
+            />
+            <span data-theme-swatch={theme.id} className="size-4 shrink-0 rounded-full border" />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{theme.name}</span>
+              <span className="block text-xs text-muted-foreground">{theme.category}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </Panel>
   );
 }
 
