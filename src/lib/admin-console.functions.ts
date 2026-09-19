@@ -488,6 +488,33 @@ export const listReport = createServerFn({ method: "POST" })
     };
   });
 
+/** Hapus seluruh riwayat pengiriman (status terkirim/gagal); antrean aktif tidak disentuh. */
+export const clearReportHistory = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+    // 1) riwayat selesai (terkirim/gagal) selalu dihapus
+    const { error } = await admin.from("message_queue").delete().in("status", ["sent", "failed"]);
+    if (error) throw new Error(error.message);
+    // 2) antrean menunggu milik kampanye yang TIDAK sedang berjalan ikut dibersihkan
+    const { data: runningRows } = await admin
+      .from("campaigns")
+      .select("id")
+      .eq("status", "running");
+    const runningIds: string[] = (runningRows ?? []).map((r: any) => r.id);
+    let pendingDel = admin.from("message_queue").delete().eq("status", "pending");
+    if (runningIds.length > 0) {
+      pendingDel = pendingDel.not("campaign_id", "in", `(${runningIds.join(",")})`);
+    }
+    const { error: pendingError } = await pendingDel;
+    if (pendingError) throw new Error(pendingError.message);
+    const { logActivity } = await import("@/lib/activity-log.server");
+    await logActivity(context.userId, "report_clear", "Riwayat pengiriman dihapus admin");
+    return { ok: true };
+  });
+
 /** Hentikan paksa seluruh blast: kampanye dijeda dan mesin member dimatikan. */
 export const stopAllBlast = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
