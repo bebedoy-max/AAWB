@@ -61,7 +61,7 @@ function TimPage() {
   const fetchStaff = useServerFn(listStaff);
   const changeRole = useServerFn(setMemberRole);
   const changeEmail = useServerFn(requestStaffEmailChange);
-  const resetPassword = useServerFn(requestStaffPasswordReset);
+  const requestPasswordReset = useServerFn(requestStaffPasswordReset);
 
   const [emailTarget, setEmailTarget] = useState<{ user_id: string; name: string } | null>(null);
   const [emailValue, setEmailValue] = useState("");
@@ -128,17 +128,15 @@ function TimPage() {
   });
 
   const sendReset = useMutation({
-    mutationFn: (vars: { userId: string }) =>
-      resetPassword({
+    mutationFn: (userId: string) =>
+      requestPasswordReset({
         data: {
-          ...vars,
+          userId,
           origin: typeof window === "undefined" ? "" : window.location.origin,
         },
       }),
-    onSuccess: (res) =>
-      toast.success(
-        `Tautan ganti kata sandi dikirim ke ${res.email}. Cek juga folder spam/junk.`,
-      ),
+    onSuccess: ({ email }) =>
+      toast.success(`OTP ganti kata sandi sudah dikirim ke ${email}.`),
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -258,7 +256,7 @@ function TimPage() {
                         size="sm"
                         variant="outline"
                         disabled={sendReset.isPending}
-                        onClick={() => sendReset.mutate({ userId: s.user_id })}
+                        onClick={() => sendReset.mutate(s.user_id)}
                       >
                         {sendReset.isPending ? (
                           <Loader2 className="mr-2 size-4 animate-spin" />

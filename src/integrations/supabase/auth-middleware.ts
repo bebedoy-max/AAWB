@@ -91,20 +91,35 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       }
     );
 
-    const { data, error } = await supabase.auth.getClaims(token);
-    if (error || !data?.claims) {
-      throw new Error('Unauthorized: Invalid token');
+    // Self-hosted GoTrue may not expose JWKS, so getClaims() can fail even for
+    // a perfectly valid session token. Fall back to a live getUser() check.
+    let claims: Record<string, any> | null = null;
+    try {
+      const { data, error } = await supabase.auth.getClaims(token);
+      if (!error && data?.claims?.sub) claims = data.claims as Record<string, any>;
+    } catch {
+      claims = null;
     }
 
-    if (!data.claims.sub) {
-      throw new Error('Unauthorized: No user ID found in token');
+    if (!claims) {
+      const { data: userData, error: userError } = await supabase.auth.getUser(token);
+      if (userError || !userData?.user?.id) {
+        throw new Error('Unauthorized: Invalid token');
+      }
+      claims = {
+        sub: userData.user.id,
+        email: userData.user.email,
+        role: userData.user.role,
+        app_metadata: userData.user.app_metadata,
+        user_metadata: userData.user.user_metadata,
+      };
     }
 
     return next({
       context: {
         supabase,
-        userId: data.claims.sub,
-        claims: data.claims,
+        userId: claims['sub'] as string,
+        claims: claims as any,
       },
     });
   },

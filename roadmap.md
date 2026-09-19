@@ -93,3 +93,9 @@
 - [x] Tampilkan nama worker pada kolom Pengguna di User Log.
 - [x] Hapus menu dan panel Akun dari Pengaturan Admin.
 - [x] Verifikasi pemeriksaan tipe dan tampilan terkait.
+
+## Penyesuaian email OTP dan kolom login
+- [x] Hapus contoh tulisan pada kolom username atau email.
+- [x] Pertahankan nama dan domain pengirim yang sudah ada.
+- [x] Ubah isi email OTP menjadi "Kode OTP Login : {{ .Token }}".
+- [x] Ubah isi email pergantian alamat menjadi "Verifikasi ganti email klik tautan di bawah ini:" beserta tautan verifikasi.

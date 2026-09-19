@@ -242,7 +242,7 @@ function AuthPage() {
                 <p className="mt-1 text-sm text-muted-foreground">Masuk untuk melanjutkan perjalanan Anda.</p>
               </div>
               <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!loading) void signIn(); }}>
-                <div className="space-y-1.5"><Label htmlFor="username">Username atau email</Label><Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="username (worker) atau email (admin)" /></div>
+                <div className="space-y-1.5"><Label htmlFor="username">Username atau email</Label><Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} /></div>
                 <div className="space-y-1.5"><Label htmlFor="password">Kata sandi</Label><div className="relative"><Input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="pr-10" /><Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword((value) => !value)} aria-label="Tampilkan kata sandi">{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</Button></div></div>
                 <Button type="submit" className="w-full" disabled={loading}>Masuk <ArrowRight className="ml-1 size-4" /></Button>
               </form>

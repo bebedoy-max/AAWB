@@ -149,9 +149,15 @@ function LaporanPage() {
         return true;
       });
     }
+    // Urutkan dari waktu terbaru (paling atas) berdasarkan waktu kirim/buat.
+    const sorted = [...filtered].sort(
+      (a, b) =>
+        new Date(b.sent_at ?? b.created_at).getTime() -
+        new Date(a.sent_at ?? a.created_at).getTime(),
+    );
     const needle = q.trim().toLowerCase();
-    if (!needle) return filtered;
-    return filtered.filter((r) =>
+    if (!needle) return sorted;
+    return sorted.filter((r) =>
       [r.recipient_phone, r.sender, r.sender_owner, r.message_body, r.error_log]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle)),
@@ -469,8 +475,10 @@ function LaporanPage() {
                     {waktu(r.sent_at ?? r.created_at)}
                   </Td>
                   <Td>
-                    <p className="font-medium">{r.sender}</p>
-                    <p className="text-xs text-muted-foreground">{r.sender_owner}</p>
+                    <p className="font-medium">{r.sender_owner}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {r.sender !== "—" ? nomor(r.sender) : "—"}
+                    </p>
                   </Td>
                   <Td className="hidden font-medium lg:table-cell">+{r.recipient_phone}</Td>
                   <Td>
