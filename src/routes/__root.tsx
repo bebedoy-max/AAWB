@@ -156,6 +156,39 @@ function RootComponent() {
     return () => sub.subscription.unsubscribe();
   }, [queryClient, router]);
 
+  // Sesi "always on": perbarui token secara berkala dan setiap kali pengguna
+  // kembali ke tab, supaya halaman yang ditinggal lama tidak memaksa login ulang.
+  // Logout hanya terjadi bila pengguna menekan tombol keluar sendiri.
+  useEffect(() => {
+    let active = true;
+    const keepAlive = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!active || !data.session) return;
+        const expiresAtMs = (data.session.expires_at ?? 0) * 1000;
+        // Perbarui bila token akan kedaluwarsa dalam 5 menit ke depan.
+        if (expiresAtMs - Date.now() < 5 * 60 * 1000) {
+          await supabase.auth.refreshSession();
+        }
+      } catch {
+        // Jaringan putus sesaat tidak boleh mengeluarkan pengguna.
+      }
+    };
+    void keepAlive();
+    const interval = window.setInterval(keepAlive, 10 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void keepAlive();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>

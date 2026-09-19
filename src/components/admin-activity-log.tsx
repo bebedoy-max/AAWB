@@ -45,9 +45,12 @@ function formatTime(value: string): string {
   });
 }
 
+const PAGE_SIZE = 20;
+
 export function AdminActivityLog() {
   const fetchLog = useServerFn(listActivityLog);
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["activity-log"],
@@ -65,6 +68,12 @@ export function AdminActivityLog() {
     );
   }, [data, q]);
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = rows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const goToPage = (p: number) => setPage(Math.min(Math.max(1, p), totalPages));
+
   return (
     <Card>
       <CardHeader>
@@ -81,7 +90,10 @@ export function AdminActivityLog() {
           <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
             <Input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setPage(1);
+              }}
               placeholder="Cari email atau aktivitas"
               className="min-w-0 flex-1 sm:w-60 sm:flex-none"
             />
@@ -109,7 +121,7 @@ export function AdminActivityLog() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {pageRows.map((r) => (
                   <tr key={r.id} className="border-b last:border-0">
                     <td className="whitespace-nowrap py-2 pr-4 text-muted-foreground">
                       {formatTime(r.created_at)}
@@ -133,7 +145,65 @@ export function AdminActivityLog() {
             </table>
           </div>
         )}
+        {rows.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Menampilkan {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, rows.length)} dari{" "}
+              {rows.length} log
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(safePage - 1)}
+                disabled={safePage <= 1 || isFetching}
+              >
+                Sebelumnya
+              </Button>
+              {generatePageNumbers(safePage, totalPages).map((p, i) =>
+                p === "…" ? (
+                  <span key={`gap-${i}`} className="px-1 text-xs text-muted-foreground">
+                    …
+                  </span>
+                ) : (
+                  <Button
+                    key={p}
+                    variant={p === safePage ? "default" : "outline"}
+                    size="sm"
+                    className="min-w-8 px-2"
+                    onClick={() => goToPage(p)}
+                    disabled={isFetching}
+                  >
+                    {p}
+                  </Button>
+                ),
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(safePage + 1)}
+                disabled={safePage >= totalPages || isFetching}
+              >
+                Berikutnya
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
+}
+
+function generatePageNumbers(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>([1, total, current, current - 1, current + 1]);
+  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const out: (number | "…")[] = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) out.push("…");
+    out.push(p);
+    prev = p;
+  }
+  return out;
 }

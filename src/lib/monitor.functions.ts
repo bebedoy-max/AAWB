@@ -13,6 +13,7 @@ export interface AdminOverview {
   devices_total: number;
   devices_connected: number;
   devices_working: number;
+  devices_standby: number;
   sent_total: number;
   failed_total: number;
   pending_total: number;
@@ -95,6 +96,7 @@ const EMPTY: AdminOverview = {
   devices_total: 0,
   devices_connected: 0,
   devices_working: 0,
+  devices_standby: 0,
   sent_total: 0,
   failed_total: 0,
   pending_total: 0,
@@ -121,7 +123,7 @@ export const getAdminOverview = createServerFn({ method: "GET" })
       const admin = supabaseAdmin as any;
       const [{ data: users }, { data: sessions }] = await Promise.all([
         admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-        admin.from("wa_sessions").select("id,user_id,status"),
+        admin.from("wa_sessions").select("id,user_id,status,blast_ready"),
       ]);
       const alive = new Set<string>(((users as any)?.users ?? []).map((u: any) => u.id));
       const rows = ((sessions ?? []) as any[]).filter((s) => alive.has(s.user_id));
@@ -132,6 +134,9 @@ export const getAdminOverview = createServerFn({ method: "GET" })
 
       overview.devices_total = rows.length;
       overview.devices_connected = rows.filter((s) => s.status === "connected").length;
+      overview.devices_standby = rows.filter(
+        (s) => s.status === "connected" && s.blast_ready,
+      ).length;
       if (overview.devices_working > overview.devices_connected) {
         overview.devices_working = overview.devices_connected;
       }

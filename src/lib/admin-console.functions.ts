@@ -54,6 +54,9 @@ export interface TargetsResult {
 
 export interface ReportRow {
   id: string;
+  campaign_id: string;
+  campaign_name: string;
+  user_id: string;
   sender: string;
   sender_owner: string;
   recipient_phone: string;
@@ -451,7 +454,7 @@ export const listReport = createServerFn({ method: "POST" })
 
     let query = admin
       .from("message_queue")
-      .select("id,session_id,user_id,recipient_phone,message_body,status,error_log,sent_at,created_at")
+      .select("id,campaign_id,session_id,user_id,recipient_phone,message_body,status,error_log,sent_at,created_at")
       .order("created_at", { ascending: false })
       .limit(1000);
     if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
@@ -463,6 +466,12 @@ export const listReport = createServerFn({ method: "POST" })
       .select("id,session_name,phone_number");
     const sessionById = new Map(((sessions ?? []) as any[]).map((s) => [s.id, s]));
 
+    const campaignIds = Array.from(new Set(((rows ?? []) as any[]).map((r) => r.campaign_id).filter(Boolean)));
+    const { data: campaignRows } = campaignIds.length
+      ? await admin.from("campaigns").select("id,name").in("id", campaignIds)
+      : { data: [] };
+    const campaignById = new Map(((campaignRows ?? []) as any[]).map((c) => [c.id, c.name]));
+
     const { users, nameMap } = await loadDirectory(admin);
     const userById = new Map(users.map((u) => [u.id, displayName(u, nameMap)]));
 
@@ -472,6 +481,9 @@ export const listReport = createServerFn({ method: "POST" })
         const s = r.session_id ? sessionById.get(r.session_id) : null;
         return {
           id: r.id,
+          campaign_id: r.campaign_id,
+          campaign_name: campaignById.get(r.campaign_id) ?? r.campaign_id,
+          user_id: r.user_id,
           sender: s ? (s.phone_number ?? s.session_name) : "—",
           sender_owner: userById.get(r.user_id) ?? "—",
           recipient_phone: r.recipient_phone,

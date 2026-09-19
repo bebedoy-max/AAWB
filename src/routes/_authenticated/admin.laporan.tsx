@@ -1,4 +1,4 @@
-/** Laporan pengiriman: filter kampanye, ringkasan, tabel riwayat, dan unduh CSV. */
+/** Laporan pengiriman: filter kampanye, ringkasan, tabel riwayat, dan unduh laporan. */
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -51,6 +51,9 @@ export const Route = createFileRoute("/_authenticated/admin/laporan")({
 
 type ReportRow = {
   id: string;
+  campaign_id: string;
+  campaign_name: string;
+  user_id: string;
   sent_at: string | null;
   created_at: string;
   sender: string;
@@ -79,6 +82,26 @@ function csvCell(value: string): string {
   return `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
 }
 
+function nomor(value: string): string {
+  const clean = String(value ?? "").trim();
+  if (!clean || clean === "—") return clean || "-";
+  return clean.startsWith("+") ? clean : `+${clean}`;
+}
+
+function jamKirim(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date).replace(/\./g, ".");
+}
+
 const PAGE_SIZE = 20;
 
 function LaporanPage() {
@@ -87,6 +110,9 @@ function LaporanPage() {
   const clearHistory = useServerFn(clearReportHistory);
 
   const [campaignId, setCampaignId] = useState("all");
+  const [dateMode, setDateMode] = useState<"all" | "month" | "custom">("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<ReportRow | null>(null);
@@ -105,14 +131,31 @@ function LaporanPage() {
 
   const rows = useMemo(() => {
     const list = data?.rows ?? [];
+    let filtered = list;
+    if (dateMode === "month") {
+      const now = new Date();
+      filtered = filtered.filter((r) => {
+        const d = new Date(r.sent_at ?? r.created_at);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      });
+    } else if (dateMode === "custom" && (dateFrom || dateTo)) {
+      const from = dateFrom ? new Date(`${dateFrom}T00:00:00`) : null;
+      const to = dateTo ? new Date(`${dateTo}T23:59:59.999`) : null;
+      filtered = filtered.filter((r) => {
+        const d = new Date(r.sent_at ?? r.created_at);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+      });
+    }
     const needle = q.trim().toLowerCase();
-    if (!needle) return list;
-    return list.filter((r) =>
+    if (!needle) return filtered;
+    return filtered.filter((r) =>
       [r.recipient_phone, r.sender, r.sender_owner, r.message_body, r.error_log]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle)),
     );
-  }, [data, q]);
+  }, [data, q, dateMode, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -122,31 +165,46 @@ function LaporanPage() {
   );
 
   const HEADER = [
-    "Waktu",
+    "No",
+    "ID Data",
+    "BLAST ID",
+    "User ID",
     "Pengirim",
-    "Pemilik perangkat",
-    "Nomor tujuan",
+    "Penerima",
+    "Teks",
     "Status",
-    "Pesan",
-    "Keterangan",
+    "Alasan",
+    "Jam Kirim",
   ];
 
+  const kodePendek = (value: string | null | undefined) => {
+    const clean = String(value ?? "").replace(/-/g, "");
+    return clean ? clean.slice(-6).toUpperCase() : "-";
+  };
+
   const tableRows = () =>
-    rows.map((r) => [
-      waktu(r.sent_at ?? r.created_at),
-      r.sender,
-      r.sender_owner,
-      `+${r.recipient_phone}`,
-      STATUS_LABEL[r.status] ?? r.status,
+    rows.map((r, index) => [
+      String(index + 1),
+      kodePendek(r.id),
+      r.campaign_name,
+      kodePendek(r.user_id),
+      nomor(r.sender),
+      nomor(r.recipient_phone),
       r.message_body,
-      r.error_log ?? "",
+      r.status === "sent" ? "SUCCESS" : r.status.toUpperCase(),
+      r.error_log || "-",
+      jamKirim(r.sent_at ?? r.created_at),
     ]);
 
-  const saveFile = (content: string, mime: string, ext: string) => {
+
+  const fileName = (ext: string) =>
+    `laporan-blast-${new Date().toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "")}.${ext}`;
+
+  const saveFile = (content: BlobPart, mime: string, ext: string) => {
     const url = URL.createObjectURL(new Blob([content], { type: mime }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `laporan-pengiriman-${new Date().toISOString().slice(0, 10)}.${ext}`;
+    link.download = fileName(ext);
     link.click();
     URL.revokeObjectURL(url);
     toast.success("Laporan diunduh");
@@ -163,7 +221,7 @@ function LaporanPage() {
       .map((cells) => `<tr>${cells.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`)
       .join("")}</tbody></table>`;
 
-  const download = (format: "csv" | "excel" | "pdf") => {
+  const download = async (format: "csv" | "excel" | "pdf") => {
     if (!rows.length) {
       toast.error("Tidak ada data untuk diunduh.");
       return;
@@ -180,11 +238,43 @@ function LaporanPage() {
     }
 
     if (format === "excel") {
-      saveFile(
-        `\uFEFF<html><head><meta charset="utf-8" /></head><body>${htmlTable()}</body></html>`,
-        "application/vnd.ms-excel;charset=utf-8",
-        "xls",
-      );
+      const XLSX = await import("xlsx-js-style");
+      const values = [HEADER, ...tableRows()];
+      const sheet = XLSX.utils.aoa_to_sheet(values);
+      sheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+      sheet["!cols"] = [
+        { wch: 6 }, { wch: 36 }, { wch: 18 }, { wch: 36 }, { wch: 18 },
+        { wch: 18 }, { wch: 40 }, { wch: 12 }, { wch: 30 }, { wch: 22 },
+      ];
+      const headerStyle = {
+        font: { bold: true, color: { rgb: "FFFFFF" }, name: "Arial" },
+        fill: { patternType: "solid", fgColor: { rgb: "305496" } },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: { bottom: { style: "thin", color: { rgb: "D9E2F3" } } },
+      };
+      for (let col = 0; col < HEADER.length; col += 1) {
+        const cell = sheet[XLSX.utils.encode_cell({ r: 0, c: col })];
+        if (cell) cell.s = headerStyle;
+      }
+      rows.forEach((row, rowIndex) => {
+        const success = row.status === "sent";
+        const failed = row.status === "failed";
+        const fill = success ? "C6EFCE" : failed ? "FFC7CE" : "FFEB9C";
+        const color = success ? "006100" : failed ? "9C0006" : "9C6500";
+        for (let col = 0; col < HEADER.length; col += 1) {
+          const cell = sheet[XLSX.utils.encode_cell({ r: rowIndex + 1, c: col })];
+          if (!cell) continue;
+          cell.s = {
+            font: { name: "Arial", bold: col === 7, color: { rgb: color } },
+            fill: { patternType: "solid", fgColor: { rgb: fill } },
+            alignment: { vertical: "center", horizontal: col === 7 ? "center" : "left" },
+          };
+        }
+      });
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, "Laporan Blast");
+      const output = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      saveFile(output, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
       return;
     }
 
@@ -252,7 +342,7 @@ function LaporanPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => download("pdf")}>PDF</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => download("excel")}>Excel (.xls)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void download("excel")}>Excel (.xlsx)</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => download("csv")}>CSV</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -273,6 +363,46 @@ function LaporanPage() {
         bodyClassName="p-0"
         action={
           <div className="flex flex-wrap gap-2">
+            <Select
+              value={dateMode}
+              onValueChange={(v) => {
+                setDateMode(v as "all" | "month" | "custom");
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua waktu</SelectItem>
+                <SelectItem value="month">Bulan ini</SelectItem>
+                <SelectItem value="custom">Pilih tanggal</SelectItem>
+              </SelectContent>
+            </Select>
+            {dateMode === "custom" ? (
+              <>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => {
+                    setDateFrom(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-36"
+                  aria-label="Dari tanggal"
+                />
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => {
+                    setDateTo(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-36"
+                  aria-label="Sampai tanggal"
+                />
+              </>
+            ) : null}
             <Select
               value={campaignId}
               onValueChange={(v) => {
