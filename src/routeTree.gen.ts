@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as GantiSandiRouteImport } from './routes/ganti-sandi'
 import { Route as VerifikasiRouteImport } from './routes/verifikasi'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedBlastRouteImport } from './routes/_authenticated/blast'
@@ -57,6 +58,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GantiSandiRoute = GantiSandiRouteImport.update({
+  id: '/ganti-sandi',
+  path: '/ganti-sandi',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VerifikasiRoute = VerifikasiRouteImport.update({
@@ -231,6 +237,7 @@ const ApiPublicWaInboundRoute = ApiPublicWaInboundRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/ganti-sandi': typeof GantiSandiRoute
   '/verifikasi': typeof VerifikasiRoute
   '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/blast': typeof AuthenticatedBlastRoute
@@ -267,6 +274,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRouteWithChildren
+  '/ganti-sandi': typeof GantiSandiRoute
   '/verifikasi': typeof VerifikasiRoute
   '/blast': typeof AuthenticatedBlastRoute
   '/campaigns': typeof AuthenticatedCampaignsRoute
@@ -304,6 +312,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRouteWithChildren
+  '/ganti-sandi': typeof GantiSandiRoute
   '/verifikasi': typeof VerifikasiRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/blast': typeof AuthenticatedBlastRoute
@@ -342,6 +351,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/ganti-sandi'
     | '/verifikasi'
     | '/admin'
     | '/blast'
@@ -378,6 +388,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/ganti-sandi'
     | '/verifikasi'
     | '/blast'
     | '/campaigns'
@@ -414,6 +425,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/ganti-sandi'
     | '/verifikasi'
     | '/_authenticated/admin'
     | '/_authenticated/blast'
@@ -452,6 +464,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
+  GantiSandiRoute: typeof GantiSandiRoute
   VerifikasiRoute: typeof VerifikasiRoute
   ApiBlastTickRoute: typeof ApiBlastTickRoute
   ApiCampaignDispatchRoute: typeof ApiCampaignDispatchRoute
@@ -484,6 +497,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ganti-sandi': {
+      id: '/ganti-sandi'
+      path: '/ganti-sandi'
+      fullPath: '/ganti-sandi'
+      preLoaderRoute: typeof GantiSandiRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/verifikasi': {
@@ -789,6 +809,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
+  GantiSandiRoute: GantiSandiRoute,
   VerifikasiRoute: VerifikasiRoute,
   ApiBlastTickRoute: ApiBlastTickRoute,
   ApiCampaignDispatchRoute: ApiCampaignDispatchRoute,

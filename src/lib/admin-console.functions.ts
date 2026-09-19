@@ -395,6 +395,71 @@ export const requestStaffEmailChange = createServerFn({ method: "POST" })
   );
 
 
+/**
+ * Kirim tautan ganti kata sandi ke email AKUN SENDIRI (admin / super admin).
+ */
+export const requestStaffPasswordReset = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string; origin?: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    const origin = String(input.origin ?? "").trim();
+    return { userId: input.userId, origin: /^https?:\/\//.test(origin) ? origin : "" };
+  })
+  .handler(async ({ data, context }): Promise<{ ok: true; email: string }> => {
+    await assertAdmin(context, true);
+    if (data.userId !== context.userId) {
+      throw new Error("Anda hanya bisa mengubah kata sandi akun Anda sendiri.");
+    }
+
+    const url = process.env["MY_SUPABASE_URL"] ?? process.env["SUPABASE_URL"] ?? "";
+    const apikey =
+      process.env["MY_SUPABASE_PUBLISHABLE_KEY"] ?? process.env["SUPABASE_PUBLISHABLE_KEY"] ?? "";
+    if (!url || !apikey) throw new Error("Konfigurasi Supabase tidak lengkap.");
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: found, error } = await (supabaseAdmin as any).auth.admin.getUserById(
+      context.userId,
+    );
+    if (error) throw new Error(error.message);
+    const email = String(found?.user?.email ?? "");
+    if (!email || email.endsWith("@member.aawb.local")) {
+      throw new Error("Akun ini belum memakai email asli. Ubah email dulu.");
+    }
+
+    const redirectTo = data.origin ? `${data.origin}/ganti-sandi` : "";
+    const res = await fetch(
+      `${url.replace(/\/$/, "")}/auth/v1/recover${
+        redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ""
+      }`,
+      {
+        method: "POST",
+        headers: { apikey, Authorization: `Bearer ${apikey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      },
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error(`[password_reset] ${res.status}: ${text}`);
+      let msg = "Gagal mengirim tautan ganti kata sandi.";
+      try {
+        const parsed = JSON.parse(text);
+        msg = parsed.msg || parsed.message || parsed.error_description || msg;
+      } catch {
+        /* pesan default */
+      }
+      if (res.status === 429) msg = "Terlalu sering meminta tautan. Tunggu beberapa menit.";
+      throw new Error(msg);
+    }
+
+    await (await import("@/lib/activity-log.server")).logActivity(
+      context.userId,
+      "password_reset",
+      `Permintaan ganti kata sandi dikirim ke ${email}`,
+    );
+
+    return { ok: true, email };
+  });
 
 /** Kandidat pengguna yang bisa diangkat menjadi admin. */
 export const listPromotableUsers = createServerFn({ method: "GET" })

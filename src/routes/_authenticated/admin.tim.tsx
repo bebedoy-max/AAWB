@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Loader2, Mail, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { KeyRound, Loader2, Mail, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ import { setMemberRole, type AppRole } from "@/lib/admin.functions";
 import {
   listStaff,
   requestStaffEmailChange,
+  requestStaffPasswordReset,
 } from "@/lib/admin-console.functions";
 import { useMyRole } from "./admin";
 import {
@@ -60,6 +61,7 @@ function TimPage() {
   const fetchStaff = useServerFn(listStaff);
   const changeRole = useServerFn(setMemberRole);
   const changeEmail = useServerFn(requestStaffEmailChange);
+  const resetPassword = useServerFn(requestStaffPasswordReset);
 
   const [emailTarget, setEmailTarget] = useState<{ user_id: string; name: string } | null>(null);
   const [emailValue, setEmailValue] = useState("");
@@ -125,6 +127,20 @@ function TimPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const sendReset = useMutation({
+    mutationFn: (vars: { userId: string }) =>
+      resetPassword({
+        data: {
+          ...vars,
+          origin: typeof window === "undefined" ? "" : window.location.origin,
+        },
+      }),
+    onSuccess: (res) =>
+      toast.success(
+        `Tautan ganti kata sandi dikirim ke ${res.email}. Cek juga folder spam/junk.`,
+      ),
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const admins = (data ?? []).filter((s) => s.role === "admin").length;
   const supers = (data ?? []).filter((s) => s.role === "super_admin").length;
@@ -203,6 +219,7 @@ function TimPage() {
                     )}
                   </Td>
                   <Td>
+                    <div className="flex flex-wrap items-center gap-2">
                     {s.user_id === me?.user_id ? (
                       <Button
                         size="sm"
@@ -236,6 +253,22 @@ function TimPage() {
                     ) : (
                       <Badge variant="outline">Terverifikasi</Badge>
                     )}
+                    {s.user_id === me?.user_id ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={sendReset.isPending}
+                        onClick={() => sendReset.mutate({ userId: s.user_id })}
+                      >
+                        {sendReset.isPending ? (
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : (
+                          <KeyRound className="mr-2 size-4" />
+                        )}
+                        Ubah password
+                      </Button>
+                    ) : null}
+                    </div>
                   </Td>
 
                 </tr>
