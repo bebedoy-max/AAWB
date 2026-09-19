@@ -88,3 +88,8 @@
 - [x] Tambahkan tombol Tambah Perangkat di pojok kanan bawah kartu Perangkat Terhubung tanpa mengubah tinggi kartu.
 - [x] Tampilkan QR dan pilihan pairing via kode setelah nama perangkat dibuat.
 - [x] Arahkan ke menu WhatsApp hanya setelah perangkat berhasil terhubung.
+
+## Penyederhanaan User Log dan Pengaturan Admin
+- [x] Tampilkan nama worker pada kolom Pengguna di User Log.
+- [x] Hapus menu dan panel Akun dari Pengaturan Admin.
+- [x] Verifikasi pemeriksaan tipe dan tampilan terkait.

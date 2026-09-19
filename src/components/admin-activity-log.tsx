@@ -62,7 +62,7 @@ export function AdminActivityLog() {
     const needle = q.trim().toLowerCase();
     if (!needle) return list;
     return list.filter((r) =>
-      [r.actor_email, r.action, ACTION_LABEL[r.action], r.detail, r.actor_role]
+      [r.actor_name, r.action, ACTION_LABEL[r.action], r.detail, r.actor_role]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle)),
     );
@@ -126,7 +126,7 @@ export function AdminActivityLog() {
                     <td className="whitespace-nowrap py-2 pr-4 text-muted-foreground">
                       {formatTime(r.created_at)}
                     </td>
-                    <td className="py-2 pr-4">{r.actor_email ?? "—"}</td>
+                    <td className="py-2 pr-4">{r.actor_name ?? "Nama belum tersedia"}</td>
                     <td className="py-2 pr-4">
                       <Badge variant="outline">{ROLE_LABEL[r.actor_role] ?? r.actor_role}</Badge>
                     </td>

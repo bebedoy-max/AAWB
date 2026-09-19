@@ -12,6 +12,7 @@ export interface ActivityRow {
   user_id: string | null;
   actor_role: string;
   actor_email: string | null;
+  actor_name: string | null;
   action: string;
   detail: string | null;
   created_at: string;
@@ -51,5 +52,24 @@ export const listActivityLog = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false })
       .limit(300);
     if (error) throw new Error(error.message);
-    return (data ?? []) as ActivityRow[];
+
+    const logRows = (data ?? []) as Omit<ActivityRow, "actor_name">[];
+    const userIds = [...new Set(logRows.map((row) => row.user_id).filter((id): id is string => Boolean(id)))];
+    const nameByUserId = new Map<string, string>();
+
+    if (userIds.length > 0) {
+      const { data: profiles } = await (supabaseAdmin as any)
+        .from("profiles")
+        .select("user_id,organization_name")
+        .in("user_id", userIds);
+      for (const profile of (profiles ?? []) as { user_id: string; organization_name: string | null }[]) {
+        const name = profile.organization_name?.trim();
+        if (name) nameByUserId.set(profile.user_id, name);
+      }
+    }
+
+    return logRows.map((row) => ({
+      ...row,
+      actor_name: row.user_id ? (nameByUserId.get(row.user_id) ?? null) : null,
+    }));
   });

@@ -1,6 +1,6 @@
 /**
  * Pengaturan sistem dengan panel samping: gateway WhatsApp, bot Telegram,
- * reward & keuangan, log aktivitas, akun, tampilan, dan koneksi Telegram.
+ * reward & keuangan, log aktivitas, tampilan, dan koneksi Telegram.
  */
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -22,8 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/my-client";
-import type { Profile } from "@/types/wa";
 import {
   getGatewaySettings,
   getGlobalAppTheme,
@@ -62,7 +60,6 @@ type SectionId =
   | "telegram-bot"
   | "reward"
   | "log"
-  | "akun"
   | "tampilan"
   | "telegram-akun"
   | "profil-wa";
@@ -78,7 +75,6 @@ const SECTIONS: {
   { id: "telegram-bot", label: "Bot Telegram", hint: "Token & username", icon: Send, superOnly: true },
   { id: "reward", label: "Reward & Keuangan", hint: "Nilai reward, referal", icon: Coins, superOnly: true },
   { id: "log", label: "User Log", hint: "Aktivitas pengguna", icon: ScrollText },
-  { id: "akun", label: "Akun", hint: "Nama & email", icon: UserRound },
   { id: "tampilan", label: "Tampilan", hint: "Tema warna", icon: Palette },
   { id: "telegram-akun", label: "Telegram CS", hint: "Kontak bantuan pengguna", icon: MessageCircle },
   { id: "profil-wa", label: "Workers Profile", hint: "Nama & foto global", icon: ImageIcon },
@@ -132,7 +128,6 @@ function PengaturanPage() {
           {active === "telegram-bot" && isSuper ? <TelegramBotPanel /> : null}
           {active === "reward" && isSuper ? <AdminRewardSettings /> : null}
           {active === "log" ? <AdminActivityLog /> : null}
-          {active === "akun" ? <AkunPanel /> : null}
           {active === "tampilan" ? <TampilanPanel /> : null}
           {active === "telegram-akun" ? <TelegramAkunPanel /> : null}
           {active === "profil-wa" ? <ProfilWhatsAppPanel /> : null}
@@ -382,63 +377,6 @@ function TelegramBotPanel() {
         <p className="text-xs text-muted-foreground">
           Token disimpan di database dan tidak pernah ditampilkan kembali secara utuh.
         </p>
-      </div>
-    </Panel>
-  );
-}
-
-function AkunPanel() {
-  const queryClient = useQueryClient();
-  const [org, setOrg] = useState("");
-  const [email, setEmail] = useState("");
-
-  const { data: profile } = useQuery({
-    queryKey: ["profile"],
-    queryFn: async () => {
-      const { data: user } = await supabase.auth.getUser();
-      setEmail(user.user?.email ?? "");
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", user.user!.id)
-        .maybeSingle();
-      return (data ?? null) as Profile | null;
-    },
-  });
-
-  useEffect(() => {
-    if (profile?.organization_name) setOrg(profile.organization_name);
-  }, [profile]);
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const { data: user } = await supabase.auth.getUser();
-      const { error } = await supabase
-        .from("profiles")
-        .upsert({ user_id: user.user!.id, organization_name: org }, { onConflict: "user_id" });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Pengaturan akun disimpan");
-      queryClient.invalidateQueries({ queryKey: ["profile"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  return (
-    <Panel title="Akun" description="Nama Anda yang ditampilkan di aplikasi.">
-      <div className="space-y-3 sm:max-w-md">
-        <div className="space-y-1.5">
-          <Label htmlFor="org">Nama</Label>
-          <Input id="org" value={org} onChange={(e) => setOrg(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="acc-email">Email akun</Label>
-          <Input id="acc-email" value={email} disabled />
-        </div>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
-          Simpan perubahan
-        </Button>
       </div>
     </Panel>
   );
