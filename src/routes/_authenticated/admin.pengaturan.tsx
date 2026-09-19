@@ -26,18 +26,15 @@ import type { Profile } from "@/types/wa";
 import {
   getGatewaySettings,
   getGlobalAppTheme,
+  getSupportTelegram,
   getTelegramSettings,
   saveGatewaySettings,
   saveGlobalAppTheme,
+  saveSupportTelegram,
   saveTelegramSettings,
   testGateway,
   testTelegramBot,
 } from "@/lib/admin.functions";
-import {
-  disconnectTelegram,
-  getTelegramStatus,
-  startTelegramLink,
-} from "@/lib/telegram.functions";
 import { AdminRewardSettings } from "@/components/admin-rewards";
 import { AdminActivityLog } from "@/components/admin-activity-log";
 import { useMyRole } from "./admin";
@@ -80,7 +77,7 @@ const SECTIONS: {
   { id: "log", label: "User Log", hint: "Aktivitas pengguna", icon: ScrollText },
   { id: "akun", label: "Akun", hint: "Nama & email", icon: UserRound },
   { id: "tampilan", label: "Tampilan", hint: "Tema warna", icon: Palette },
-  { id: "telegram-akun", label: "Telegram Saya", hint: "Koneksi notifikasi", icon: MessageCircle },
+  { id: "telegram-akun", label: "Telegram CS", hint: "Kontak bantuan pengguna", icon: MessageCircle },
 ];
 
 function PengaturanPage() {
@@ -444,63 +441,74 @@ function AkunPanel() {
 
 function TelegramAkunPanel() {
   const queryClient = useQueryClient();
+  const fetchSupport = useServerFn(getSupportTelegram);
+  const persistSupport = useServerFn(saveSupportTelegram);
+  const [username, setUsername] = useState("");
+  const [touched, setTouched] = useState(false);
 
-  const { data: status, isLoading } = useQuery({
-    queryKey: ["telegram-status"],
-    queryFn: () => getTelegramStatus(),
-    refetchInterval: (query) =>
-      (query.state.data as { connected?: boolean } | undefined)?.connected ? false : 5000,
+  const { data: support, isLoading } = useQuery({
+    queryKey: ["support-telegram"],
+    queryFn: () => fetchSupport(),
   });
 
-  const connect = useMutation({
-    mutationFn: () => startTelegramLink(),
-    onSuccess: (res) => {
-      window.open(res.url, "_blank", "noopener,noreferrer");
-      toast.info("Tekan START pada obrolan Telegram yang terbuka untuk menyelesaikan koneksi.");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  useEffect(() => {
+    if (!touched) setUsername(support?.username ?? "");
+  }, [support, touched]);
 
-  const disconnect = useMutation({
-    mutationFn: () => disconnectTelegram(),
+  const save = useMutation({
+    mutationFn: () => persistSupport({ data: { username } }),
     onSuccess: () => {
-      toast.success("Akun Telegram diputuskan");
-      queryClient.invalidateQueries({ queryKey: ["telegram-status"] });
+      toast.success("Kontak Telegram CS tersimpan");
+      setTouched(false);
+      queryClient.invalidateQueries({ queryKey: ["support-telegram"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const preview = username.replace(/^@/, "").trim();
 
   return (
-    <Panel title="Telegram Saya" description="Hubungkan akun Telegram Anda untuk menerima notifikasi.">
+    <Panel
+      title="Telegram CS"
+      description="Akun Telegram tim bantuan. Tombol “Hubungi via Telegram” pada dashboard Worker's akan membuka obrolan ini."
+    >
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Memeriksa status…</p>
-      ) : !status?.configured ? (
-        <p className="text-sm text-muted-foreground">
-          Bot Telegram belum dikonfigurasi. Isi token bot pada bagian Bot Telegram terlebih dahulu.
-        </p>
-      ) : status.connected ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-          <div>
-            <p className="text-sm font-medium">
-              Tersambung{status.username ? ` sebagai @${status.username}` : ""}
-            </p>
+        <p className="text-sm text-muted-foreground">Memuat…</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="cs-telegram">Username Telegram CS</Label>
+            <Input
+              id="cs-telegram"
+              placeholder="contoh: aawb_support"
+              value={username}
+              onChange={(e) => {
+                setTouched(true);
+                setUsername(e.target.value);
+              }}
+            />
             <p className="text-xs text-muted-foreground">
-              {status.first_name ?? "Akun Telegram"} · ID {status.chat_id}
+              Tanpa tanda @. Kosongkan untuk menyembunyikan tombol kontak.
             </p>
           </div>
-          <Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>
-            Putuskan
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Belum tersambung. Tekan tombol di bawah, lalu tekan START pada obrolan Telegram yang
-            terbuka.
-          </p>
-          <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
-            Hubungkan Telegram
-          </Button>
+
+          <div className="rounded-lg border p-3 text-sm">
+            <p className="text-xs text-muted-foreground">Tautan yang dipakai pengguna</p>
+            <p className="mt-1 font-medium">{preview ? `https://t.me/${preview}` : "Belum diatur"}</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => save.mutate()} disabled={save.isPending}>
+              Simpan kontak
+            </Button>
+            {preview ? (
+              <Button variant="outline" asChild>
+                <a href={`https://t.me/${preview}`} target="_blank" rel="noopener noreferrer">
+                  Uji buka obrolan
+                </a>
+              </Button>
+            ) : null}
+          </div>
         </div>
       )}
     </Panel>

@@ -68,6 +68,54 @@ export const saveGlobalAppTheme = createServerFn({ method: "POST" })
     return { ok: true, theme: data.theme };
   });
 
+/** Username Telegram customer service (dipakai tombol "Hubungi via Telegram"). */
+export const getSupportTelegram = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async (): Promise<{ username: string | null; url: string | null }> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await (supabaseAdmin as any)
+      .from("app_settings")
+      .select("support_telegram_username")
+      .eq("id", "global")
+      .maybeSingle();
+    if (error) return { username: null, url: null };
+    const username = (data?.support_telegram_username ?? "").replace(/^@/, "") || null;
+    return { username, url: username ? `https://t.me/${username}` : null };
+  });
+
+/** Simpan username Telegram customer service. Hanya admin & super admin. */
+export const saveSupportTelegram = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { username: string }) => ({
+    username: (input?.username ?? "").trim().replace(/^@/, "").replace(/^https?:\/\/t\.me\//i, ""),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    if (data.username && !/^[A-Za-z0-9_]{4,32}$/.test(data.username)) {
+      throw new Error("Username Telegram tidak valid. Gunakan 4-32 huruf, angka, atau garis bawah.");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin as any).from("app_settings").upsert(
+      {
+        id: "global",
+        support_telegram_username: data.username || null,
+        updated_at: new Date().toISOString(),
+        updated_by: context.userId,
+      },
+      { onConflict: "id" },
+    );
+    if (error) {
+      if (/support_telegram_username/.test(error.message)) {
+        throw new Error(
+          "Fitur ini belum aktif. Jalankan db/migrations/018_support_telegram.sql di SQL Editor Supabase.",
+        );
+      }
+      throw new Error(error.message);
+    }
+    return { ok: true, username: data.username || null };
+  });
+
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 async function rolesOf(_supabase: any, userId: string): Promise<AppRole[]> {
