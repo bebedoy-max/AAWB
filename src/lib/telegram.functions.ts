@@ -90,3 +90,19 @@ export const disconnectTelegram = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+/**
+ * Kirim notifikasi ke Telegram pengguna setelah ia mengubah kata sandi sendiri.
+ * Diam saja bila bot belum aktif atau akun belum tersambung.
+ */
+export const notifyOwnPasswordChanged = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { notifyUserTelegram } = await import("@/lib/telegram.server");
+    const waktu = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+    const sent = await notifyUserTelegram(
+      context.userId,
+      `🔐 <b>Kata sandi diubah</b>\nKata sandi akun Anda baru saja diubah pada ${waktu} WIB.\n\nJika bukan Anda yang melakukannya, segera hubungi admin.`,
+    );
+    return { sent };
+  });

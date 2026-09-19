@@ -97,7 +97,7 @@ export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
         size="icon"
         variant="ghost"
         aria-label="Tutup pemberitahuan"
-        className="absolute right-2 top-2 size-7 rounded-full text-warning-foreground/70 hover:text-foreground"
+        className="absolute right-2 top-2 size-7 rounded-full text-foreground/80 hover:bg-warning/25 hover:text-foreground"
         onClick={dismissNotice}
       >
         <X className="size-4" />
@@ -109,7 +109,7 @@ export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
           <p className="mt-1 text-sm text-foreground/85">
             Gunakan nama dan foto profil yang ditentukan sebelum mulai mengirim pesan.
           </p>
-          <div className="mt-4 rounded-lg border border-warning-border bg-background/25 p-3 text-xs font-semibold leading-5 text-warning-foreground">
+          <div className="mt-4 rounded-lg border border-warning-border bg-background/25 p-3 text-xs font-semibold leading-5 text-foreground/90">
             <Pin className="mr-2 inline size-3.5 text-warning" />
             Jika mengerjakan data, simpan bukti aktivitas sesuai arahan admin.
           </div>

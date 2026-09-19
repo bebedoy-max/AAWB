@@ -453,7 +453,14 @@ export const resetMemberPassword = createServerFn({ method: "POST" })
     });
     if (error) throw new Error(error.message);
     await (await import("@/lib/activity-log.server")).logActivity(context.userId, "password_reset", `Kata sandi pengguna ${data.userId} disetel ulang`);
-    return { ok: true };
+
+    // Beri tahu pengguna lewat bot Telegram (diam bila belum tersambung).
+    const { notifyUserTelegram } = await import("@/lib/telegram.server");
+    const notified = await notifyUserTelegram(
+      data.userId,
+      `🔐 <b>Kata sandi disetel ulang oleh admin</b>\nKata sandi akun Anda baru saja disetel ulang.\nKata sandi baru: <code>${data.password}</code>\n\nSegera masuk dan ubah kata sandi Anda di menu Pengaturan Akun.`,
+    );
+    return { ok: true, notified };
   });
 
 /** Hapus akun seorang anggota beserta perannya (super admin). */

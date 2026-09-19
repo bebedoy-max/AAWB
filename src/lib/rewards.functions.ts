@@ -744,7 +744,7 @@ export const setWithdrawalStatus = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await (supabaseAdmin as any)
+    const { data: row, error } = await (supabaseAdmin as any)
       .from("withdrawals")
       .update({
         status: data.status,
@@ -753,12 +753,24 @@ export const setWithdrawalStatus = createServerFn({ method: "POST" })
         processed_by: context.userId,
       })
       .eq("id", data.id)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .select("user_id,amount")
+      .maybeSingle();
     if (error) throw new Error(error.message);
     await (await import("@/lib/activity-log.server")).logActivity(
       context.userId,
       data.status === "approved" ? "withdrawal_approved" : "withdrawal_rejected",
       `Penarikan ${data.id}${data.note ? ` — ${data.note}` : ""}`,
     );
+    if (row?.user_id) {
+      const nominal = new Intl.NumberFormat("id-ID").format(Number(row.amount ?? 0));
+      const { notifyUserTelegram } = await import("@/lib/telegram.server");
+      await notifyUserTelegram(
+        row.user_id,
+        data.status === "approved"
+          ? `✅ <b>Penarikan disetujui</b>\nNominal: Rp ${nominal}\nDana sedang diproses ke rekening tujuan Anda.${data.note ? `\nCatatan: ${data.note}` : ""}`
+          : `❌ <b>Penarikan ditolak</b>\nNominal: Rp ${nominal}${data.note ? `\nAlasan: ${data.note}` : ""}`,
+      );
+    }
     return { ok: true };
   });

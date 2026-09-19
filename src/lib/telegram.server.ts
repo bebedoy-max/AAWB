@@ -91,3 +91,21 @@ export async function getBotUsername(): Promise<string> {
 export async function sendTelegramMessage(chatId: string | number, text: string): Promise<void> {
   await callTelegram("sendMessage", { chat_id: chatId, text, parse_mode: "HTML" });
 }
+
+/** Kirim notifikasi ke akun Telegram milik seorang pengguna (diam bila belum tersambung). */
+export async function notifyUserTelegram(userId: string, text: string): Promise<boolean> {
+  try {
+    if (!(await isTelegramConfigured())) return false;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await (supabaseAdmin as any)
+      .from("telegram_links")
+      .select("chat_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!data?.chat_id) return false;
+    await sendTelegramMessage(data.chat_id, text);
+    return true;
+  } catch {
+    return false;
+  }
+}

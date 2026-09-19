@@ -4,6 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { memberPassword } from "@/lib/member-auth.functions";
+import {
+  disconnectTelegram,
+  getTelegramStatus,
+  notifyOwnPasswordChanged,
+  startTelegramLink,
+} from "@/lib/telegram.functions";
 import { PageHeader } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, Eye, EyeOff, Landmark, Save, UserRound, Wallet } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Landmark, Save, Send, UserRound, Wallet } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/pengaturan-akun")({
   head: () => ({
@@ -91,6 +97,7 @@ function AccountSettings() {
           username={data?.username ?? ""}
           profile={data?.profile ?? null}
         />
+        <TelegramConnectCard />
         <DisbursementCard key={`disb-${data?.profile ? "ready" : "loading"}`} profile={data?.profile ?? null} />
       </div>
     </div>
@@ -134,49 +141,60 @@ function PasswordInput({
 
 function AccountInfoCard({ username, profile }: { username: string; profile: AccountProfile | null }) {
   const queryClient = useQueryClient();
-  const [fullName, setFullName] = useState(profile?.organization_name ?? "");
-  const [telegram, setTelegram] = useState(profile?.telegram_username ?? "");
+  const initialName = profile?.organization_name ?? "";
+  const [fullName, setFullName] = useState(initialName);
   const [password, setPassword] = useState("");
   const [passwordRepeat, setPasswordRepeat] = useState("");
 
   useEffect(() => {
     setFullName(profile?.organization_name ?? "");
-    setTelegram(profile?.telegram_username ?? "");
   }, [profile]);
+
+  const nameChanged = fullName.trim() !== (profile?.organization_name ?? "").trim();
+  const wantsPassword = password.length > 0 || passwordRepeat.length > 0;
+  const hasChanges = nameChanged || wantsPassword;
 
   const save = useMutation({
     mutationFn: async () => {
+      if (!hasChanges) throw new Error("Tidak ada perubahan untuk disimpan.");
       const name = fullName.trim();
       if (name.length < 2) throw new Error("Nama lengkap minimal 2 karakter.");
-      const tg = telegram.trim().replace(/^@+/, "");
 
-      const { data: auth } = await supabase.auth.getUser();
-      const user = auth.user!;
-
-      if (password || passwordRepeat) {
+      if (wantsPassword) {
         if (password.length < 4) throw new Error("Kata sandi baru minimal 4 karakter.");
         if (password !== passwordRepeat) throw new Error("Ulangi kata sandi tidak cocok.");
       }
 
-      const { error: profileError } = await supabase.from("profiles").upsert(
-        {
-          user_id: user.id,
-          organization_name: name,
-          telegram_username: tg || null,
-        } as never,
-        { onConflict: "user_id" },
-      );
-      if (profileError) throw profileError;
+      const { data: auth } = await supabase.auth.getUser();
+      const user = auth.user!;
 
-      const authUpdate: { password?: string; data?: Record<string, unknown> } = {
-        data: { organization_name: name },
-      };
-      if (password) authUpdate.password = memberPassword(password);
+      if (nameChanged) {
+        const { error: profileError } = await supabase.from("profiles").upsert(
+          { user_id: user.id, organization_name: name } as never,
+          { onConflict: "user_id" },
+        );
+        if (profileError) throw profileError;
+      }
+
+      const authUpdate: { password?: string; data?: Record<string, unknown> } = {};
+      if (nameChanged) authUpdate.data = { organization_name: name };
+      if (wantsPassword) authUpdate.password = memberPassword(password);
       const { error: authError } = await supabase.auth.updateUser(authUpdate);
-      if (authError) throw new Error("Kata sandi belum dapat diubah. Silakan coba lagi.");
+      if (authError) throw new Error("Perubahan belum dapat disimpan. Silakan coba lagi.");
+
+      // Notifikasi Telegram bersifat pelengkap: kegagalannya tidak membatalkan simpan.
+      if (wantsPassword) await notifyOwnPasswordChanged().catch(() => undefined);
+
+      return { nameChanged, passwordChanged: wantsPassword };
     },
-    onSuccess: () => {
-      toast.success("Akun berhasil disimpan");
+    onSuccess: (res) => {
+      toast.success(
+        res.passwordChanged && res.nameChanged
+          ? "Nama dan kata sandi berhasil diperbarui"
+          : res.passwordChanged
+            ? "Kata sandi berhasil diperbarui"
+            : "Nama lengkap berhasil diperbarui",
+      );
       setPassword("");
       setPasswordRepeat("");
       queryClient.invalidateQueries({ queryKey: ["my-account-settings"] });
@@ -212,25 +230,6 @@ function AccountInfoCard({ username, profile }: { username: string; profile: Acc
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="telegram" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            ID Telegram
-          </Label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">@</span>
-            <Input
-              id="telegram"
-              value={telegram}
-              onChange={(e) => setTelegram(e.target.value.replace(/^@+/, ""))}
-              className="pl-8"
-              placeholder="username_telegram"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Digunakan admin untuk menghubungi Anda jika ada kendala penarikan saldo atau lainnya.
-          </p>
-        </div>
-
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="new-password" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -256,12 +255,96 @@ function AccountInfoCard({ username, profile }: { username: string; profile: Acc
           </div>
         </div>
 
-        <div className="flex justify-end">
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
+        <div className="flex items-center justify-end gap-3">
+          {!hasChanges ? (
+            <span className="text-xs text-muted-foreground">Belum ada perubahan.</span>
+          ) : null}
+          <Button onClick={() => save.mutate()} disabled={save.isPending || !hasChanges}>
             <Save className="mr-2 size-4" />
             {save.isPending ? "Menyimpan…" : "Simpan Akun"}
           </Button>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TelegramConnectCard() {
+  const queryClient = useQueryClient();
+  const { data: status, isLoading } = useQuery({
+    queryKey: ["telegram-status"],
+    queryFn: () => getTelegramStatus(),
+    refetchInterval: (query) =>
+      (query.state.data as { connected?: boolean } | undefined)?.connected ? false : 5000,
+  });
+
+  const connect = useMutation({
+    mutationFn: () => startTelegramLink(),
+    onSuccess: (res) => {
+      window.open(res.url, "_blank", "noopener,noreferrer");
+      toast.info("Tekan START pada obrolan bot Telegram yang terbuka untuk menyelesaikan koneksi.");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const disconnect = useMutation({
+    mutationFn: () => disconnectTelegram(),
+    onSuccess: () => {
+      toast.success("Akun Telegram diputuskan");
+      queryClient.invalidateQueries({ queryKey: ["telegram-status"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Card className="rounded-2xl shadow-panel">
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="grid size-11 place-items-center rounded-xl bg-secondary">
+            <Send className="size-5 text-muted-foreground" />
+          </div>
+          <div>
+            <CardTitle className="text-xl">Notifikasi Telegram</CardTitle>
+            <CardDescription>
+              Sambungkan akun Telegram Anda untuk menerima notifikasi reset kata sandi, status
+              penarikan saldo, dan pengumuman lain dari bot resmi.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Memeriksa status…</p>
+        ) : !status?.configured ? (
+          <p className="text-sm text-muted-foreground">
+            Bot Telegram belum diaktifkan oleh admin. Coba lagi nanti.
+          </p>
+        ) : status.connected ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-medium">
+                Tersambung{status.username ? ` sebagai @${status.username}` : ""}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {status.first_name ?? "Akun Telegram"} · ID {status.chat_id}
+              </p>
+            </div>
+            <Button variant="outline" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>
+              Putuskan
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Tekan tombol di bawah, lalu tekan <strong>START</strong> pada obrolan bot yang terbuka.
+              Status di halaman ini berubah otomatis setelah tersambung.
+            </p>
+            <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
+              <Send className="mr-2 size-4" />
+              {connect.isPending ? "Membuka Telegram…" : "Hubungkan Telegram"}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
