@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/my-client";
@@ -53,6 +54,9 @@ function AuthPage() {
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [otpEmail, setOtpEmail] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -64,6 +68,20 @@ function AuthPage() {
 
   const normalized = useMemo(() => normalizeUsername(username), [username]);
   const validUsername = /^[a-z0-9_]{4,24}$/.test(normalized);
+
+  const sendOtp = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+    if (error) {
+      toast.error(
+        error.message.toLowerCase().includes("rate")
+          ? "Terlalu sering meminta kode. Tunggu sebentar lalu coba lagi."
+          : "Kode OTP gagal dikirim. Periksa pengaturan pengiriman email.",
+      );
+      return false;
+    }
+    toast.success("Kode OTP dikirim ke email terdaftar. Berlaku beberapa menit.");
+    return true;
+  };
 
   const signIn = async () => {
     const identifier = username.trim();
@@ -83,10 +101,20 @@ function AuthPage() {
       return;
     }
     const target = await getPostLoginPath();
-    if (!isEmail && target === "/admin") {
+    if (target === "/admin") {
+      // Admin dan super admin wajib email + verifikasi OTP.
       await supabase.auth.signOut();
+      if (!isEmail) {
+        setLoading(false);
+        toast.error("Admin dan super admin wajib masuk memakai email terdaftar dan kata sandi.");
+        return;
+      }
+      const sent = await sendOtp(identifier.toLowerCase());
       setLoading(false);
-      toast.error("Admin dan super admin wajib masuk memakai email terdaftar dan kata sandi.");
+      if (sent) {
+        setOtpEmail(identifier.toLowerCase());
+        setOtpCode("");
+      }
       return;
     }
     await recordActivity({
@@ -94,6 +122,30 @@ function AuthPage() {
     }).catch(() => {});
     navigate({ to: target });
   };
+
+  const verifyOtp = async () => {
+    if (!otpEmail || otpCode.length < 6) {
+      toast.error("Masukkan 6 digit kode OTP.");
+      return;
+    }
+    setOtpLoading(true);
+    const { error } = await supabase.auth.verifyOtp({ email: otpEmail, token: otpCode, type: "email" });
+    if (error) {
+      setOtpLoading(false);
+      toast.error(
+        error.message.toLowerCase().includes("expired")
+          ? "Kode OTP kedaluwarsa. Minta kode baru."
+          : "Kode OTP salah.",
+      );
+      return;
+    }
+    await recordActivity({ data: { action: "login", detail: "Masuk admin dengan OTP email" } }).catch(() => {});
+    const target = await getPostLoginPath();
+    setOtpLoading(false);
+    setOtpEmail(null);
+    navigate({ to: target });
+  };
+
 
 
   const nextStep = async () => {
@@ -179,7 +231,7 @@ function AuthPage() {
                 <p className="mt-1 text-sm text-muted-foreground">Masuk untuk melanjutkan perjalanan Anda.</p>
               </div>
               <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (!loading) void signIn(); }}>
-                <div className="space-y-1.5"><Label htmlFor="username">Username atau email</Label><Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="username (worker) atau email (admin)" /><p className="text-xs text-muted-foreground">Admin dan super admin wajib masuk dengan email terdaftar.</p></div>
+                <div className="space-y-1.5"><Label htmlFor="username">Username atau email</Label><Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="username (worker) atau email (admin)" /></div>
                 <div className="space-y-1.5"><Label htmlFor="password">Kata sandi</Label><div className="relative"><Input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="pr-10" /><Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword((value) => !value)} aria-label="Tampilkan kata sandi">{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</Button></div></div>
                 <Button type="submit" className="w-full" disabled={loading}>Masuk <ArrowRight className="ml-1 size-4" /></Button>
               </form>
@@ -205,6 +257,42 @@ function AuthPage() {
           )}
         </div>
       </div>
+
+      <Dialog open={otpEmail !== null} onOpenChange={(open) => { if (!open) { setOtpEmail(null); setOtpCode(""); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Verifikasi OTP</DialogTitle>
+            <DialogDescription>
+              Kode 6 digit telah dikirim ke {otpEmail}. Masukkan kode tersebut untuk membuka dashboard admin.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => { event.preventDefault(); if (!otpLoading) void verifyOtp(); }}
+          >
+            <Input
+              autoFocus
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={otpCode}
+              onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              className="text-center text-lg tracking-[0.5em]"
+            />
+            <Button type="submit" className="w-full" disabled={otpLoading || otpCode.length < 6}>Verifikasi</Button>
+          </form>
+          <button
+            type="button"
+            className="text-center text-sm font-semibold text-primary disabled:opacity-60"
+            disabled={otpLoading}
+            onClick={() => { if (otpEmail) void sendOtp(otpEmail); }}
+          >
+            Kirim ulang kode
+          </button>
+        </DialogContent>
+      </Dialog>
     </div>
+
   );
 }
