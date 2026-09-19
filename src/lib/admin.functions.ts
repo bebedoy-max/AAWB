@@ -386,12 +386,29 @@ export const setMemberRole = createServerFn({ method: "POST" })
     if (data.userId === context.userId) {
       throw new Error("Anda tidak dapat mengubah peran akun Anda sendiri.");
     }
-    const { supabaseAdmin: adminCheck } = await import("@/integrations/supabase/client.server");
-    const targetRoles = await rolesOf(adminCheck as any, data.userId);
-    if (highest(targetRoles) === "super_admin") {
-      throw new Error("Peran Super Admin tidak dapat diubah dari sini.");
-    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const targetRoles = await rolesOf(supabaseAdmin as any, data.userId);
+    const currentRole = highest(targetRoles);
+    if (currentRole === data.role) return { ok: true };
+
+    // Batas keras: maksimal 2 super admin dan 3 admin.
+    if (data.role === "super_admin" || data.role === "admin") {
+      const { data: allRoles } = await (supabaseAdmin as any)
+        .from("user_roles")
+        .select("user_id,role")
+        .eq("role", data.role);
+      const others = ((allRoles ?? []) as { user_id: string }[]).filter(
+        (r) => r.user_id !== data.userId,
+      ).length;
+      const limit = data.role === "super_admin" ? 2 : 3;
+      if (others >= limit) {
+        throw new Error(
+          data.role === "super_admin"
+            ? "Kuota Super Admin sudah penuh (maksimal 2). Turunkan salah satu terlebih dahulu."
+            : "Kuota Admin sudah penuh (maksimal 3). Turunkan salah satu terlebih dahulu.",
+        );
+      }
+    }
     const del = await (supabaseAdmin as any).from("user_roles").delete().eq("user_id", data.userId);
     if (del.error) throw new Error(del.error.message);
     const ins = await (supabaseAdmin as any)

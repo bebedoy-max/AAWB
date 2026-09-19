@@ -4,9 +4,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { RefreshCw, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { Loader2, Mail, RefreshCw, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -25,7 +26,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { setMemberRole, type AppRole } from "@/lib/admin.functions";
-import { listPromotableUsers, listStaff } from "@/lib/admin-console.functions";
+import {
+  listPromotableUsers,
+  listStaff,
+  requestStaffEmailChange,
+} from "@/lib/admin-console.functions";
 import { useMyRole } from "./admin";
 import {
   AdminPageTitle,
@@ -57,14 +62,20 @@ function TimPage() {
   const fetchStaff = useServerFn(listStaff);
   const fetchCandidates = useServerFn(listPromotableUsers);
   const changeRole = useServerFn(setMemberRole);
+  const changeEmail = useServerFn(requestStaffEmailChange);
 
   const [open, setOpen] = useState(false);
   const [candidate, setCandidate] = useState("");
   const [role, setRole] = useState<AppRole>("admin");
+  const [emailTarget, setEmailTarget] = useState<{ user_id: string; name: string } | null>(null);
+  const [emailValue, setEmailValue] = useState("");
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["admin-staff"],
     queryFn: () => fetchStaff(),
+    // Pantau status verifikasi email secara berkala.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((s) => !s.email_verified) ? 15000 : false,
   });
 
   const { data: candidates } = useQuery({
@@ -90,8 +101,21 @@ function TimPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const sendEmail = useMutation({
+    mutationFn: (vars: { userId: string; email: string }) => changeEmail({ data: vars }),
+    onSuccess: () => {
+      toast.success("Email diperbarui. Menunggu verifikasi dari pemilik email.");
+      setEmailTarget(null);
+      setEmailValue("");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const admins = (data ?? []).filter((s) => s.role === "admin").length;
   const supers = (data ?? []).filter((s) => s.role === "super_admin").length;
+  const superPenuh = supers >= 2;
+  const adminPenuh = admins >= 3;
 
   return (
     <>
@@ -142,8 +166,12 @@ function TimPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="super_admin">Super Admin</SelectItem>
+                          <SelectItem value="admin" disabled={adminPenuh}>
+                            Admin {adminPenuh ? "(kuota penuh)" : ""}
+                          </SelectItem>
+                          <SelectItem value="super_admin" disabled={superPenuh}>
+                            Super Admin {superPenuh ? "(kuota penuh)" : ""}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -187,6 +215,7 @@ function TimPage() {
                 <Th>Email</Th>
                 <Th>Bergabung</Th>
                 <Th>Peran</Th>
+                <Th>Email asli</Th>
               </tr>
             </thead>
             <tbody>
@@ -207,13 +236,52 @@ function TimPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="super_admin">Super Admin</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem
+                            value="super_admin"
+                            disabled={superPenuh && s.role !== "super_admin"}
+                          >
+                            Super Admin {superPenuh && s.role !== "super_admin" ? "(kuota penuh)" : ""}
+                          </SelectItem>
+                          <SelectItem value="admin" disabled={adminPenuh && s.role !== "admin"}>
+                            Admin {adminPenuh && s.role !== "admin" ? "(kuota penuh)" : ""}
+                          </SelectItem>
                           <SelectItem value="member">Worker's</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
                       <Badge variant="outline">{ROLE_LABEL[s.role]}</Badge>
+                    )}
+                  </Td>
+                  <Td>
+                    {isSuper ? (
+                      <Button
+                        size="sm"
+                        variant={s.email_verified ? "outline" : "secondary"}
+                        disabled={!s.email_verified}
+                        onClick={() => {
+                          setEmailTarget({ user_id: s.user_id, name: s.name });
+                          setEmailValue(s.needs_real_email ? "" : s.email);
+                        }}
+                      >
+                        {s.email_verified ? (
+                          <>
+                            <Mail className="mr-2 size-4" />
+                            Ubah email
+                          </>
+                        ) : (
+                          <>
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                            Menunggu verifikasi
+                          </>
+                        )}
+                      </Button>
+                    ) : s.email_verified ? (
+                      <Badge variant="outline">Terverifikasi</Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        <Loader2 className="mr-1 size-3 animate-spin" />
+                        Menunggu verifikasi
+                      </Badge>
                     )}
                   </Td>
                 </tr>
@@ -223,11 +291,52 @@ function TimPage() {
         )}
       </Panel>
 
-      {!isSuper ? (
-        <p className="mt-3 text-xs text-muted-foreground">
-          Hanya Super Admin yang dapat mengubah peran anggota tim.
-        </p>
-      ) : null}
+      <p className="mt-3 text-xs text-muted-foreground">
+        {isSuper
+          ? "Kuota tim: maksimal 2 Super Admin dan 3 Admin. Email asli wajib diverifikasi pemiliknya."
+          : "Hanya Super Admin yang dapat mengubah peran anggota tim."}
+      </p>
+
+      <Dialog
+        open={Boolean(emailTarget)}
+        onOpenChange={(v) => {
+          if (!v) setEmailTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ubah email {emailTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Masukkan email asli. Tautan verifikasi dikirim ke alamat tersebut dan tombol akan
+              terkunci sampai email terverifikasi.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Email baru</Label>
+            <Input
+              type="email"
+              value={emailValue}
+              placeholder="nama@perusahaan.com"
+              onChange={(e) => setEmailValue(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEmailTarget(null)}>
+              Batal
+            </Button>
+            <Button
+              disabled={!emailValue.trim() || sendEmail.isPending}
+              onClick={() =>
+                emailTarget &&
+                sendEmail.mutate({ userId: emailTarget.user_id, email: emailValue.trim() })
+              }
+            >
+              {sendEmail.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Kirim verifikasi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -225,15 +225,71 @@ export const listStaff = createServerFn({ method: "GET" })
     const admin = supabaseAdmin as any;
     const { users, roleMap, nameMap } = await loadDirectory(admin);
     return users
-      .map((u) => ({
-        user_id: u.id,
-        name: displayName(u, nameMap),
-        email: u.email ?? "(tanpa email)",
-        role: highest(roleMap.get(u.id) ?? []),
-        created_at: u.created_at,
-      }))
+      .map((u) => {
+        const email = (u.email ?? "") as string;
+        const pending = (u.new_email ?? null) as string | null;
+        const isPlaceholder = !email || email.endsWith("@member.aawb.local");
+        return {
+          user_id: u.id,
+          name: displayName(u, nameMap),
+          email: email || "(tanpa email)",
+          role: highest(roleMap.get(u.id) ?? []),
+          created_at: u.created_at,
+          pending_email: pending,
+          // Menunggu verifikasi jika ada perubahan email tertunda atau email
+          // asli belum dikonfirmasi.
+          email_verified: !isPlaceholder && Boolean(u.email_confirmed_at) && !pending,
+          needs_real_email: isPlaceholder,
+        };
+      })
       .filter((u) => u.role !== "member")
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  });
+
+/** Minta perubahan email seorang admin/super admin. Email baru wajib diverifikasi. */
+export const requestStaffEmailChange = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { userId: string; email: string }) => {
+    if (!input?.userId) throw new Error("Pengguna tidak valid.");
+    const email = String(input.email ?? "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) throw new Error("Format email tidak valid.");
+    if (email.endsWith("@member.aawb.local")) throw new Error("Gunakan email asli, bukan email internal.");
+    return { userId: input.userId, email };
+  })
+  .handler(async ({ data, context }): Promise<{ ok: true; link: string | null }> => {
+    await assertAdmin(context, true);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+
+    const roles = await rolesOf(admin, data.userId);
+    if (highest(roles) === "member") {
+      throw new Error("Hanya admin atau super admin yang perlu menautkan email asli.");
+    }
+
+    const { error } = await admin.auth.admin.updateUserById(data.userId, {
+      email: data.email,
+      email_confirm: false,
+    });
+    if (error) throw new Error(error.message);
+
+    // Tautan verifikasi; bisa dikirim manual bila email otomatis belum aktif.
+    let link: string | null = null;
+    try {
+      const { data: linkData } = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email: data.email,
+      });
+      link = linkData?.properties?.action_link ?? null;
+    } catch {
+      link = null;
+    }
+
+    await (await import("@/lib/activity-log.server")).logActivity(
+      context.userId,
+      "email_change",
+      `Email pengguna ${data.userId} diubah menjadi ${data.email} (menunggu verifikasi)`,
+    );
+    return { ok: true, link };
   });
 
 /** Kandidat pengguna yang bisa diangkat menjadi admin. */
