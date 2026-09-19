@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   LayoutDashboard,
@@ -319,9 +319,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   // sedangkan area member tetap memakai sidebar.
   const adminLayout = pathname === "/admin" || pathname.startsWith("/admin/");
 
+  const queryClient = useQueryClient();
+
   const signOut = async () => {
+    await queryClient.cancelQueries();
+    queryClient.clear();
     await supabase.auth.signOut();
-    navigate({ to: "/auth" });
+    navigate({ to: "/auth", replace: true });
   };
 
   return (

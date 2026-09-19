@@ -14,6 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "../lib/theme";
 import { Toaster } from "../components/ui/sonner";
 import { CampaignAutoRunner } from "../components/campaign-auto-runner";
+import { supabase } from "../integrations/supabase/my-client";
 
 function NotFoundComponent() {
   return (
@@ -132,6 +133,22 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const router = useRouter();
+
+  // Saat akun berganti (login/logout), buang data lama agar peran & isi halaman
+  // tidak tertukar antar akun.
+  useEffect(() => {
+    let lastUserId: string | null | undefined;
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      const userId = session?.user?.id ?? null;
+      if (event === "SIGNED_IN" && userId === lastUserId) return;
+      lastUserId = userId;
+      queryClient.clear();
+      router.invalidate();
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [queryClient, router]);
 
   return (
     <QueryClientProvider client={queryClient}>
