@@ -92,12 +92,12 @@ export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
   if (dismissed) return null;
 
   return (
-    <section className="relative mb-6 rounded-2xl border border-warning-border bg-warning-surface p-5 shadow-panel sm:p-6">
+    <section className="relative mb-6 rounded-2xl border border-warning-border bg-warning-surface p-5 text-warning-surface-foreground shadow-panel sm:p-6">
       <Button
         size="icon"
         variant="ghost"
         aria-label="Tutup pemberitahuan"
-        className="absolute right-2 top-2 size-7 rounded-full text-foreground/80 hover:bg-warning/25 hover:text-foreground"
+         className="absolute right-2 top-2 size-7 rounded-full text-warning-surface-foreground/80 hover:bg-warning/25 hover:text-warning-surface-foreground"
         onClick={dismissNotice}
       >
         <X className="size-4" />
@@ -106,10 +106,10 @@ export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
         <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" />
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-bold text-warning">PERHATIAN: ATUR PROFIL</h2>
-          <p className="mt-1 text-sm text-foreground/85">
+          <p className="mt-1 text-sm text-warning-surface-foreground/85">
             Gunakan nama dan foto profil yang ditentukan sebelum mulai mengirim pesan.
           </p>
-          <div className="mt-4 rounded-lg border border-warning-border bg-background/25 p-3 text-xs font-semibold leading-5 text-foreground/90">
+          <div className="mt-4 rounded-lg border border-warning-border bg-background/25 p-3 text-xs font-semibold leading-5 text-warning-surface-foreground">
             <Pin className="mr-2 inline size-3.5 text-warning" />
             Jika mengerjakan data, simpan bukti aktivitas sesuai arahan admin.
           </div>
@@ -122,8 +122,8 @@ export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
               )}
             </div>
             <div className="min-w-0">
-              <p className="text-xs text-warning-foreground/80">Nama profil wajib</p>
-              <p className="truncate text-sm font-semibold text-foreground">
+              <p className="text-xs text-warning-surface-foreground/80">Nama profil wajib</p>
+              <p className="truncate text-sm font-semibold text-warning-surface-foreground">
                 {profileName ?? "Belum diatur admin"}
               </p>
             </div>
@@ -147,7 +147,7 @@ export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
             </Button>
           </div>
           {apply.data ? (
-            <ul className="mt-3 space-y-1 text-xs text-warning-foreground">
+            <ul className="mt-3 space-y-1 text-xs text-warning-surface-foreground">
               {apply.data.details.map((item) => (
                 <li key={item.device}>
                   {item.device}:{" "}

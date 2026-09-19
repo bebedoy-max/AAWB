@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -83,6 +83,7 @@ function RewardsPage() {
   const [holder, setHolder] = useState("");
   const [amount, setAmount] = useState("");
   const [targetId, setTargetId] = useState("");
+  const payoutFormRef = useRef<HTMLDivElement>(null);
 
   const multi = Boolean(data?.accounts_table_ready);
   const accounts = data?.accounts ?? [];
@@ -115,6 +116,13 @@ function RewardsPage() {
     setNumber(data.payout.number ?? "");
     setHolder(data.payout.name ?? "");
   }, [multi, data?.payout]);
+
+  useEffect(() => {
+    if (!showForm || !window.matchMedia("(max-width: 767px)").matches) return;
+    window.requestAnimationFrame(() => {
+      payoutFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [showForm]);
 
   const resetForm = () => {
     setProvider("");
@@ -215,7 +223,7 @@ function RewardsPage() {
           <CardContent className="pt-8 sm:pt-14">
             <div className="flex items-center justify-between text-xs"><span>Progres penarikan</span><Badge variant="outline">Min. {rupiah(min)}</Badge></div>
             <Progress value={progress} className="mt-2 h-2" />
-            <p className="mt-3 rounded-lg border border-warning-border bg-warning-surface p-3 text-xs font-semibold text-warning-foreground">{balance >= min ? "Saldo sudah dapat ditarik." : `Kurang ${rupiah(min - balance)} untuk ditarik.`}</p>
+            <p className="mt-3 rounded-lg border border-warning-border bg-warning-surface p-3 text-xs font-semibold text-warning-surface-foreground">{balance >= min ? "Saldo sudah dapat ditarik." : `Kurang ${rupiah(min - balance)} untuk ditarik.`}</p>
           </CardContent>
         </Card>
 
@@ -225,9 +233,9 @@ function RewardsPage() {
             {!hasAccount ? (
                <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-warning-border bg-warning-surface p-6 text-center sm:min-h-48">
                 <div className="grid size-12 place-items-center rounded-full bg-warning/15"><AlertTriangle className="size-5 text-warning" /></div>
-                <p className="mt-3 font-semibold">Data rekening belum diisi</p>
-                <p className="mt-1 max-w-sm text-xs text-muted-foreground">Isi metode pencairan terlebih dahulu sebelum mengajukan penarikan dana.</p>
-                <Button className="mt-4" onClick={() => setShowForm(true)}>Isi data rekening sekarang</Button>
+                 <p className="mt-3 font-semibold text-warning-surface-foreground">Data rekening belum diisi</p>
+                 <p className="mt-1 max-w-sm text-xs text-warning-surface-foreground/80">Isi metode pencairan terlebih dahulu sebelum mengajukan penarikan dana.</p>
+                 <Button type="button" className="mt-4 min-h-11" onClick={() => setShowForm(true)}>Isi data rekening sekarang</Button>
               </div>
             ) : (
               <div className="space-y-4">
@@ -241,7 +249,7 @@ function RewardsPage() {
       </div>
 
       {(showForm || hasAccount) ? (
-        <Card className="mt-4 rounded-xl shadow-panel">
+        <Card ref={payoutFormRef} className="mt-4 scroll-mt-24 rounded-xl shadow-panel">
           <CardHeader className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"><div><CardTitle className="text-base">Rekening pencairan</CardTitle><CardDescription>Kelola bank atau e-wallet tujuan pencairan Anda.</CardDescription></div>{multi && !showForm ? <Button size="sm" variant="outline" disabled={list.length >= 4} onClick={() => setShowForm(true)}><Plus className="mr-1 size-4" /> Tambah</Button> : null}</CardHeader>
           <CardContent className="space-y-4">
             {!showForm && list.length ? <div className="grid gap-3 md:grid-cols-2">{list.map((a) => <div key={a.id} className="rounded-lg border bg-accent/30 p-3"><div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2"><div className="min-w-0"><p className="truncate text-sm font-medium">{a.method === "bank" ? "Bank" : "E-wallet"} {a.provider} · {a.number}</p><p className="text-xs text-muted-foreground">a.n. {a.name}</p></div>{a.is_default ? <Badge variant="outline">Utama</Badge> : null}</div>{multi ? <div className="mt-3 flex gap-2">{!a.is_default ? <Button size="sm" variant="outline" onClick={() => doDefault.mutate(a.id)}>Jadikan utama</Button> : null}<Button size="sm" variant="ghost" onClick={() => doDelete.mutate(a.id)}><Trash2 className="mr-1 size-3.5" /> Hapus</Button></div> : null}</div>)}</div> : null}

@@ -435,7 +435,7 @@ function Devices() {
           ["Gagal (Semua)", performance?.failed ?? 0, "text-destructive"],
           ["Partisipasi Blast", performance?.pending ?? 0, "text-primary"],
           ["Nomor Tertaut", (sessions ?? []).filter((session) => Boolean(session.phone_number)).length, "text-accent-foreground"],
-          ["Rata-rata Speed", 0, "text-warning-foreground"],
+          ["Rata-rata Speed", 0, "text-warning"],
         ].map(([label, value, tone]) => <Card key={String(label)} className="rounded-2xl shadow-none"><CardContent className="min-h-28 p-5"><p className="text-sm text-muted-foreground">{label}</p><p className={cn("mt-3 text-2xl font-semibold", String(tone))}>{value}</p></CardContent></Card>)}
       </div>
 

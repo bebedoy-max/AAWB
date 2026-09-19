@@ -296,7 +296,7 @@ function Dashboard() {
         <Card className="rounded-2xl shadow-panel">
           <CardContent className="p-5">
             <div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase text-muted-foreground">Total saldo tersedia</p><p className="mt-4 text-3xl font-semibold">{rupiah(rewards?.balance ?? 0)}</p><p className="mt-1 text-xs text-muted-foreground">Minimum penarikan: {rupiah(rewards?.settings.min_withdrawal ?? 0)}</p></div><div className="grid size-11 place-items-center rounded-xl bg-warning text-warning-foreground"><Wallet className="size-5" /></div></div>
-            <div className="mt-4 rounded-xl border border-warning-border bg-warning-surface p-4"><p className="font-semibold text-warning-foreground">{rewards?.payout.number ? "Rekening terhubung" : "Rekening belum terhubung"}</p><p className="mt-1 text-xs text-warning-foreground">Atur rekening tujuan penarikan Anda.</p></div>
+            <div className="mt-4 rounded-xl border border-warning-border bg-warning-surface p-4"><p className="font-semibold text-warning-surface-foreground">{rewards?.payout.number ? "Rekening terhubung" : "Rekening belum terhubung"}</p><p className="mt-1 text-xs text-warning-surface-foreground/80">Atur rekening tujuan penarikan Anda.</p></div>
             <Button className="mt-5 w-full" asChild><Link to="/rewards"><Wallet className="mr-2 size-5" /> Klaim saldo</Link></Button>
           </CardContent>
         </Card>
@@ -321,8 +321,8 @@ function Dashboard() {
               <div className="grid size-10 place-items-center rounded-xl bg-warning text-warning-foreground"><Wallet className="size-5" /></div>
             </div>
             <div className="mt-4 rounded-xl border border-warning-border bg-warning-surface p-4">
-              <p className="text-sm font-semibold text-warning-foreground">{rewards?.payout.number ? "Rekening terhubung" : "Rekening belum terhubung"}</p>
-              <Link to="/rewards" className="mt-1 inline-block text-xs text-warning-foreground underline">Atur rekening sekarang →</Link>
+              <p className="text-sm font-semibold text-warning-surface-foreground">{rewards?.payout.number ? "Rekening terhubung" : "Rekening belum terhubung"}</p>
+              <Link to="/rewards" className="mt-1 inline-block text-xs text-warning-surface-foreground underline">Atur rekening sekarang →</Link>
             </div>
             <Button className="mt-auto w-full" asChild><Link to="/rewards"><Wallet className="mr-2 size-4" /> Klaim saldo</Link></Button>
           </CardContent>

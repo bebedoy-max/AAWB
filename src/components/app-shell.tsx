@@ -356,14 +356,31 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="px-6 pb-2 pt-2 text-[10px] font-bold uppercase text-muted-foreground">Menu utama</p>
             <NavLinks />
             <div className="mt-auto border-t p-3">
-              <Link
-                to="/pengaturan-akun"
-                className="block rounded-xl px-2 py-2 transition-colors hover:bg-sidebar-accent"
-                title="Buka Pengaturan Akun"
-              >
-                <p className="truncate text-sm font-bold">{account.name}</p>
-                <p className="mt-1 truncate text-xs text-muted-foreground">@{account.username}</p>
-              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full rounded-xl px-2 py-2 text-left transition-colors hover:bg-sidebar-accent"
+                    title="Menu akun"
+                  >
+                    <p className="truncate text-sm font-bold">{account.name}</p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">@{account.username}</p>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" className="w-56">
+                  <DropdownMenuLabel>
+                    <span className="block truncate text-sm font-semibold">{account.name}</span>
+                    <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">@{account.username}</span>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate({ to: "/pengaturan-akun" })}>
+                    <Settings className="mr-2 size-4" /> Pengaturan Akun
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={signOut}>
+                    <LogOut className="mr-2 size-4" /> Keluar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </aside>

@@ -62,6 +62,7 @@
   --color-member-panel: var(--member-panel);
   --color-member-panel-strong: var(--member-panel-strong);
   --color-warning-surface: var(--warning-surface);
+  --color-warning-surface-foreground: var(--warning-surface-foreground);
   --color-warning-border: var(--warning-border);
   --font-sans:
     "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -118,6 +119,7 @@
   --member-panel: oklch(1 0 0);
   --member-panel-strong: oklch(0.97 0.008 245);
   --warning-surface: oklch(0.96 0.035 80);
+  --warning-surface-foreground: oklch(0.28 0.06 80);
   --warning-border: oklch(0.72 0.13 75);
 }
 
@@ -167,6 +169,7 @@
   --member-panel: oklch(0.255 0.035 247);
   --member-panel-strong: oklch(0.285 0.04 247);
   --warning-surface: oklch(0.29 0.045 72);
+  --warning-surface-foreground: oklch(0.92 0.06 82);
   --warning-border: oklch(0.6 0.12 75);
 }
 
@@ -263,6 +266,8 @@
   --member-panel-strong: hsl(160 28% 9%);
 
   --warning-surface: hsl(38 52% 14%);
+
+  --warning-surface-foreground: hsl(38 45% 88%);
 
   --warning-border: hsl(38 42% 32%);
 
@@ -362,6 +367,8 @@
 
   --warning-surface: hsl(38 52% 14%);
 
+  --warning-surface-foreground: hsl(38 45% 88%);
+
   --warning-border: hsl(38 42% 32%);
 
 }
@@ -459,6 +466,8 @@
   --member-panel-strong: hsl(188 15% 26%);
 
   --warning-surface: hsl(38 42% 28%);
+
+  --warning-surface-foreground: hsl(38 50% 92%);
 
   --warning-border: hsl(38 38% 42%);
 
@@ -558,6 +567,8 @@
 
   --warning-surface: hsl(38 42% 28%);
 
+  --warning-surface-foreground: hsl(38 50% 92%);
+
   --warning-border: hsl(38 38% 42%);
 
 }
@@ -655,6 +666,8 @@
   --member-panel-strong: hsl(160 22% 94%);
 
   --warning-surface: hsl(38 85% 88%);
+
+  --warning-surface-foreground: hsl(36 55% 16%);
 
   --warning-border: hsl(38 55% 68%);
 
@@ -754,6 +767,8 @@
 
   --warning-surface: hsl(38 85% 88%);
 
+  --warning-surface-foreground: hsl(36 55% 16%);
+
   --warning-border: hsl(38 55% 68%);
 
 }
@@ -852,6 +867,8 @@
 
   --warning-surface: hsl(38 85% 88%);
 
+  --warning-surface-foreground: hsl(36 55% 16%);
+
   --warning-border: hsl(38 55% 68%);
 
 }
@@ -862,6 +879,40 @@
 [data-theme-swatch="light-mint-fresh"] { background-color: hsl(160 70% 50%); }
 [data-theme-swatch="warm-cream-peach"] { background-color: hsl(25 70% 50%); }
 [data-theme-swatch="pastel-lavender"] { background-color: hsl(262 70% 50%); }
+
+/* Accessible foreground corrections for every supported palette. */
+[data-app-theme="dark-emerald"],
+[data-app-theme="midnight-indigo"] {
+  --destructive: hsl(4 68% 50%);
+  --info-foreground: hsl(208 70% 10%);
+}
+
+[data-app-theme="semi-dark-teal"] {
+  --accent-foreground: hsl(188 70% 88%);
+  --sidebar-accent-foreground: hsl(188 70% 88%);
+  --info-foreground: hsl(208 70% 10%);
+}
+
+[data-app-theme="semi-dark-amber"] {
+  --primary-foreground: hsl(32 55% 12%);
+  --success-foreground: hsl(32 55% 12%);
+  --accent-foreground: hsl(32 70% 88%);
+  --sidebar-primary-foreground: hsl(32 55% 12%);
+  --sidebar-accent-foreground: hsl(32 70% 88%);
+  --info-foreground: hsl(208 70% 10%);
+}
+
+[data-app-theme="light-mint-fresh"],
+[data-app-theme="pastel-lavender"] {
+  --info-foreground: hsl(208 70% 10%);
+}
+
+[data-app-theme="warm-cream-peach"] {
+  --primary-foreground: hsl(25 55% 10%);
+  --success-foreground: hsl(25 55% 10%);
+  --sidebar-primary-foreground: hsl(25 55% 10%);
+  --info-foreground: hsl(208 70% 10%);
+}
 
 @layer base {
   * {
