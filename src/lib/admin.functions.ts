@@ -292,9 +292,16 @@ export const saveTelegramSettings = createServerFn({ method: "POST" })
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
+    const { normalizeBotUsername } = await import("@/lib/telegram.server");
+    if (data.username && !normalizeBotUsername(data.username)) {
+      throw new Error(
+        "Username bot tidak valid. Tulis hanya username-nya (contoh: aaw_bbot), bukan tautan lengkap.",
+      );
+    }
+
     const patch: Record<string, unknown> = {
       id: "global",
-      telegram_bot_username: data.username || null,
+      telegram_bot_username: normalizeBotUsername(data.username),
       updated_at: new Date().toISOString(),
       updated_by: context.userId,
     };

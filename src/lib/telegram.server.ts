@@ -76,11 +76,24 @@ export async function callTelegram<T = any>(
 
 let cachedUsername: string | null = null;
 
+/**
+ * Bersihkan isian username bot: admin sering menempel tautan lengkap
+ * (https://t.me/namabot), tanda @, atau spasi. Hasil akhir harus username murni.
+ */
+export function normalizeBotUsername(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let v = raw.trim();
+  v = v.replace(/^https?:\/\//i, "").replace(/^(t\.me|telegram\.me|telegram\.dog)\//i, "");
+  v = v.replace(/^@/, "").split(/[/?#\s]/)[0] ?? "";
+  return /^[A-Za-z0-9_]{4,32}$/.test(v) ? v : null;
+}
+
 export async function getBotUsername(): Promise<string> {
   if (cachedUsername) return cachedUsername;
   const cfg = await loadConfig();
-  if (cfg.username) {
-    cachedUsername = cfg.username.replace(/^@/, "");
+  const clean = normalizeBotUsername(cfg.username);
+  if (clean) {
+    cachedUsername = clean;
     return cachedUsername;
   }
   const me = await callTelegram<{ username: string }>("getMe");
