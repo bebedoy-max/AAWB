@@ -129,8 +129,9 @@ function NavLinks({ onNavigate, adminMode = false }: { onNavigate?: () => void; 
 function AdminTopNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
-    <div className="border-b bg-card">
-      <div className="mx-auto flex max-w-[1400px] items-center justify-center gap-2 overflow-x-auto px-3 py-2 lg:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="px-3 lg:px-6">
+      <div className="mx-auto flex w-full max-w-[1400px] items-center justify-center gap-2 overflow-x-auto rounded-b-xl bg-card px-3 py-2 lg:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+
         {ADMIN_NAV.map(({ to, label, icon: Icon }) => {
           const active = isActivePath(pathname, to);
           return (
@@ -353,11 +354,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
 
         <header className={cn(
-          "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 lg:px-6",
+          "px-4 lg:px-6",
           adminLayout
             ? "fixed inset-x-0 top-0 z-50 h-[5.5rem] bg-transparent px-2 pt-2 lg:sticky lg:h-[4.75rem] lg:border-b lg:bg-background/85 lg:px-6 lg:py-1 lg:backdrop-blur"
             : "fixed inset-x-0 top-0 z-50 h-[5.5rem] bg-transparent px-2 pt-2 lg:sticky lg:h-20 lg:bg-background/85 lg:px-6 lg:pt-0 lg:backdrop-blur",
-        )}> 
+        )}>
+          <div className={cn(
+            "grid h-full w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3",
+            adminLayout && "mx-auto max-w-[1400px]",
+          )}>
+
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="hidden" aria-label="Buka menu">
@@ -452,7 +458,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          </div>
         </header>
+
 
         {adminLayout ? <div className="hidden lg:block"><AdminTopNav /></div> : null}
 

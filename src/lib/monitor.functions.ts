@@ -223,6 +223,19 @@ export const listBlastProjects = createServerFn({ method: "GET" })
       }
     }
 
+    // Kampanye yang antreannya sudah habis otomatis ditandai "Selesai",
+    // meski perangkat pengirim berhenti sebelum menutup kampanye.
+    const finished = ((projects ?? []) as any[]).filter((p) => {
+      if (p.status !== "running") return false;
+      const c = counts.get(p.id);
+      return Boolean(c) && c!.pending === 0 && c!.sent + c!.failed > 0;
+    });
+    if (finished.length) {
+      const doneIds = finished.map((p) => p.id);
+      await admin.from("campaigns").update({ status: "completed" }).in("id", doneIds);
+      for (const p of finished) p.status = "completed";
+    }
+
     return ((projects ?? []) as any[]).map((p) => {
       const legacy = splitCta(p.message_body ?? "");
       const storedButton = Array.isArray(p.buttons_json)
@@ -246,6 +259,7 @@ export const listBlastProjects = createServerFn({ method: "GET" })
       };
     });
   });
+
 
 /** Buat proyek blast baru: pesan + daftar nomor yang sudah diformat. */
 export const createBlastProject = createServerFn({ method: "POST" })
