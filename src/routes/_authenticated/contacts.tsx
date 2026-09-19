@@ -46,9 +46,9 @@ import type { Contact, ContactGroup } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/contacts")({
   head: () => ({
     meta: [
-      { title: "Kontak & Grup — AAWB" },
+      { title: "Kontak & Grup — NAROWA" },
       { name: "description", content: "Kelola kontak dan grup penerima broadcast." },
-      { property: "og:title", content: "Kontak & Grup — AAWB" },
+      { property: "og:title", content: "Kontak & Grup — NAROWA" },
       { property: "og:description", content: "Kelola kontak dan grup penerima broadcast." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

@@ -154,9 +154,9 @@ function AdminTopNav() {
 
 function Brand() {
   return (
-    <div className="flex h-[76px] items-center gap-3 overflow-hidden border-b px-3">
-      <BrandLogo className="h-16 w-auto shrink-0 object-contain" />
-      <div className="min-w-0 border-l pl-3">
+    <div className="flex h-[76px] items-center gap-1.5 overflow-hidden border-b px-3">
+      <BrandLogo className="h-12 w-auto shrink-0 object-contain" />
+      <div className="min-w-0 border-l pl-1.5">
         <p className="text-base font-bold leading-tight">Worker's</p>
       </div>
 
@@ -414,7 +414,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {adminLayout ? (
             <Link to="/admin" className="hidden min-w-0 items-center gap-2 lg:flex">
-              <BrandLogo className="h-[4.5rem] max-w-[300px] shrink-0" />
+              <BrandLogo className="h-12 max-w-[200px] shrink-0" />
               <span className="hidden truncate text-sm font-semibold sm:inline">Admin</span>
             </Link>
           ) : (

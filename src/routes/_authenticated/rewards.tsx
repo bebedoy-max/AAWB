@@ -32,12 +32,12 @@ import {
 export const Route = createFileRoute("/_authenticated/rewards")({
   head: () => ({
     meta: [
-      { title: "Saldo & Reward — AAWB" },
+      { title: "Saldo & Reward — NAROWA" },
       {
         name: "description",
         content: "Lihat reward dari pesan blast yang berhasil terkirim dan ajukan pencairan saldo.",
       },
-      { property: "og:title", content: "Saldo & Reward — AAWB" },
+      { property: "og:title", content: "Saldo & Reward — NAROWA" },
       {
         property: "og:description",
         content: "Reward per pesan terkirim, bonus referal, dan pencairan saldo.",

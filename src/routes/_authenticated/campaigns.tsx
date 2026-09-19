@@ -36,9 +36,9 @@ import type { Campaign, ContactGroup, Template, WaSession } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/campaigns")({
   head: () => ({
     meta: [
-      { title: "Kampanye Broadcast — AAWB" },
+      { title: "Kampanye Broadcast — NAROWA" },
       { name: "description", content: "Buat dan pantau kampanye broadcast WhatsApp." },
-      { property: "og:title", content: "Kampanye Broadcast — AAWB" },
+      { property: "og:title", content: "Kampanye Broadcast — NAROWA" },
       { property: "og:description", content: "Buat dan pantau kampanye broadcast WhatsApp." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

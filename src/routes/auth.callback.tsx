@@ -11,15 +11,15 @@ export const Route = createFileRoute("/auth/callback")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Menyelesaikan login — AAWB Suite Broadcast" },
+      { title: "Menyelesaikan login — NAROWA Suite Broadcast" },
       {
         name: "description",
-        content: "Halaman singkat yang menyelesaikan proses masuk dengan akun Google ke AAWB.",
+        content: "Halaman singkat yang menyelesaikan proses masuk dengan akun Google ke NAROWA.",
       },
-      { property: "og:title", content: "Menyelesaikan login — AAWB Suite Broadcast" },
+      { property: "og:title", content: "Menyelesaikan login — NAROWA Suite Broadcast" },
       {
         property: "og:description",
-        content: "Halaman singkat yang menyelesaikan proses masuk dengan akun Google ke AAWB.",
+        content: "Halaman singkat yang menyelesaikan proses masuk dengan akun Google ke NAROWA.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

@@ -44,10 +44,10 @@ import { APP_THEMES, applyAppTheme, DEFAULT_APP_THEME, type AppThemeId } from "@
 export const Route = createFileRoute("/_authenticated/admin/pengaturan")({
   head: () => ({
     meta: [
-      { title: "Pengaturan Sistem — AAWB" },
-      { name: "description", content: "Kelola konfigurasi sistem dan tema warna global AAWB." },
-      { property: "og:title", content: "Pengaturan Sistem — AAWB" },
-      { property: "og:description", content: "Kelola konfigurasi sistem dan tema warna global AAWB." },
+      { title: "Pengaturan Sistem — NAROWA" },
+      { name: "description", content: "Kelola konfigurasi sistem dan tema warna global NAROWA." },
+      { property: "og:title", content: "Pengaturan Sistem — NAROWA" },
+      { property: "og:description", content: "Kelola konfigurasi sistem dan tema warna global NAROWA." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -423,7 +423,7 @@ function TelegramAkunPanel() {
             <Label htmlFor="cs-telegram">Username Telegram CS</Label>
             <Input
               id="cs-telegram"
-              placeholder="contoh: aawb_support"
+              placeholder="contoh: narowa_support"
               value={username}
               onChange={(e) => {
                 setTouched(true);
@@ -560,7 +560,7 @@ function ProfilWhatsAppPanel() {
             <Label htmlFor="wa-profile-name">Nama profil</Label>
             <Input
               id="wa-profile-name"
-              placeholder="contoh: Layanan Pelanggan AAWB"
+              placeholder="contoh: Layanan Pelanggan NAROWA"
               maxLength={25}
               value={name}
               onChange={(e) => {

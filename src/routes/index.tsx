@@ -3,7 +3,7 @@ import { ArrowRight, Globe2 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 
-const TITLE = "AAWB — Ruang Aktivitas Worker's";
+const TITLE = "NAROWA — Ruang Aktivitas Worker's";
 const DESC = "Kelola aktivitas dan pantau perkembangan akun Anda dengan mudah.";
 
 export const Route = createFileRoute("/")({
@@ -29,8 +29,8 @@ function Landing() {
       </header>
 
       <main className="mx-auto flex min-h-[calc(100vh-160px)] max-w-5xl flex-col items-center justify-center px-6 pb-20 pt-10 text-center">
-        {/* -mb-9 menyerap ruang transparan di bagian bawah file logo */}
-        <BrandLogo className="-mb-9 h-40" />
+        {/* -mb-6 menyerap ruang transparan di bagian bawah file logo */}
+        <BrandLogo className="-mb-6 h-32" />
         <h1 className="mt-4 max-w-3xl font-display text-4xl font-bold sm:text-6xl">
           Kelola aktivitas dengan mudah dan pantau seluruh perkembangan Anda.
         </h1>
@@ -47,7 +47,7 @@ function Landing() {
       </main>
 
       <footer className="border-t py-6 text-center text-xs text-muted-foreground">
-        Kebijakan Privasi · Syarat &amp; Ketentuan · © {new Date().getFullYear()} AAWB
+        Kebijakan Privasi · Syarat &amp; Ketentuan · © {new Date().getFullYear()} NAROWA
       </footer>
     </div>
   );

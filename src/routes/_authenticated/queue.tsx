@@ -28,9 +28,9 @@ import type { Campaign, QueuedMessage } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/queue")({
   head: () => ({
     meta: [
-      { title: "Antrean & Log Audit — AAWB" },
+      { title: "Antrean & Log Audit — NAROWA" },
       { name: "description", content: "Pantau status dan riwayat pengiriman pesan WhatsApp." },
-      { property: "og:title", content: "Antrean & Log Audit — AAWB" },
+      { property: "og:title", content: "Antrean & Log Audit — NAROWA" },
       { property: "og:description", content: "Pantau status dan riwayat pengiriman pesan WhatsApp." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

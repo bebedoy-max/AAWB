@@ -31,9 +31,9 @@ import { parsePhoneList } from "@/lib/phone-format";
 export const Route = createFileRoute("/_authenticated/projects")({
   head: () => ({
     meta: [
-      { title: "Proyek Blast — AAWB" },
+      { title: "Proyek Blast — NAROWA" },
       { name: "description", content: "Buat proyek blast: pesan kampanye dan daftar nomor tujuan." },
-      { property: "og:title", content: "Proyek Blast — AAWB" },
+      { property: "og:title", content: "Proyek Blast — NAROWA" },
       { property: "og:description", content: "Buat proyek blast: pesan kampanye dan daftar nomor tujuan." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

@@ -11,15 +11,15 @@ import { getPostLoginPath } from "@/lib/post-login";
 export const Route = createFileRoute("/verifikasi")({
   head: () => ({
     meta: [
-      { title: "Verifikasi Email — AAWB Suite Broadcast" },
+      { title: "Verifikasi Email — NAROWA Suite Broadcast" },
       {
         name: "description",
-        content: "Menyelesaikan verifikasi alamat email akun AAWB Anda secara otomatis.",
+        content: "Menyelesaikan verifikasi alamat email akun NAROWA Anda secara otomatis.",
       },
-      { property: "og:title", content: "Verifikasi Email — AAWB Suite Broadcast" },
+      { property: "og:title", content: "Verifikasi Email — NAROWA Suite Broadcast" },
       {
         property: "og:description",
-        content: "Menyelesaikan verifikasi alamat email akun AAWB Anda secara otomatis.",
+        content: "Menyelesaikan verifikasi alamat email akun NAROWA Anda secara otomatis.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

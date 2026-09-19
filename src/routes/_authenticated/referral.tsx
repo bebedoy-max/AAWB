@@ -13,12 +13,12 @@ import { getMyReferral } from "@/lib/rewards.functions";
 export const Route = createFileRoute("/_authenticated/referral")({
   head: () => ({
     meta: [
-      { title: "Referal — AAWB" },
+      { title: "Referal — NAROWA" },
       {
         name: "description",
         content: "Undang anggota baru dan dapatkan bonus dari setiap pesan sukses tim Anda.",
       },
-      { property: "og:title", content: "Referal — AAWB" },
+      { property: "og:title", content: "Referal — NAROWA" },
       {
         property: "og:description",
         content: "Bagikan kode undangan dan pantau bonus dari tim referal Anda.",

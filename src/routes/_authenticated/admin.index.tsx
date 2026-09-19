@@ -42,10 +42,10 @@ import {
 export const Route = createFileRoute("/_authenticated/admin/")({
   head: () => ({
     meta: [
-      { title: "Ringkasan Sistem — AAWB" },
-      { name: "description", content: "Pantau kondisi Worker's, perangkat, dan kampanye AAWB." },
-      { property: "og:title", content: "Ringkasan Sistem — AAWB" },
-      { property: "og:description", content: "Pantau kondisi Worker's, perangkat, dan kampanye AAWB." },
+      { title: "Ringkasan Sistem — NAROWA" },
+      { name: "description", content: "Pantau kondisi Worker's, perangkat, dan kampanye NAROWA." },
+      { property: "og:title", content: "Ringkasan Sistem — NAROWA" },
+      { property: "og:description", content: "Pantau kondisi Worker's, perangkat, dan kampanye NAROWA." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

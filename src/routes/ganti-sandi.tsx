@@ -22,15 +22,15 @@ import { getPostLoginPath } from "@/lib/post-login";
 export const Route = createFileRoute("/ganti-sandi")({
   head: () => ({
     meta: [
-      { title: "Ganti Kata Sandi — AAWB Suite Broadcast" },
+      { title: "Ganti Kata Sandi — NAROWA Suite Broadcast" },
       {
         name: "description",
-        content: "Buat kata sandi baru untuk akun admin AAWB Suite Broadcast Anda.",
+        content: "Buat kata sandi baru untuk akun admin NAROWA Suite Broadcast Anda.",
       },
-      { property: "og:title", content: "Ganti Kata Sandi — AAWB Suite Broadcast" },
+      { property: "og:title", content: "Ganti Kata Sandi — NAROWA Suite Broadcast" },
       {
         property: "og:description",
-        content: "Buat kata sandi baru untuk akun admin AAWB Suite Broadcast Anda.",
+        content: "Buat kata sandi baru untuk akun admin NAROWA Suite Broadcast Anda.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

@@ -70,9 +70,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/devices")({
   head: () => ({
     meta: [
-      { title: "Perangkat WhatsApp — AAWB" },
+      { title: "Perangkat WhatsApp — NAROWA" },
       { name: "description", content: "Kelola perangkat WhatsApp yang terhubung." },
-      { property: "og:title", content: "Perangkat WhatsApp — AAWB" },
+      { property: "og:title", content: "Perangkat WhatsApp — NAROWA" },
       { property: "og:description", content: "Kelola perangkat WhatsApp yang terhubung." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

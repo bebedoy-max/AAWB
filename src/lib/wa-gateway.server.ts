@@ -230,7 +230,7 @@ async function call(path: string, init?: RequestInit): Promise<Record<string, un
   return (res.body && typeof res.body === "object" ? res.body : {}) as Record<string, unknown>;
 }
 
-/** Peta status mentah WAHA (STOPPED/STARTING/SCAN_QR_CODE/WORKING/FAILED) ke status internal AAWB. */
+/** Peta status mentah WAHA (STOPPED/STARTING/SCAN_QR_CODE/WORKING/FAILED) ke status internal NAROWA. */
 function normalizeStatus(rawStatus: unknown): WaSessionStatus {
   const s = String(rawStatus ?? "").toUpperCase();
   if (s === "WORKING") return "connected";

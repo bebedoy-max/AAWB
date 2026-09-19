@@ -12,9 +12,9 @@ import { rupiah } from "@/lib/currency";
 export const Route = createFileRoute("/_authenticated/monitor")({
   head: () => ({
     meta: [
-      { title: "Monitoring Real-time — AAWB" },
+      { title: "Monitoring Real-time — NAROWA" },
       { name: "description", content: "Pantau Worker's, perangkat, dan pengiriman pesan secara real-time." },
-      { property: "og:title", content: "Monitoring Real-time — AAWB" },
+      { property: "og:title", content: "Monitoring Real-time — NAROWA" },
       { property: "og:description", content: "Pantau Worker's, perangkat, dan pengiriman pesan secara real-time." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

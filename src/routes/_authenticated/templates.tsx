@@ -43,9 +43,9 @@ import type { MediaType, Template, TemplateButton } from "@/types/wa";
 export const Route = createFileRoute("/_authenticated/templates")({
   head: () => ({
     meta: [
-      { title: "Template Pesan — AAWB" },
+      { title: "Template Pesan — NAROWA" },
       { name: "description", content: "Buat template WhatsApp dengan media, emoji, dan tombol." },
-      { property: "og:title", content: "Template Pesan — AAWB" },
+      { property: "og:title", content: "Template Pesan — NAROWA" },
       {
         property: "og:description",
         content: "Buat template WhatsApp dengan media, emoji, dan tombol tautan.",

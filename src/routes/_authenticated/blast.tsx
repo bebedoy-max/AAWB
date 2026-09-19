@@ -19,9 +19,9 @@ import { rupiah } from "@/lib/currency";
 export const Route = createFileRoute("/_authenticated/blast")({
   head: () => ({
     meta: [
-      { title: "Mulai Blast — AAWB" },
+      { title: "Mulai Blast — NAROWA" },
       { name: "description", content: "Pilih kecepatan blast dan jalankan pengiriman dari perangkat Anda." },
-      { property: "og:title", content: "Mulai Blast — AAWB" },
+      { property: "og:title", content: "Mulai Blast — NAROWA" },
       { property: "og:description", content: "Pilih kecepatan blast dan jalankan pengiriman dari perangkat Anda." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

@@ -79,7 +79,7 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
 
         await sendTelegramMessage(
           chat.id,
-          "✅ Akun Telegram Anda berhasil terhubung dengan AAWB. Notifikasi akan dikirim ke chat ini.",
+          "✅ Akun Telegram Anda berhasil terhubung dengan NAROWA. Notifikasi akan dikirim ke chat ini.",
         ).catch(() => undefined);
         return Response.json({ ok: true });
       },

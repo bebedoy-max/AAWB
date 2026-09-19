@@ -32,9 +32,9 @@ import type { QueuedMessage, SessionGatewayResponse, WaSession } from "@/types/w
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Dashboard — AAWB" },
+      { title: "Dashboard — NAROWA" },
       { name: "description", content: "Ringkasan kinerja pengiriman WhatsApp Anda." },
-      { property: "og:title", content: "Dashboard — AAWB" },
+      { property: "og:title", content: "Dashboard — NAROWA" },
       { property: "og:description", content: "Ringkasan kinerja pengiriman WhatsApp Anda." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

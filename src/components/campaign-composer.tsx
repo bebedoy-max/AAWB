@@ -37,7 +37,7 @@ export function CampaignComposer({
   onSubmit,
   isPending,
   extra,
-  senderName = "AAWB",
+  senderName = "NAROWA",
   initial = null,
 }: Props) {
   const [name, setName] = useState("");

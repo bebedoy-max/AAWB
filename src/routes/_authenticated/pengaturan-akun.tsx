@@ -28,9 +28,9 @@ import { ArrowLeft, Eye, EyeOff, Landmark, Save, Send, UserRound, Wallet } from 
 export const Route = createFileRoute("/_authenticated/pengaturan-akun")({
   head: () => ({
     meta: [
-      { title: "Pengaturan Akun — AAWB" },
+      { title: "Pengaturan Akun — NAROWA" },
       { name: "description", content: "Kelola identitas akun dan rekening tujuan pencairan saldo Anda." },
-      { property: "og:title", content: "Pengaturan Akun — AAWB" },
+      { property: "og:title", content: "Pengaturan Akun — NAROWA" },
       { property: "og:description", content: "Kelola identitas akun dan rekening tujuan pencairan saldo Anda." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

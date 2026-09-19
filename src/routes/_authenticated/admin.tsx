@@ -11,15 +11,15 @@ import { Panel } from "@/components/admin-ui";
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
-      { title: "Konsol Admin — AAWB" },
+      { title: "Konsol Admin — NAROWA" },
       {
         name: "description",
-        content: "Kelola pengguna, kampanye, data nomor, laporan, dan sistem AAWB.",
+        content: "Kelola pengguna, kampanye, data nomor, laporan, dan sistem NAROWA.",
       },
-      { property: "og:title", content: "Konsol Admin — AAWB" },
+      { property: "og:title", content: "Konsol Admin — NAROWA" },
       {
         property: "og:description",
-        content: "Kelola pengguna, kampanye, data nomor, laporan, dan sistem AAWB.",
+        content: "Kelola pengguna, kampanye, data nomor, laporan, dan sistem NAROWA.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

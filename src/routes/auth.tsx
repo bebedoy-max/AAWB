@@ -24,10 +24,10 @@ import {
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Masuk atau Daftar — AAWB" },
-      { name: "description", content: "Masuk dengan username atau buat akun Worker's AAWB." },
-      { property: "og:title", content: "Masuk atau Daftar — AAWB" },
-      { property: "og:description", content: "Masuk dengan username atau buat akun Worker's AAWB." },
+      { title: "Masuk atau Daftar — NAROWA" },
+      { name: "description", content: "Masuk dengan username atau buat akun Worker's NAROWA." },
+      { property: "og:title", content: "Masuk atau Daftar — NAROWA" },
+      { property: "og:description", content: "Masuk dengan username atau buat akun Worker's NAROWA." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -257,7 +257,7 @@ function AuthPage() {
   return (
     <div className="member-surface flex min-h-screen items-center justify-center bg-secondary/50 px-4 py-8">
       <div className="relative mx-auto w-full max-w-md">
-        <Link to="/" className="absolute bottom-[calc(100%+0.25rem)] left-1/2 flex -translate-x-1/2 justify-center"><BrandLogo className="h-40" /></Link>
+        <Link to="/" className="absolute bottom-[calc(100%-2.5rem)] left-1/2 flex -translate-x-1/2 justify-center"><BrandLogo className="h-44" /></Link>
         <div className="rounded-lg border bg-card p-6 shadow-panel sm:p-8">
           {mode === "login" ? (
             <>
@@ -288,7 +288,7 @@ function AuthPage() {
                 {step === 1 && <div className="space-y-1.5"><Label htmlFor="register-name">Nama lengkap</Label><Input id="register-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama Anda" maxLength={80} /></div>}
                 {step === 2 && <><div className="space-y-1.5"><Label htmlFor="register-username">Username</Label><Input id="register-username" autoFocus value={username} onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} placeholder="minimal 4 karakter" maxLength={24} /><p className="text-xs text-muted-foreground">Gunakan huruf kecil, angka, atau garis bawah.</p></div><div className="space-y-1.5"><Label htmlFor="register-password">Kata sandi</Label><div className="relative"><Input id="register-password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="minimal 4 karakter" maxLength={72} className="pr-10" /><Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword((value) => !value)} aria-label="Tampilkan kata sandi">{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</Button></div></div></>}
                 {step === 3 && <div className="space-y-1.5"><Label htmlFor="register-ref">Kode referral (opsional)</Label><Input id="register-ref" autoFocus value={referralCode} onChange={(event) => setReferralCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} placeholder="Masukkan kode referral" maxLength={12} /></div>}
-                {step === 4 && <div className="flex items-start gap-3 rounded-lg border bg-secondary/50 p-4"><Checkbox id="privacy-policy" checked={privacyAccepted} onCheckedChange={(checked) => setPrivacyAccepted(checked === true)} /><Label htmlFor="privacy-policy" className="cursor-pointer text-sm leading-5">Saya menyetujui Kebijakan Privasi serta Syarat &amp; Ketentuan AAWB.</Label></div>}
+                {step === 4 && <div className="flex items-start gap-3 rounded-lg border bg-secondary/50 p-4"><Checkbox id="privacy-policy" checked={privacyAccepted} onCheckedChange={(checked) => setPrivacyAccepted(checked === true)} /><Label htmlFor="privacy-policy" className="cursor-pointer text-sm leading-5">Saya menyetujui Kebijakan Privasi serta Syarat &amp; Ketentuan NAROWA.</Label></div>}
               </div>
               <div className="mt-6 flex gap-2"><Button variant="outline" size="icon" onClick={() => step === 1 ? setMode("login") : setStep((current) => current - 1)} aria-label="Kembali"><ArrowLeft className="size-4" /></Button><Button className="flex-1" disabled={loading} onClick={() => step === 4 ? void finishRegistration() : void nextStep()}>{step === 4 ? "Selesai" : "Lanjut"}<ArrowRight className="ml-1 size-4" /></Button></div>
               <p className="mt-5 text-center text-sm text-muted-foreground">Sudah punya akun? <button type="button" className="font-semibold text-primary" onClick={() => setMode("login")}>Masuk</button></p>

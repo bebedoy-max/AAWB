@@ -19,10 +19,10 @@ import {
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
     meta: [
-      { title: "Pengaturan — AAWB" },
-      { name: "description", content: "Atur ruang kerja dan tampilan AAWB." },
-      { property: "og:title", content: "Pengaturan — AAWB" },
-      { property: "og:description", content: "Atur ruang kerja dan tampilan AAWB." },
+      { title: "Pengaturan — NAROWA" },
+      { name: "description", content: "Atur ruang kerja dan tampilan NAROWA." },
+      { property: "og:title", content: "Pengaturan — NAROWA" },
+      { property: "og:description", content: "Atur ruang kerja dan tampilan NAROWA." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
