@@ -46,7 +46,10 @@ function createMySupabaseClient() {
       autoRefreshToken: true,
       // Login Google memakai alur PKCE: kode di URL ditukar jadi sesi di browser.
       flowType: "pkce",
-      detectSessionInUrl: true,
+      // /auth/callback dan /verifikasi memproses kode/token sendiri. Pemrosesan
+      // otomatis di sini membuat refresh token sekali-pakai dapat ditukar dua
+      // kali dan meninggalkan sesi lama atau status verifikasi yang menggantung.
+      detectSessionInUrl: false,
     },
 
   });

@@ -116,13 +116,13 @@ function VerifyPage() {
         if (otpError) {
           const { data } = await supabase.auth.getSession();
           if (data.session) {
-            finish();
+            await finish();
             return;
           }
           setError(friendlyError(otpError.message));
           return;
         }
-        finish();
+        await finish();
         return;
       }
 

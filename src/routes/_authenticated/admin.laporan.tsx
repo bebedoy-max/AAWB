@@ -46,6 +46,16 @@ import {
 } from "@/components/admin-ui";
 
 export const Route = createFileRoute("/_authenticated/admin/laporan")({
+  head: () => ({
+    meta: [
+      { title: "Laporan Pengiriman — NAROWA" },
+      { name: "description", content: "Pantau riwayat dan status pengiriman pesan NAROWA." },
+      { property: "og:title", content: "Laporan Pengiriman — NAROWA" },
+      { property: "og:description", content: "Pantau riwayat dan status pengiriman pesan NAROWA." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: LaporanPage,
 });
 

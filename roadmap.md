@@ -7,3 +7,4 @@
 - [x] Hapus tombol tema dan profil worker duplikat; tampilkan nama lengkap serta peran admin
 - [x] Perbaiki tombol isi data rekening pada tampilan mobile
 - [x] Pastikan teks panel berwarna terbaca pada semua tema
+- [x] Perbaiki status verifikasi perubahan email Super Admin yang terus memuat

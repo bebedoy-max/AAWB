@@ -235,12 +235,17 @@ export const listStaff = createServerFn({ method: "GET" })
       const requestedAt = meta["email_change_requested_at"]
         ? Date.parse(String(meta["email_change_requested_at"]))
         : NaN;
+      const requestedEmail = String(meta["email_change_target"] ?? "").trim().toLowerCase();
       const rawPending = (u.new_email ?? null) as string | null;
+      // Auth kadang masih mengembalikan new_email sesaat setelah tautan dipakai.
+      // Email akun yang sudah sama dengan target adalah bukti perubahan selesai.
+      const completed = Boolean(requestedEmail) && email.trim().toLowerCase() === requestedEmail;
       // Permintaan dianggap kedaluwarsa bila lewat 3 menit (atau tidak punya
       // catatan waktu sama sekali).
       const expired =
-        Boolean(rawPending) && (!Number.isFinite(requestedAt) || now - requestedAt > EMAIL_CHANGE_TTL_MS);
-      const pending = expired ? null : rawPending;
+        Boolean(rawPending) && !completed &&
+        (!Number.isFinite(requestedAt) || now - requestedAt > EMAIL_CHANGE_TTL_MS);
+      const pending = expired || completed ? null : rawPending;
       const isPlaceholder = !email || email.endsWith("@member.aawb.local");
       return {
         user_id: u.id,
@@ -259,6 +264,7 @@ export const listStaff = createServerFn({ method: "GET" })
         email_verified: !pending,
         needs_real_email: isPlaceholder,
         _expired: expired,
+        _completed: completed,
         _currentEmail: email,
       };
     });
@@ -266,7 +272,7 @@ export const listStaff = createServerFn({ method: "GET" })
     // Bersihkan permintaan yang sudah kedaluwarsa (best-effort).
     await Promise.all(
       rows
-        .filter((r) => r._expired && r._currentEmail)
+        .filter((r) => (r._expired || r._completed) && r._currentEmail)
         .map(async (r) => {
           try {
             await admin.auth.admin.updateUserById(r.user_id, {
@@ -281,7 +287,7 @@ export const listStaff = createServerFn({ method: "GET" })
     );
 
     return rows
-      .map(({ _expired, _currentEmail, ...r }) => r)
+      .map(({ _expired, _completed, _currentEmail, ...r }) => r)
       .filter((u) => u.role !== "member")
       .sort((a, b) => a.created_at.localeCompare(b.created_at));
   });
@@ -746,7 +752,10 @@ export const listReport = createServerFn({ method: "POST" })
           campaign_name: campaignById.get(r.campaign_id) ?? r.campaign_id,
           user_id: r.user_id,
           sender: s ? (s.phone_number ?? s.session_name) : "—",
-          sender_owner: userById.get(r.user_id) ?? "—",
+          // Nama pengirim harus mengikuti pemilik perangkat yang benar-benar
+          // mengirim pesan, bukan pemilik kampanye/admin yang membuat antrean.
+          sender_owner:
+            userById.get(r.claimed_by ?? s?.user_id ?? r.user_id) ?? "—",
           recipient_phone: r.recipient_phone,
           message_body: r.message_body ?? "",
           status: r.status,
