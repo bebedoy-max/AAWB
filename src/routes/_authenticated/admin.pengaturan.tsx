@@ -81,7 +81,7 @@ const SECTIONS: {
   { id: "akun", label: "Akun", hint: "Nama & email", icon: UserRound },
   { id: "tampilan", label: "Tampilan", hint: "Tema warna", icon: Palette },
   { id: "telegram-akun", label: "Telegram CS", hint: "Kontak bantuan pengguna", icon: MessageCircle },
-  { id: "profil-wa", label: "Profil WhatsApp", hint: "Nama & foto global", icon: ImageIcon },
+  { id: "profil-wa", label: "Workers Profile", hint: "Nama & foto global", icon: ImageIcon },
 ];
 
 function PengaturanPage() {
@@ -568,7 +568,7 @@ function ProfilWhatsAppPanel() {
         },
       }),
     onSuccess: () => {
-      toast.success("Profil WhatsApp global tersimpan");
+      toast.success("Workers Profile tersimpan");
       setTouched(false);
       queryClient.invalidateQueries({ queryKey: ["wa-profile-settings"] });
     },
@@ -577,7 +577,7 @@ function ProfilWhatsAppPanel() {
 
   return (
     <Panel
-      title="Profil WhatsApp"
+      title="Workers Profile"
       description="Nama dan foto profil yang wajib dipakai seluruh Worker's pada akun WhatsApp perangkat mereka."
     >
       {isLoading ? (

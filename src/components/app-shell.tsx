@@ -340,7 +340,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 to="/pengaturan-akun"
                 className="block rounded-xl px-2 py-2 transition-colors hover:bg-sidebar-accent"
-                title="Buka Workers Profile"
+                title="Buka Pengaturan Akun"
               >
                 <p className="truncate text-sm font-bold">{account.name}</p>
                 <p className="mt-1 truncate text-xs text-muted-foreground">@{account.username}</p>
