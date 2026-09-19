@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { Send, Smartphone, TrendingUp, AlertTriangle, Download, Pin, UserRound, QrCode, Wallet, Users, ArrowRight, Copy, Plus, KeyRound, RefreshCw } from "lucide-react";
+import { Send, Smartphone, TrendingUp, AlertTriangle, Download, Pin, UserRound, QrCode, Wallet, Users, Copy, Plus, KeyRound, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/my-client";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -293,13 +293,6 @@ function Dashboard() {
       </div>
 
       <div className="mt-5 space-y-4 sm:hidden">
-        <Card className="rounded-2xl shadow-panel">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-3"><div className="grid size-11 place-items-center rounded-xl bg-secondary text-primary"><QrCode className="size-5" /></div><div><p className="text-lg font-semibold">Hubungkan perangkat baru</p><p className="text-sm text-muted-foreground">Pindai QR untuk menambahkan nomor WhatsApp.</p></div></div>
-            <Button className="mt-5 w-full" asChild><Link to="/devices"><QrCode className="mr-2 size-5" /> Pindai nomor baru <ArrowRight className="ml-auto size-4" /></Link></Button>
-          </CardContent>
-        </Card>
-
         <Card className="rounded-2xl shadow-panel">
           <CardContent className="p-5">
             <div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase text-muted-foreground">Total saldo tersedia</p><p className="mt-4 text-3xl font-semibold">{rupiah(rewards?.balance ?? 0)}</p><p className="mt-1 text-xs text-muted-foreground">Minimum penarikan: {rupiah(rewards?.settings.min_withdrawal ?? 0)}</p></div><div className="grid size-11 place-items-center rounded-xl bg-warning text-warning-foreground"><Wallet className="size-5" /></div></div>

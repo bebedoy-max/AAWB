@@ -3,16 +3,19 @@
  * ditetapkan admin, menyediakan unduh foto, salin nama, dan penerapan nyata
  * ke seluruh perangkat WhatsApp milik pengguna yang sedang terhubung.
  */
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { AlertTriangle, Download, Pin, UserRound, Wand2 } from "lucide-react";
+import { AlertTriangle, Download, Pin, UserRound, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   applyWaProfileToMyDevices,
   getWaProfileSettings,
   type ApplyProfileResult,
 } from "@/lib/wa-profile.functions";
+
+const NOTICE_DISMISS_KEY = "aawb:wa-profile-notice-dismissed";
 
 export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
   const fetchProfile = useServerFn(getWaProfileSettings);
@@ -26,6 +29,30 @@ export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
   const profileName = profile?.name ?? null;
   const photo = profile?.photo ?? null;
   const extension = (profile?.mimetype ?? "image/png").split("/")[1] ?? "png";
+
+  const [dismissed, setDismissed] = useState(false);
+
+  // Tutup permanen per worker: jika admin mengubah nama/foto profil,
+  // pemberitahuan muncul kembali secara otomatis.
+  useEffect(() => {
+    if (!profile) return;
+    const stamp = `${profileName ?? ""}:${photo?.length ?? 0}`;
+    try {
+      setDismissed(window.localStorage.getItem(NOTICE_DISMISS_KEY) === stamp);
+    } catch {
+      setDismissed(false);
+    }
+  }, [profile, profileName, photo]);
+
+  const dismissNotice = () => {
+    setDismissed(true);
+    try {
+      const stamp = `${profileName ?? ""}:${photo?.length ?? 0}`;
+      window.localStorage.setItem(NOTICE_DISMISS_KEY, stamp);
+    } catch {
+      // penyimpanan tidak tersedia: cukup tutup untuk sesi ini
+    }
+  };
 
   const copyProfileName = async () => {
     if (!profileName) {
@@ -62,8 +89,19 @@ export function WaProfilePanel({ compact = false }: { compact?: boolean }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  if (dismissed) return null;
+
   return (
-    <section className="mb-6 rounded-2xl border border-warning-border bg-warning-surface p-5 shadow-panel sm:p-6">
+    <section className="relative mb-6 rounded-2xl border border-warning-border bg-warning-surface p-5 shadow-panel sm:p-6">
+      <Button
+        size="icon"
+        variant="ghost"
+        aria-label="Tutup pemberitahuan"
+        className="absolute right-2 top-2 size-7 rounded-full text-warning-foreground/70 hover:text-foreground"
+        onClick={dismissNotice}
+      >
+        <X className="size-4" />
+      </Button>
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" />
         <div className="min-w-0 flex-1">
