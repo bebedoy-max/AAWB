@@ -11,8 +11,6 @@ import {
   Send,
   Settings,
   Menu,
-  Moon,
-  Sun,
   LogOut,
   ShieldCheck,
   Wallet,
@@ -30,10 +28,8 @@ import { getMyRole } from "@/lib/admin.functions";
 import { attachReferral } from "@/lib/rewards.functions";
 
 import { supabase } from "@/integrations/supabase/my-client";
-import { useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   DropdownMenu,
@@ -251,20 +247,42 @@ function AdminBottomNav() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const [account, setAccount] = useState({ username: "member", name: "Worker's" });
   const [clock, setClock] = useState(new Date());
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const linkReferral = useServerFn(attachReferral);
+  const fetchRole = useServerFn(getMyRole);
+
+  const { data: myRole } = useQuery({
+    queryKey: ["my-role"],
+    queryFn: () => fetchRole(),
+    retry: false,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const metadata = data.user?.user_metadata as { username?: string; organization_name?: string } | undefined;
+    supabase.auth.getUser().then(async ({ data }) => {
+      const user = data.user;
+      const metadata = user?.user_metadata as {
+        username?: string;
+        organization_name?: string;
+        full_name?: string;
+        name?: string;
+      } | undefined;
+      const { data: profile } = user
+        ? await supabase.from("profiles").select("organization_name").eq("user_id", user.id).maybeSingle()
+        : { data: null };
+      const username = metadata?.username ?? user?.email?.split("@")[0] ?? "member";
       setAccount({
-        username: metadata?.username ?? data.user?.email?.split("@")[0] ?? "member",
-        name: metadata?.organization_name ?? "Worker's",
+        username,
+        name:
+          profile?.organization_name ??
+          metadata?.organization_name ??
+          metadata?.full_name ??
+          metadata?.name ??
+          username,
       });
     });
   }, []);
@@ -409,42 +427,36 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           </div>
 
-          <div className={cn("col-start-3 ml-auto flex items-center gap-2", !adminLayout && "hidden lg:flex")}> 
-            <Badge
-              variant="outline"
-              className={cn(
-                "hidden gap-1.5",
-                activeSession ? "border-primary/40 text-primary" : "text-muted-foreground",
-              )}
-            >
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  activeSession ? "bg-primary" : "bg-muted-foreground",
-                )}
-              />
-              {activeSession
-                ? `${activeSession.session_name} aktif`
-                : "Tidak ada perangkat terhubung"}
-            </Badge>
-
-            <Button variant="ghost" size="icon" onClick={toggle} aria-label="Ganti tema">
-              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            </Button>
-
+          {adminLayout ? (
+          <div className="col-start-3 ml-auto hidden items-center lg:flex">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Menu akun">
+                <Button variant="ghost" className="h-auto gap-3 px-2 py-1.5" aria-label="Menu akun admin">
                   <Avatar className="size-8">
                     <AvatarFallback className="bg-accent text-accent-foreground text-xs">
-                      {account.username.slice(0, 2).toUpperCase() || "MB"}
+                      {account.name
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((part) => part[0])
+                        .join("")
+                        .toUpperCase() || "AD"}
                     </AvatarFallback>
                   </Avatar>
+                  <span className="text-left leading-tight">
+                    <span className="block text-sm font-semibold">{account.name}</span>
+                    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                      {myRole?.is_super_admin ? "Super Admin" : "Admin"}
+                    </span>
+                  </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
-                  @{account.username}
+                <DropdownMenuLabel>
+                  <span className="block text-sm font-semibold">{account.name}</span>
+                  <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                    {myRole?.is_super_admin ? "Super Admin" : "Admin"}
+                  </span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -458,6 +470,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          ) : null}
           </div>
         </header>
 
