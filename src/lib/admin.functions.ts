@@ -24,11 +24,14 @@ export interface GatewaySettings {
   updated_at: string | null;
 }
 
-/** Tema warna global yang berlaku untuk seluruh akun. */
+/**
+ * Tema warna global yang aman dibaca publik.
+ * Hanya nilai tema dari daftar yang diizinkan yang pernah dikembalikan.
+ */
 export const getGlobalAppTheme = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<{ theme: AppThemeId }> => {
-    const { data, error } = await (context.supabase as any)
+  .handler(async (): Promise<{ theme: AppThemeId }> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await (supabaseAdmin as any)
       .from("app_settings")
       .select("app_theme")
       .eq("id", "global")

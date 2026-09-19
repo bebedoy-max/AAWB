@@ -1,5 +1,4 @@
-import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
@@ -8,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -17,7 +16,7 @@ import { Toaster } from "../components/ui/sonner";
 import { CampaignAutoRunner } from "../components/campaign-auto-runner";
 import { supabase } from "../integrations/supabase/my-client";
 import { getGlobalAppTheme } from "../lib/admin.functions";
-import { applyAppTheme, DEFAULT_APP_THEME } from "../lib/app-theme";
+import { applyAppTheme, type AppThemeId } from "../lib/app-theme";
 
 function NotFoundComponent() {
   return (
@@ -80,6 +79,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  loader: () => getGlobalAppTheme(),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -121,8 +121,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  const { theme } = Route.useLoaderData();
+
   return (
-    <html lang="id" data-app-theme={DEFAULT_APP_THEME}>
+    <html lang="id" data-app-theme={theme}>
       <head>
         <HeadContent />
       </head>
@@ -136,17 +138,15 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const { theme } = Route.useLoaderData();
   const router = useRouter();
-  const [authenticated, setAuthenticated] = useState(false);
 
   // Saat akun berganti (login/logout), buang data lama agar peran & isi halaman
   // tidak tertukar antar akun.
   useEffect(() => {
     let lastUserId: string | null | undefined;
-    supabase.auth.getSession().then(({ data }) => setAuthenticated(Boolean(data.session)));
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      setAuthenticated(Boolean(session));
       const userId = session?.user?.id ?? null;
       if (event === "SIGNED_IN" && userId === lastUserId) return;
       lastUserId = userId;
@@ -159,7 +159,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <GlobalAppTheme authenticated={authenticated} />
+        <GlobalAppTheme theme={theme} />
         {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
         <Outlet />
         {/* Pekerja kampanye jalan di seluruh halaman, bukan hanya di halaman Kampanye. */}
@@ -170,19 +170,10 @@ function RootComponent() {
   );
 }
 
-function GlobalAppTheme({ authenticated }: { authenticated: boolean }) {
-  const fetchTheme = useServerFn(getGlobalAppTheme);
-
-  const { data } = useQuery({
-    queryKey: ["global-app-theme"],
-    queryFn: () => fetchTheme(),
-    enabled: authenticated,
-    staleTime: 60_000,
-  });
-
+function GlobalAppTheme({ theme }: { theme: AppThemeId }) {
   useEffect(() => {
-    applyAppTheme(data?.theme ?? DEFAULT_APP_THEME);
-  }, [data?.theme]);
+    applyAppTheme(theme);
+  }, [theme]);
 
   return null;
 }
