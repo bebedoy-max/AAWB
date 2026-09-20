@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { Loader2, CircleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/my-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getPostLoginPath } from "@/lib/post-login";
+import { finalizeStaffEmailChange } from "@/lib/admin-console.functions";
 
 export const Route = createFileRoute("/verifikasi")({
   head: () => ({
@@ -40,6 +42,7 @@ function friendlyError(message: string): string {
 
 function VerifyPage() {
   const navigate = useNavigate();
+  const finalizeEmailChange = useServerFn(finalizeStaffEmailChange);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,6 +56,29 @@ function VerifyPage() {
     const run = async () => {
       const query = new URLSearchParams(window.location.search);
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+
+      // Alur perubahan email staf memakai state sekali-pakai. Kepemilikan
+      // alamat baru dibuktikan saat penerima membuka tautan yang memuat state.
+      const emailChangeUser = query.get("email_change_user");
+      const emailChangeState = query.get("email_change_state");
+      if (emailChangeUser && emailChangeState) {
+        try {
+          await finalizeEmailChange({
+            data: { userId: emailChangeUser, state: emailChangeState },
+          });
+          await supabase.auth.signOut({ scope: "local" });
+          window.history.replaceState(null, "", window.location.pathname);
+          toast.success("Email berhasil diubah. Silakan masuk dengan email baru.");
+          navigate({ to: "/auth", replace: true });
+        } catch (verificationError) {
+          setError(
+            verificationError instanceof Error
+              ? friendlyError(verificationError.message)
+              : "Verifikasi gagal. Silakan minta tautan baru.",
+          );
+        }
+        return;
+      }
 
       // Supabase may report a failure straight in the URL.
       const urlError = hash.get("error_description") ?? query.get("error_description");

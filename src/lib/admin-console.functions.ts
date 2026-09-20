@@ -220,6 +220,18 @@ export const listAdminUsers = createServerFn({ method: "GET" })
 /** Masa berlaku permintaan ganti email: 3 menit. */
 export const EMAIL_CHANGE_TTL_MS = 3 * 60 * 1000;
 
+async function hashEmailChangeState(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function createEmailChangeState(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export const listStaff = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -278,7 +290,11 @@ export const listStaff = createServerFn({ method: "GET" })
             await admin.auth.admin.updateUserById(r.user_id, {
               email: r._currentEmail,
               email_confirm: true,
-              user_metadata: { email_change_requested_at: null, email_change_target: null },
+               user_metadata: {
+                 email_change_requested_at: null,
+                 email_change_target: null,
+                 email_change_state_hash: null,
+               },
             });
           } catch {
             /* abaikan, status tetap dianggap kedaluwarsa di UI */
@@ -327,7 +343,14 @@ export const requestStaffEmailChange = createServerFn({ method: "POST" })
         process.env["MY_SUPABASE_PUBLISHABLE_KEY"] ?? process.env["SUPABASE_PUBLISHABLE_KEY"] ?? "";
       if (!url || !apikey) throw new Error("Konfigurasi Supabase tidak lengkap.");
 
-      const redirectTo = data.origin ? `${data.origin}/verifikasi` : "";
+      const emailChangeState = createEmailChangeState();
+      const emailChangeStateHash = await hashEmailChangeState(emailChangeState);
+      const redirectUrl = data.origin ? new URL("/verifikasi", data.origin) : null;
+      if (redirectUrl) {
+        redirectUrl.searchParams.set("email_change_user", context.userId);
+        redirectUrl.searchParams.set("email_change_state", emailChangeState);
+      }
+      const redirectTo = redirectUrl?.toString() ?? "";
       const endpoint = `${url.replace(/\/$/, "")}/auth/v1/user${
         redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ""
       }`;
@@ -379,6 +402,7 @@ export const requestStaffEmailChange = createServerFn({ method: "POST" })
           user_metadata: {
             email_change_requested_at: requestedAt,
             email_change_target: data.email,
+             email_change_state_hash: emailChangeStateHash,
           },
         });
       } catch (e) {
@@ -399,6 +423,58 @@ export const requestStaffEmailChange = createServerFn({ method: "POST" })
       };
     },
   );
+
+/**
+ * Menyelesaikan perubahan setelah pemilik alamat baru membuka tautan email.
+ * State acak di tautan hanya disimpan sebagai hash dan sekali pakai.
+ */
+export const finalizeStaffEmailChange = createServerFn({ method: "POST" })
+  .inputValidator((input: { userId: string; state: string }) => {
+    const userId = String(input?.userId ?? "").trim();
+    const state = String(input?.state ?? "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(userId) || !/^[0-9a-f]{64}$/i.test(state)) {
+      throw new Error("Tautan verifikasi tidak valid.");
+    }
+    return { userId, state };
+  })
+  .handler(async ({ data }): Promise<{ ok: true; email: string }> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: found, error } = await (supabaseAdmin as any).auth.admin.getUserById(data.userId);
+    if (error || !found?.user) throw new Error("Akun tidak ditemukan.");
+
+    const user = found.user;
+    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const target = String(meta["email_change_target"] ?? "").trim().toLowerCase();
+    const requestedAt = Date.parse(String(meta["email_change_requested_at"] ?? ""));
+    const expectedHash = String(meta["email_change_state_hash"] ?? "");
+    const receivedHash = await hashEmailChangeState(data.state);
+
+    if (!target || !expectedHash || expectedHash !== receivedHash) {
+      throw new Error("Tautan verifikasi tidak valid atau sudah pernah dipakai.");
+    }
+    if (!Number.isFinite(requestedAt) || Date.now() - requestedAt > EMAIL_CHANGE_TTL_MS) {
+      throw new Error("Tautan verifikasi sudah kedaluwarsa. Minta email baru.");
+    }
+
+    const currentEmail = String(user.email ?? "").trim().toLowerCase();
+    const pendingEmail = String(user.new_email ?? "").trim().toLowerCase();
+    if (currentEmail !== target && pendingEmail !== target) {
+      throw new Error("Alamat pada tautan tidak cocok dengan perubahan yang diminta.");
+    }
+
+    const { error: updateError } = await (supabaseAdmin as any).auth.admin.updateUserById(data.userId, {
+      email: target,
+      email_confirm: true,
+      user_metadata: {
+        email_change_requested_at: null,
+        email_change_target: null,
+        email_change_state_hash: null,
+      },
+    });
+    if (updateError) throw new Error(updateError.message);
+
+    return { ok: true, email: target };
+  });
 
 
 /**
