@@ -363,7 +363,9 @@ export async function processBlastTick(
           err instanceof GatewayError ? err.message : ((err as Error).message ?? "Pengiriman gagal");
         const kind = classifyFailure({
           message,
-          status: err instanceof GatewayError ? err.status : undefined,
+          ...(err instanceof GatewayError && typeof err.status === "number"
+            ? { status: err.status }
+            : {}),
           deliveryUnknown: err instanceof GatewayError && err.deliveryUnknown,
         });
         let deviceProblem = false;

@@ -701,7 +701,7 @@ export const attachReferral = createServerFn({ method: "POST" })
     let cursor: string | null = inviter.user_id as string;
     for (let depth = 0; cursor && depth < 20; depth += 1) {
       if (cursor === uid) throw new Error("Kode referal ini tidak dapat dipakai.");
-      const { data: up } = await (supabaseAdmin as any)
+      const { data: up }: { data: { referred_by?: string | null } | null } = await (supabaseAdmin as any)
         .from("profiles")
         .select("referred_by")
         .eq("user_id", cursor)

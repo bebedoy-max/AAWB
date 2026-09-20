@@ -24,7 +24,14 @@ export function CampaignAutoRunner() {
     let stopped = false;
     const deviceLoops = new Set<string>();
 
+    // Penyegaran tampilan dibatasi paling sering sekali per 5 detik. Dulu
+    // setiap tick memicu 5 permintaan ulang sekaligus, sehingga satu tab saja
+    // sudah membanjiri server dengan kueri.
+    let lastRefresh = 0;
     const refresh = () => {
+      const now = Date.now();
+      if (now - lastRefresh < 5000) return;
+      lastRefresh = now;
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       queryClient.invalidateQueries({ queryKey: ["campaign-progress"] });
       queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
@@ -32,8 +39,9 @@ export function CampaignAutoRunner() {
       queryClient.invalidateQueries({ queryKey: ["member-blast-state"] });
     };
 
-    // Alur pengiriman satu perangkat: berputar terus selama saklar "siap blast"
-    // pada perangkat itu masih menyala.
+    // Alur pengiriman satu perangkat: berputar selama saklar "siap blast"
+    // pada perangkat itu masih menyala, dengan jeda kecil antar putaran agar
+    // server tidak dihujani permintaan tanpa henti.
     const runDevice = async (deviceId: string) => {
       if (deviceLoops.has(deviceId)) return;
       deviceLoops.add(deviceId);
@@ -42,8 +50,8 @@ export function CampaignAutoRunner() {
           try {
             await blastTick(deviceId);
           } catch {
-            /* gangguan sementara: langsung dicoba lagi */
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            /* gangguan sementara */
+            await new Promise((resolve) => setTimeout(resolve, 3000));
           }
           refresh();
 
@@ -53,6 +61,7 @@ export function CampaignAutoRunner() {
             .eq("id", deviceId)
             .maybeSingle();
           if (!row || !(row as { blast_ready?: boolean | null }).blast_ready) break;
+          await new Promise((resolve) => setTimeout(resolve, 1500));
         }
       } finally {
         deviceLoops.delete(deviceId);
@@ -66,6 +75,26 @@ export function CampaignAutoRunner() {
         try {
           const { data: session } = await supabase.auth.getSession();
           if (session.session) {
+            // Akun admin melihat SEMUA perangkat. Bila tab admin ikut
+            // menjalankan pekerja, satu tab akan mendorong seluruh perangkat
+            // milik semua worker sekaligus — beban server berlipat dan blast
+            // justru melambat. Pengiriman global sudah ditangani penjadwal di
+            // server, jadi tab admin cukup memantau saja.
+            const { data: roleRows } = await (supabase as unknown as {
+              from: (t: string) => {
+                select: (c: string) => {
+                  eq: (k: string, v: string) => Promise<{ data: Array<{ role: string }> | null }>;
+                };
+              };
+            })
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", session.session.user.id);
+            const isAdmin = (roleRows ?? []).some(
+              (r) => r.role === "admin" || r.role === "super_admin",
+            );
+            if (isAdmin) return;
+
             const { data: campaigns } = await supabase
               .from("campaigns")
               .select("id,session_id,status")
@@ -100,7 +129,7 @@ export function CampaignAutoRunner() {
         } catch {
           /* gangguan sementara */
         }
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
       }
     };
 
@@ -119,6 +148,7 @@ export function CampaignAutoRunner() {
       stopped = true;
     };
   }, [queryClient]);
+
 
   return null;
 }

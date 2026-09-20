@@ -331,7 +331,7 @@ export const requestStaffEmailChange = createServerFn({ method: "POST" })
       data,
       context,
     }): Promise<{ ok: true; sent: boolean; pending_email: string; expires_at: string }> => {
-      await assertAdmin(context, true);
+      await assertAdmin(context);
 
       if (data.userId !== context.userId) {
         throw new Error("Anda hanya bisa mengubah email akun Anda sendiri.");
@@ -491,7 +491,7 @@ export const requestStaffPasswordReset = createServerFn({ method: "POST" })
     return { userId: input.userId, origin: /^https?:\/\//.test(origin) ? origin : "" };
   })
   .handler(async ({ data, context }): Promise<{ ok: true; email: string }> => {
-    await assertAdmin(context, true);
+    await assertAdmin(context);
     if (data.userId !== context.userId) {
       throw new Error("Anda hanya bisa mengubah kata sandi akun Anda sendiri.");
     }

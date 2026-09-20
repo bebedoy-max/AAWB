@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { toast } from "sonner";
+import { useEffect, useState, type ReactNode } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -348,58 +347,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     navigate({ to: "/auth", replace: true });
   };
 
-  // Admin & super admin: keluar otomatis setelah 15 menit tanpa aktivitas.
-  // Worker (member) tetap masuk sampai menekan tombol keluar sendiri.
-  const signOutRef = useRef(signOut);
-  signOutRef.current = signOut;
-  const isAdminAccount = !!myRole?.is_admin;
+  // Keluar otomatis saat tidak ada aktivitas SUDAH DIHAPUS untuk semua peran.
+  // Admin & super admin tetap masuk sampai menekan tombol Keluar; login sudah
+  // dilindungi OTP email, dan pemeriksaan berkala itu hanya menambah beban.
 
-  useEffect(() => {
-    if (!isAdminAccount) return;
-    const IDLE_MS = 15 * 60 * 1000;
-    // Waktu terakhir ada aktivitas. Dicek berkala, bukan lewat satu timer
-    // panjang: di ponsel timer ditahan saat layar mati lalu langsung berjalan
-    // begitu aplikasi dibuka lagi, sehingga pengguna aktif ikut terlempar.
-    let lastActivity = Date.now();
-    let signedOut = false;
-
-    const reset = () => {
-      lastActivity = Date.now();
-    };
-
-    const events: (keyof DocumentEventMap)[] = [
-      "mousemove",
-      "mousedown",
-      "keydown",
-      "wheel",
-      "touchstart",
-      "touchmove",
-      "touchend",
-      "pointerdown",
-      "click",
-      "input",
-      "scroll",
-      "visibilitychange",
-    ];
-    // capture: true agar gulir di dalam panel (yang tidak merambat ke window)
-    // tetap terhitung sebagai aktivitas.
-    events.forEach((e) =>
-      document.addEventListener(e, reset, { passive: true, capture: true }),
-    );
-
-    const interval = window.setInterval(() => {
-      if (signedOut) return;
-      if (Date.now() - lastActivity < IDLE_MS) return;
-      signedOut = true;
-      toast.info("Anda keluar otomatis karena 15 menit tidak ada aktivitas.");
-      void signOutRef.current();
-    }, 30_000);
-
-    return () => {
-      window.clearInterval(interval);
-      events.forEach((e) => document.removeEventListener(e, reset, { capture: true }));
-    };
-  }, [isAdminAccount]);
 
 
   return (
