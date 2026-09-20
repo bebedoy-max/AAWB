@@ -88,8 +88,8 @@ function GantiSandiPage() {
   }, []);
 
   const simpan = async () => {
-    if (pass.length < 6) {
-      toast.error("Kata sandi minimal 6 karakter.");
+    if (pass.length < 8) {
+      toast.error("Kata sandi minimal 8 karakter.");
       return;
     }
     if (pass !== pass2) {
@@ -147,7 +147,7 @@ function GantiSandiPage() {
           <DialogHeader>
             <DialogTitle>Buat kata sandi baru</DialogTitle>
             <DialogDescription>
-              Minimal 6 karakter. Setelah disimpan, Anda langsung masuk ke dashboard.
+              Minimal 8 karakter. Setelah disimpan, Anda langsung masuk ke dashboard.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

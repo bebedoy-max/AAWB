@@ -161,7 +161,7 @@ function AccountInfoCard({ username, profile }: { username: string; profile: Acc
       if (name.length < 2) throw new Error("Nama lengkap minimal 2 karakter.");
 
       if (wantsPassword) {
-        if (password.length < 4) throw new Error("Kata sandi baru minimal 4 karakter.");
+        if (password.length < 8) throw new Error("Kata sandi baru minimal 8 karakter.");
         if (password !== passwordRepeat) throw new Error("Ulangi kata sandi tidak cocok.");
       }
 

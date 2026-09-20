@@ -11,7 +11,7 @@ const usernameSchema = z
 
 const registerSchema = z.object({
   username: usernameSchema,
-  password: z.string().min(4, "Kata sandi minimal 4 karakter.").max(72),
+  password: z.string().min(8, "Kata sandi minimal 8 karakter.").max(72),
   name: z.string().trim().min(2, "Nama minimal 2 karakter.").max(80),
   referralCode: z.string().trim().toUpperCase().max(12).optional(),
 });
@@ -28,14 +28,97 @@ export function memberPassword(password: string): string {
   return `${password}::AAWB`;
 }
 
+/* ------------------------------------------------------------------------- */
+/* Pembantu server. Semua impor server bersifat dinamis (dipakai di handler). */
+/* ------------------------------------------------------------------------- */
+
+const RESET_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+const RESET_CODE_LENGTH = 8;
+const RESET_TTL_MINUTES = 10;
+const RESET_GENERIC_ERROR = "Kode salah atau sudah kedaluwarsa. Minta kode baru.";
+
+function normalizeIdentifier(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase();
+}
+
+/**
+ * Mencari id akun dari email. Memakai fungsi database `find_user_id_by_email`
+ * (satu query terindeks). Jalur lama (memindai 1000 pengguna pertama) hanya
+ * cadangan selama fungsi itu belum terpasang.
+ */
+async function findUserIdByEmail(email: string): Promise<string | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const { data, error } = await (supabaseAdmin as any).rpc("find_user_id_by_email", { _email: email });
+  if (!error) return (data as string | null) ?? null;
+
+  console.warn("[member-auth] find_user_id_by_email belum tersedia, memakai jalur lama:", error.message);
+  const { data: users } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  return (users?.users ?? []).find((user) => user.email === email)?.id ?? null;
+}
+
+/** Akun + chat Telegram tujuan untuk permintaan reset (username akun ATAU username Telegram). */
+async function resolveResetTarget(
+  identifier: string,
+): Promise<{ userId: string; chatId: string | number } | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const admin = supabaseAdmin as any;
+
+  let userId: string | null = null;
+  if (/^[a-z0-9_]{4,24}$/.test(identifier)) {
+    userId = await findUserIdByEmail(usernameEmail(identifier));
+  }
+  if (!userId) {
+    // Netralkan karakter wildcard LIKE (% dan _) supaya pencocokan tepat.
+    const pattern = identifier.replace(/[\\%_]/g, (c) => `\\${c}`);
+    const { data: byTelegram } = await admin
+      .from("telegram_links")
+      .select("user_id")
+      .ilike("username", pattern)
+      .not("chat_id", "is", null)
+      .maybeSingle();
+    userId = byTelegram?.user_id ?? null;
+  }
+  if (!userId) return null;
+
+  const { data: link } = await admin
+    .from("telegram_links")
+    .select("chat_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!link?.chat_id) return null;
+  return { userId, chatId: link.chat_id };
+}
+
+async function hashResetCode(userId: string, code: string): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  return createHash("sha256").update(`${userId}:${code}`).digest("hex");
+}
+
+/** Pembatasan per IP (perkiraan). Bila konteks permintaan tidak tersedia, tidak memblokir. */
+async function ipRateLimited(scope: string, limit: number, windowMs: number): Promise<boolean> {
+  try {
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const { clientIp, rateLimited } = await import("@/lib/rate-limit.server");
+    return rateLimited(`${scope}:${clientIp(getRequest())}`, limit, windowMs);
+  } catch {
+    return false;
+  }
+}
+
 export const checkUsername = createServerFn({ method: "POST" })
   .inputValidator((input: { username: string }) => ({ username: usernameSchema.parse(input.username) }))
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const email = usernameEmail(data.username);
-    const { data: users, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    if (error) throw new Error("Username belum dapat diperiksa.");
-    return { available: !(users.users ?? []).some((user) => user.email === email) };
+    try {
+      const existing = await findUserIdByEmail(usernameEmail(data.username));
+      return { available: !existing };
+    } catch {
+      throw new Error("Username belum dapat diperiksa.");
+    }
   });
 
 export const registerMember = createServerFn({ method: "POST" })
@@ -80,74 +163,106 @@ export const registerMember = createServerFn({ method: "POST" })
     return { ok: true as const, email };
   });
 /**
- * Lupa kata sandi lewat Telegram.
+ * Lupa kata sandi lewat Telegram, dua langkah.
  *
- * Worker mengisi username akun ATAU username Telegram-nya. Bila akun itu sudah
- * menyambungkan Telegram, kata sandi sementara dibuat dan dikirim oleh bot ke
- * akun Telegram tersebut. Jawaban selalu bersifat umum agar username tidak bisa
- * ditebak dari luar.
+ * 1) requestPasswordResetViaTelegram: worker mengisi username akun ATAU username
+ *    Telegram-nya. Bila akun itu punya Telegram tersambung, bot mengirim KODE
+ *    sekali pakai (berlaku 10 menit). Kata sandi TIDAK diubah di langkah ini.
+ * 2) confirmPasswordResetViaTelegram: kata sandi baru hanya diterapkan setelah
+ *    kode yang benar dimasukkan.
+ *
+ * Jawaban langkah 1 selalu sama (akun ada atau tidak), dan pembatasan laju per
+ * akun dijaga di database (maks. 3 kode per jam, jeda 60 detik, 5 percobaan).
  */
 export const requestPasswordResetViaTelegram = createServerFn({ method: "POST" })
   .inputValidator((input: { identifier: string }) => {
-    const identifier = (input?.identifier ?? "").trim().replace(/^@/, "").toLowerCase();
-    if (identifier.length < 3) throw new Error("Masukkan username akun atau username Telegram Anda.");
+    const identifier = normalizeIdentifier(input?.identifier);
+    if (!/^[a-z0-9_]{3,32}$/.test(identifier)) {
+      throw new Error("Masukkan username akun atau username Telegram Anda.");
+    }
     return { identifier };
   })
-  .handler(async ({ data }): Promise<{ ok: true; sent: boolean }> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    const admin = supabaseAdmin as any;
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    if (await ipRateLimited("reset-request", 10, 60 * 60 * 1000)) return { ok: true };
 
-    let userId: string | null = null;
+    const target = await resolveResetTarget(data.identifier);
+    if (!target) return { ok: true };
 
-    // 1) Cocokkan sebagai username akun aplikasi.
-    if (/^[a-z0-9_]{4,24}$/.test(data.identifier)) {
-      const email = usernameEmail(data.identifier);
-      const { data: users } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-      userId = (users?.users ?? []).find((user) => user.email === email)?.id ?? null;
-    }
-
-    // 2) Bila belum ketemu, cocokkan sebagai username Telegram yang tersambung.
-    if (!userId) {
-      const { data: link } = await admin
-        .from("telegram_links")
-        .select("user_id")
-        .ilike("username", data.identifier)
-        .not("chat_id", "is", null)
-        .maybeSingle();
-      userId = link?.user_id ?? null;
-    }
-
-    if (!userId) return { ok: true, sent: false };
-
-    const { data: link } = await admin
-      .from("telegram_links")
-      .select("chat_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (!link?.chat_id) return { ok: true, sent: false };
-
-    // Kata sandi sementara yang mudah dibaca.
-    const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
-    const temp = Array.from(
-      { length: 10 },
-      () => alphabet[Math.floor(Math.random() * alphabet.length)],
+    const { randomInt } = await import("node:crypto");
+    const code = Array.from({ length: RESET_CODE_LENGTH }, () =>
+      RESET_ALPHABET.charAt(randomInt(RESET_ALPHABET.length)),
     ).join("");
 
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-      password: memberPassword(temp),
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const { data: outcome, error } = await (supabaseAdmin as any).rpc("create_reset_code", {
+      _user_id: target.userId,
+      _code_hash: await hashResetCode(target.userId, code),
+      _ttl_minutes: RESET_TTL_MINUTES,
     });
-    if (error) throw new Error("Kata sandi sementara gagal dibuat. Coba lagi sebentar lagi.");
+    if (error) {
+      console.error("[reset] create_reset_code gagal:", error.message);
+      return { ok: true };
+    }
+    if (outcome !== "ok") return { ok: true }; // terlalu sering: diam-diam, jawaban tetap umum
 
     const { sendTelegramMessage } = await import("@/lib/telegram.server");
     try {
       await sendTelegramMessage(
-        link.chat_id,
-        `🔐 <b>Permintaan lupa kata sandi</b>\nKata sandi sementara Anda: <code>${temp}</code>\n\nMasuk memakai kata sandi ini, lalu segera ganti di menu <b>Pengaturan Akun</b>.\nJika bukan Anda yang meminta, segera ganti kata sandi dan hubungi admin.`,
+        target.chatId,
+        `🔐 <b>Kode reset kata sandi</b>\nKode Anda: <code>${code}</code>\n\nBerlaku ${RESET_TTL_MINUTES} menit. Masukkan kode ini di halaman Lupa kata sandi bersama kata sandi baru.\nJangan bagikan kode ini kepada siapa pun. Jika bukan Anda yang meminta, abaikan pesan ini; kata sandi Anda tidak berubah.`,
       );
-    } catch {
-      throw new Error("Notifikasi Telegram gagal dikirim. Hubungi admin.");
+    } catch (err) {
+      console.error("[reset] pengiriman Telegram gagal:", err instanceof Error ? err.message : err);
+    }
+    return { ok: true };
+  });
+
+export const confirmPasswordResetViaTelegram = createServerFn({ method: "POST" })
+  .inputValidator((input: { identifier: string; code: string; newPassword: string }) => {
+    const identifier = normalizeIdentifier(input?.identifier);
+    const code = String(input?.code ?? "")
+      .trim()
+      .toLowerCase();
+    const newPassword = String(input?.newPassword ?? "");
+    if (!/^[a-z0-9_]{3,32}$/.test(identifier)) throw new Error(RESET_GENERIC_ERROR);
+    if (!new RegExp(`^[${RESET_ALPHABET}]{${RESET_CODE_LENGTH}}$`).test(code)) {
+      throw new Error("Kode harus 8 karakter (huruf dan angka) seperti yang dikirim bot.");
+    }
+    if (newPassword.length < 8 || newPassword.length > 72) {
+      throw new Error("Kata sandi baru harus 8–72 karakter.");
+    }
+    return { identifier, code, newPassword };
+  })
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    if (await ipRateLimited("reset-confirm", 20, 60 * 60 * 1000)) {
+      throw new Error("Terlalu banyak percobaan. Coba lagi nanti.");
     }
 
-    return { ok: true, sent: true };
+    const target = await resolveResetTarget(data.identifier);
+    if (!target) throw new Error(RESET_GENERIC_ERROR);
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const { data: outcome, error } = await (supabaseAdmin as any).rpc("verify_reset_code", {
+      _user_id: target.userId,
+      _code_hash: await hashResetCode(target.userId, data.code),
+    });
+    if (error || outcome !== "ok") throw new Error(RESET_GENERIC_ERROR);
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(target.userId, {
+      password: memberPassword(data.newPassword),
+    });
+    if (updateError) throw new Error("Kata sandi belum dapat diubah. Minta kode baru lalu coba lagi.");
+
+    const { sendTelegramMessage } = await import("@/lib/telegram.server");
+    try {
+      await sendTelegramMessage(
+        target.chatId,
+        "🔐 <b>Kata sandi diubah</b>\nKata sandi akun Anda baru saja diubah lewat kode reset. Jika bukan Anda, segera hubungi admin.",
+      );
+    } catch {
+      /* pemberitahuan pelengkap; kegagalannya tidak membatalkan perubahan */
+    }
+    return { ok: true };
   });

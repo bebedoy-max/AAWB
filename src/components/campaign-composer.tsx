@@ -30,6 +30,35 @@ type Props = {
 };
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+const DRAFT_KEY = "narowa:campaign-draft";
+
+function readDraft(): CampaignDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as CampaignDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(draft: CampaignDraft) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Kuota penyimpanan penuh (mis. poster besar) — draf teks tetap jalan.
+  }
+}
+
+function clearDraft() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* abaikan */
+  }
+}
 
 export function CampaignComposer({
   open,
@@ -47,16 +76,41 @@ export function CampaignComposer({
   const [ctaUrl, setCtaUrl] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const msgRef = useRef<HTMLTextAreaElement>(null);
+  const initialRef = useRef<CampaignDraft | null>(initial);
+  initialRef.current = initial;
 
-  // Isi form saat dialog dibuka (mode edit) atau kosongkan (mode baru).
+  // Isi form saat dialog BARU dibuka (mode edit) atau pulihkan draf (mode baru).
+  // Sengaja hanya bereaksi pada perubahan `open`, supaya isian tidak pernah
+  // terhapus saat komponen dirender ulang (mis. kembali dari tab lain).
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (!open) return;
-    setName(initial?.name ?? "");
-    setMessage(initial?.message ?? "");
-    setMediaUrl(initial?.mediaUrl ?? null);
-    setCtaText(initial?.ctaText ?? "");
-    setCtaUrl(initial?.ctaUrl ?? "");
-  }, [open, initial]);
+    if (open && !wasOpen.current) {
+      wasOpen.current = true;
+      if (initialRef.current) {
+        const i = initialRef.current;
+        setName(i.name);
+        setMessage(i.message);
+        setMediaUrl(i.mediaUrl);
+        setCtaText(i.ctaText);
+        setCtaUrl(i.ctaUrl);
+      } else {
+        const saved = readDraft();
+        setName(saved?.name ?? "");
+        setMessage(saved?.message ?? "");
+        setMediaUrl(saved?.mediaUrl ?? null);
+        setCtaText(saved?.ctaText ?? "");
+        setCtaUrl(saved?.ctaUrl ?? "");
+      }
+    }
+    if (!open) wasOpen.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Simpan draf kampanye baru supaya isian aman bila halaman dimuat ulang.
+  useEffect(() => {
+    if (!open || initialRef.current) return;
+    writeDraft({ name, message, mediaUrl, ctaText, ctaUrl });
+  }, [open, name, message, mediaUrl, ctaText, ctaUrl]);
 
   const pickFile = (file?: File | null) => {
     if (!file) return;
@@ -98,6 +152,7 @@ export function CampaignComposer({
       toast.error("Teks pesan wajib diisi.");
       return;
     }
+    if (!initialRef.current) clearDraft();
     onSubmit({ name: name.trim(), message: message.trim(), mediaUrl, ctaText, ctaUrl });
   };
 

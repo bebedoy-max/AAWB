@@ -63,7 +63,8 @@ export const startTelegramLink = createServerFn({ method: "POST" })
       throw new Error("Bot Telegram aplikasi belum dikonfigurasi. Hubungi admin.");
     }
     const botUsername = await getBotUsername();
-    const code = `lk${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    const { randomBytes } = await import("node:crypto");
+    const code = `lk${randomBytes(12).toString("base64url")}`;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await (supabaseAdmin as any).from("telegram_links").upsert(

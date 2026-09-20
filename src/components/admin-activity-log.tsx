@@ -24,7 +24,7 @@ const ACTION_LABEL: Record<string, string> = {
   blast_abort: "Batalkan blast",
   blast_retry: "Kirim ulang blast",
   withdrawal_request: "Ajukan penarikan",
-  withdrawal_approved: "Setujui penarikan",
+  withdrawal_approved: "Proses penarikan (sukses)",
   withdrawal_rejected: "Tolak penarikan",
 };
 

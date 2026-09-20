@@ -527,28 +527,28 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
 
     if (!target) return { ok: false, error: "Lengkapi data rekening pencairan terlebih dahulu." };
 
-    const { data: bal } = await (supabaseAdmin as any).rpc("reward_balance", { _user_id: uid });
-    const balance = Number(bal ?? 0);
-    if (data.amount < settings.min_withdrawal) {
+    // Cek minimum, cek saldo, dan penyisipan dilakukan SATU transaksi di database
+    // dengan kunci per pengguna, sehingga dua permintaan bersamaan tidak bisa
+    // sama-sama lolos (mencegah penarikan ganda dari saldo yang sama).
+    const { data: outcome, error } = await (supabaseAdmin as any).rpc("request_withdrawal", {
+      _user_id: uid,
+      _amount: data.amount,
+      _method: target.method,
+      _provider: target.provider,
+      _account_number: target.number,
+      _account_name: target.name,
+    });
+    if (error) return { ok: false, error: error.message };
+    if (outcome === "below_min") {
       return {
         ok: false,
         error: `Minimum penarikan Rp ${settings.min_withdrawal.toLocaleString("id-ID")}.`,
       };
     }
-    if (data.amount > balance) {
+    if (outcome === "insufficient") {
       return { ok: false, error: "Jumlah penarikan melebihi saldo tersedia." };
     }
-
-    const { error } = await (supabaseAdmin as any).from("withdrawals").insert({
-      user_id: uid,
-      amount: data.amount,
-      method: target.method,
-      provider: target.provider,
-      account_number: target.number,
-      account_name: target.name,
-      status: "pending",
-    });
-    if (error) return { ok: false, error: error.message };
+    if (outcome !== "ok") return { ok: false, error: "Pengajuan penarikan tidak valid." };
     await (await import("@/lib/activity-log.server")).logActivity(uid, "withdrawal_request", `Pengajuan penarikan Rp ${data.amount.toLocaleString("id-ID")}`);
     return { ok: true };
   });
@@ -695,6 +695,19 @@ export const attachReferral = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!inviter?.user_id) throw new Error("Kode referal tidak ditemukan.");
     if (inviter.user_id === uid) throw new Error("Anda tidak dapat memakai kode sendiri.");
+
+    // Tolak siklus: pengundang tidak boleh berada di bawah pengguna ini pada rantai
+    // referral (mis. A mengundang B lalu B memakai kode A, atau rantai lebih panjang).
+    let cursor: string | null = inviter.user_id as string;
+    for (let depth = 0; cursor && depth < 20; depth += 1) {
+      if (cursor === uid) throw new Error("Kode referal ini tidak dapat dipakai.");
+      const { data: up } = await (supabaseAdmin as any)
+        .from("profiles")
+        .select("referred_by")
+        .eq("user_id", cursor)
+        .maybeSingle();
+      cursor = (up?.referred_by as string | null) ?? null;
+    }
 
     const { error } = await (supabaseAdmin as any)
       .from("profiles")

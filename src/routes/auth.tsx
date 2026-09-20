@@ -16,6 +16,7 @@ import {
   checkUsername,
   memberPassword,
   normalizeUsername,
+  confirmPasswordResetViaTelegram,
   registerMember,
   requestPasswordResetViaTelegram,
   usernameEmail,
@@ -61,21 +62,40 @@ function AuthPage() {
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotId, setForgotId] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
+  const [forgotCode, setForgotCode] = useState("");
+  const [forgotPass, setForgotPass] = useState("");
   const requestReset = useServerFn(requestPasswordResetViaTelegram);
+  const confirmReset = useServerFn(confirmPasswordResetViaTelegram);
+
+  const closeForgot = () => {
+    setForgotOpen(false);
+    setForgotId("");
+    setForgotStep(1);
+    setForgotCode("");
+    setForgotPass("");
+  };
 
   const submitForgot = async () => {
     setForgotLoading(true);
     try {
-      const res = await requestReset({ data: { identifier: forgotId } });
-      if (res.sent) {
-        toast.success("Kata sandi sementara sudah dikirim ke Telegram Anda.");
-        setForgotOpen(false);
-        setForgotId("");
-      } else {
-        toast.error(
-          "Tidak ada akun dengan Telegram tersambung untuk data itu. Periksa kembali, atau hubungi admin.",
-        );
-      }
+      await requestReset({ data: { identifier: forgotId } });
+      // Jawaban selalu sama supaya keberadaan akun tidak bisa ditebak dari luar.
+      toast.success("Jika data cocok dan Telegram tersambung, kode sudah dikirim. Berlaku 10 menit.");
+      setForgotStep(2);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Permintaan gagal. Coba lagi.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const submitConfirm = async () => {
+    setForgotLoading(true);
+    try {
+      await confirmReset({ data: { identifier: forgotId, code: forgotCode, newPassword: forgotPass } });
+      toast.success("Kata sandi berhasil diubah. Silakan masuk dengan kata sandi baru.");
+      closeForgot();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Permintaan gagal. Coba lagi.");
     } finally {
@@ -199,8 +219,8 @@ function AuthPage() {
         toast.error("Username minimal 4 karakter dan hanya boleh berisi huruf kecil, angka, atau garis bawah.");
         return;
       }
-      if (password.length < 4) {
-        toast.error("Kata sandi minimal 4 karakter.");
+      if (password.length < 8) {
+        toast.error("Kata sandi minimal 8 karakter.");
         return;
       }
       setLoading(true);
@@ -286,7 +306,7 @@ function AuthPage() {
               </div>
               <div className="min-h-36 space-y-4">
                 {step === 1 && <div className="space-y-1.5"><Label htmlFor="register-name">Nama lengkap</Label><Input id="register-name" autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Nama Anda" maxLength={80} /></div>}
-                {step === 2 && <><div className="space-y-1.5"><Label htmlFor="register-username">Username</Label><Input id="register-username" autoFocus value={username} onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} placeholder="minimal 4 karakter" maxLength={24} /><p className="text-xs text-muted-foreground">Gunakan huruf kecil, angka, atau garis bawah.</p></div><div className="space-y-1.5"><Label htmlFor="register-password">Kata sandi</Label><div className="relative"><Input id="register-password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="minimal 4 karakter" maxLength={72} className="pr-10" /><Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword((value) => !value)} aria-label="Tampilkan kata sandi">{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</Button></div></div></>}
+                {step === 2 && <><div className="space-y-1.5"><Label htmlFor="register-username">Username</Label><Input id="register-username" autoFocus value={username} onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} placeholder="minimal 4 karakter" maxLength={24} /><p className="text-xs text-muted-foreground">Gunakan huruf kecil, angka, atau garis bawah.</p></div><div className="space-y-1.5"><Label htmlFor="register-password">Kata sandi</Label><div className="relative"><Input id="register-password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="minimal 8 karakter" maxLength={72} className="pr-10" /><Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0" onClick={() => setShowPassword((value) => !value)} aria-label="Tampilkan kata sandi">{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</Button></div></div></>}
                 {step === 3 && <div className="space-y-1.5"><Label htmlFor="register-ref">Kode referral (opsional)</Label><Input id="register-ref" autoFocus value={referralCode} onChange={(event) => setReferralCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} placeholder="Masukkan kode referral" maxLength={12} /></div>}
                 {step === 4 && <div className="flex items-start gap-3 rounded-lg border bg-secondary/50 p-4"><Checkbox id="privacy-policy" checked={privacyAccepted} onCheckedChange={(checked) => setPrivacyAccepted(checked === true)} /><Label htmlFor="privacy-policy" className="cursor-pointer text-sm leading-5">Saya menyetujui Kebijakan Privasi serta Syarat &amp; Ketentuan NAROWA.</Label></div>}
               </div>
@@ -332,33 +352,83 @@ function AuthPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={forgotOpen} onOpenChange={(open) => { setForgotOpen(open); if (!open) setForgotId(""); }}>
+      <Dialog open={forgotOpen} onOpenChange={(open) => { if (open) setForgotOpen(true); else closeForgot(); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Lupa kata sandi</DialogTitle>
             <DialogDescription>
-              Masukkan username akun Anda atau username Telegram Anda. Kata sandi sementara akan
-              dikirim oleh bot ke akun Telegram yang sudah Anda sambungkan.
+              {forgotStep === 1
+                ? "Masukkan username akun Anda atau username Telegram Anda. Bot akan mengirim kode ke akun Telegram yang sudah Anda sambungkan."
+                : "Masukkan kode dari bot Telegram dan kata sandi baru Anda (minimal 8 karakter)."}
             </DialogDescription>
           </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={(event) => { event.preventDefault(); if (!forgotLoading && forgotId.trim().length >= 3) void submitForgot(); }}
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="forgot-id">Username akun atau username Telegram</Label>
-              <Input
-                id="forgot-id"
-                autoFocus
-                value={forgotId}
-                onChange={(event) => setForgotId(event.target.value)}
-                placeholder="contoh: wagi atau @wagiman"
-              />
-            </div>
-            <Button type="submit" className="w-full" disabled={forgotLoading || forgotId.trim().length < 3}>
-              {forgotLoading ? "Mengirim…" : "Kirim ke Telegram"}
-            </Button>
-          </form>
+          {forgotStep === 1 ? (
+            <form
+              className="space-y-4"
+              onSubmit={(event) => { event.preventDefault(); if (!forgotLoading && forgotId.trim().length >= 3) void submitForgot(); }}
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="forgot-id">Username akun atau username Telegram</Label>
+                <Input
+                  id="forgot-id"
+                  autoFocus
+                  value={forgotId}
+                  onChange={(event) => setForgotId(event.target.value)}
+                  placeholder="contoh: wagi atau @wagiman"
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={forgotLoading || forgotId.trim().length < 3}>
+                {forgotLoading ? "Mengirim…" : "Kirim kode ke Telegram"}
+              </Button>
+            </form>
+          ) : (
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!forgotLoading && forgotCode.trim().length === 8 && forgotPass.length >= 8) void submitConfirm();
+              }}
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="forgot-code">Kode dari Telegram</Label>
+                <Input
+                  id="forgot-code"
+                  autoFocus
+                  value={forgotCode}
+                  onChange={(event) => setForgotCode(event.target.value.trim().toLowerCase())}
+                  placeholder="8 karakter"
+                  maxLength={8}
+                  autoComplete="one-time-code"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="forgot-pass">Kata sandi baru</Label>
+                <Input
+                  id="forgot-pass"
+                  type="password"
+                  value={forgotPass}
+                  onChange={(event) => setForgotPass(event.target.value)}
+                  placeholder="minimal 8 karakter"
+                  maxLength={72}
+                  autoComplete="new-password"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={forgotLoading || forgotCode.trim().length !== 8 || forgotPass.length < 8}
+              >
+                {forgotLoading ? "Menyimpan…" : "Simpan kata sandi baru"}
+              </Button>
+              <button
+                type="button"
+                className="w-full text-center text-xs font-semibold text-primary"
+                onClick={() => { setForgotStep(1); setForgotCode(""); setForgotPass(""); }}
+              >
+                Kirim ulang kode
+              </button>
+            </form>
+          )}
           <p className="text-center text-xs text-muted-foreground">
             Belum menyambungkan Telegram? Hubungi admin untuk menyetel ulang kata sandi Anda.
           </p>
