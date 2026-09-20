@@ -76,7 +76,7 @@ const SECTIONS: {
   { id: "reward", label: "Reward & Keuangan", hint: "Nilai reward, referal", icon: Coins, superOnly: true },
   { id: "log", label: "User Log", hint: "Aktivitas pengguna", icon: ScrollText },
   { id: "tampilan", label: "Tampilan", hint: "Tema warna", icon: Palette },
-  { id: "telegram-akun", label: "Telegram CS", hint: "Kontak bantuan pengguna", icon: MessageCircle },
+  { id: "telegram-akun", label: "Telegram Channel", hint: "Group Public NAROWA", icon: MessageCircle },
   { id: "profil-wa", label: "Workers Profile", hint: "Nama & foto global", icon: ImageIcon },
 ];
 
@@ -401,7 +401,7 @@ function TelegramAkunPanel() {
   const save = useMutation({
     mutationFn: () => persistSupport({ data: { username } }),
     onSuccess: () => {
-      toast.success("Kontak Telegram CS tersimpan");
+      toast.success("Kontak Telegram Channel tersimpan");
       setTouched(false);
       queryClient.invalidateQueries({ queryKey: ["support-telegram"] });
     },
@@ -412,7 +412,7 @@ function TelegramAkunPanel() {
 
   return (
     <Panel
-      title="Telegram CS"
+      title="Telegram Channel"
       description="Akun Telegram tim bantuan. Tombol “Hubungi via Telegram” pada dashboard Worker's akan membuka obrolan ini."
     >
       {isLoading ? (
@@ -420,7 +420,7 @@ function TelegramAkunPanel() {
       ) : (
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="cs-telegram">Username Telegram CS</Label>
+            <Label htmlFor="cs-telegram">Username Telegram Channel</Label>
             <Input
               id="cs-telegram"
               placeholder="contoh: narowa_support"
