@@ -543,6 +543,34 @@ export const requestStaffPasswordReset = createServerFn({ method: "POST" })
     return { ok: true, email };
   });
 
+/** Ubah nama tampilan akun sendiri (admin / super admin). */
+export const updateStaffName = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { name: string }) => {
+    const name = String(input?.name ?? "").trim();
+    if (name.length < 2 || name.length > 100) {
+      throw new Error("Nama harus 2-100 karakter.");
+    }
+    return { name };
+  })
+  .handler(async ({ data, context }): Promise<{ ok: true; name: string }> => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin as any)
+      .from("profiles")
+      .update({ organization_name: data.name })
+      .eq("user_id", context.userId);
+    if (error) throw new Error(error.message);
+
+    await (await import("@/lib/activity-log.server")).logActivity(
+      context.userId,
+      "profile_update",
+      `Nama tampilan diubah menjadi ${data.name}`,
+    );
+
+    return { ok: true, name: data.name };
+  });
+
 /** Kandidat pengguna yang bisa diangkat menjadi admin. */
 export const listPromotableUsers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])

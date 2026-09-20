@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { KeyRound, Loader2, Mail, RefreshCw, ShieldCheck, Users } from "lucide-react";
+import { KeyRound, Loader2, Mail, Pencil, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ import {
   listStaff,
   requestStaffEmailChange,
   requestStaffPasswordReset,
+  updateStaffName,
 } from "@/lib/admin-console.functions";
 import { useMyRole } from "./admin";
 import {
@@ -65,6 +66,9 @@ function TimPage() {
 
   const [emailTarget, setEmailTarget] = useState<{ user_id: string; name: string } | null>(null);
   const [emailValue, setEmailValue] = useState("");
+  const [nameOpen, setNameOpen] = useState(false);
+  const [nameValue, setNameValue] = useState("");
+  const renameStaff = useServerFn(updateStaffName);
 
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
@@ -122,6 +126,16 @@ function TimPage() {
 
       setEmailTarget(null);
       setEmailValue("");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const saveName = useMutation({
+    mutationFn: (name: string) => renameStaff({ data: { name } }),
+    onSuccess: ({ name }) => {
+      toast.success(`Nama berhasil diubah menjadi ${name}.`);
+      setNameOpen(false);
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -255,6 +269,19 @@ function TimPage() {
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={() => {
+                          setNameValue(s.name);
+                          setNameOpen(true);
+                        }}
+                      >
+                        <Pencil className="mr-2 size-4" />
+                        Ubah nama
+                      </Button>
+                    ) : null}
+                    {s.user_id === me?.user_id ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
                         disabled={sendReset.isPending}
                         onClick={() => sendReset.mutate(s.user_id)}
                       >
@@ -324,7 +351,43 @@ function TimPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={nameOpen}
+        onOpenChange={(v) => {
+          if (!v) setNameOpen(false);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ubah nama</DialogTitle>
+            <DialogDescription>
+              Nama ini tampil di konsol admin dan daftar tim.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Nama baru</Label>
+            <Input
+              value={nameValue}
+              placeholder="Nama lengkap"
+              onChange={(e) => setNameValue(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNameOpen(false)}>
+              Batal
+            </Button>
+            <Button
+              disabled={nameValue.trim().length < 2 || saveName.isPending}
+              onClick={() => saveName.mutate(nameValue.trim())}
+            >
+              {saveName.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
+
 
   );
 }
