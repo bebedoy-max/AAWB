@@ -41,6 +41,25 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
         // Kolom blast_ready/blast_speed ditambahkan lewat migrasi, belum ada di tipe hasil generate.
         const supabaseAdmin = typedAdmin as unknown as import("@supabase/supabase-js").SupabaseClient;
         const { processBlastTick } = await import("@/lib/member-worker.server");
+        const { PROCESSING_TIMEOUT, RETRY_MAX_ATTEMPTS } = await import("@/lib/blast-retry");
+
+        // Sapuan pesan macet (dijalankan tiap panggilan cron, walau tidak ada kampanye berjalan):
+        // baris "processing" tanpa konfirmasi lebih dari 5 menit dianggap gagal SEMENTARA dan
+        // dikembalikan ke antrean agar dikirim lagi (oleh perangkat lain) sampai berhasil, atau
+        // ditutup gagal bila batas percobaan habis.
+        try {
+          const { data: swept, error: sweepError } = await supabaseAdmin.rpc("sweep_stale_processing", {
+            _max_age: PROCESSING_TIMEOUT,
+            _max_attempts: RETRY_MAX_ATTEMPTS,
+          });
+          if (sweepError) {
+            console.error("[blast-devices] sapuan pesan macet gagal (migrasi 024 sudah dijalankan?):", sweepError.message);
+          } else if (Number(swept) > 0) {
+            console.log(`[blast-devices] sapuan: ${swept} pesan macet dikembalikan ke antrean`);
+          }
+        } catch (error) {
+          console.error("[blast-devices] sapuan pesan macet gagal:", error instanceof Error ? error.message : error);
+        }
 
         // Tidak ada kampanye berjalan → tidak ada pekerjaan.
         const { count: running } = await supabaseAdmin

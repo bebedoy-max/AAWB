@@ -803,9 +803,6 @@ export const resetTargets = createServerFn({ method: "POST" })
     return { ok: true, removed: Number(count ?? 0) };
   });
 
-/** Batas waktu sebuah pesan boleh berstatus "processing" sebelum dianggap gagal. */
-const PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
-
 /** Laporan pengiriman per kampanye. */
 export const listReport = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -817,20 +814,10 @@ export const listReport = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
-    // Pesan yang tersangkut di "processing" lebih lama dari batas waktu
-    // dianggap GAGAL — jangan pernah dihitung sebagai terkirim.
-    try {
-      await admin
-        .from("message_queue")
-        .update({
-          status: "failed",
-          error_log: "Gagal: melewati batas waktu 5 menit tanpa konfirmasi terkirim",
-        })
-        .eq("status", "processing")
-        .lt("created_at", new Date(Date.now() - PROCESSING_TIMEOUT_MS).toISOString());
-    } catch {
-      /* pembersihan bersifat best-effort */
-    }
+    // Catatan: pesan macet di "processing" TIDAK lagi ditandai gagal di sini. Dulu pembersihan ini
+    // memakai waktu baris DIBUAT (bukan waktu diproses) dan hanya jalan saat laporan dibuka, sehingga
+    // pesan yang sedang berjalan ikut ditandai gagal. Sekarang ditangani sapuan terjadwal
+    // (sweep_stale_processing) yang mengembalikan pesan ke antrean untuk dikirim ulang.
 
     // Ambil SELURUH baris tanpa batas: penarikan bertahap per 1.000 baris
     // sampai habis, karena database memotong maksimal 1.000 per permintaan.

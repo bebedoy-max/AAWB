@@ -19,6 +19,7 @@ import {
   inlineButtonsAsText,
   stripButtonTokens,
 } from "@/lib/whatsapp";
+import { isConnectPhaseNetworkError } from "@/lib/blast-retry";
 
 
 export interface GatewaySessionState {
@@ -46,6 +47,16 @@ export class GatewayError extends Error {
 
 const sessionSendLocks = new Map<string, Promise<void>>();
 const sessionRestartLocks = new Map<string, Promise<GatewaySessionState>>();
+// Penyambungan ulang sesi WhatsApp jangan terlalu sering: tiap kali memutus dan menyambung ulang
+// sesi, WhatsApp bisa mencurigai perangkat. Maksimal sekali per 3 menit per perangkat.
+const SESSION_RESTART_MIN_INTERVAL_MS = 3 * 60_000;
+const lastSessionRestartAt = new Map<string, number>();
+function shouldRestartSession(id: string): boolean {
+  const now = Date.now();
+  if (now - (lastSessionRestartAt.get(id) ?? 0) < SESSION_RESTART_MIN_INTERVAL_MS) return false;
+  lastSessionRestartAt.set(id, now);
+  return true;
+}
 
 /**
  * WAHA uses several non-standard responses when its internal WhatsApp socket
@@ -177,10 +188,13 @@ async function request(path: string, init?: RequestInit): Promise<RawResult> {
     });
   } catch (err) {
     const isSendRequest = init?.method === "POST" && /^\/api\/send/i.test(path);
+    // Gagal SEBELUM tersambung ke gateway (gateway mati, DNS, koneksi ditolak): pesan pasti
+    // belum terkirim, jadi bukan hasil "tidak diketahui" dan aman dikembalikan ke antrean.
+    const beforeSend = isConnectPhaseNetworkError(err);
     throw new GatewayError(
       `Tidak dapat terhubung ke gateway WhatsApp: ${(err as Error).message}`,
       502,
-      isSendRequest,
+      isSendRequest && !beforeSend,
     );
   }
 
@@ -779,7 +793,10 @@ export async function sendMessage(params: {
     } catch (error) {
       if (isUnknownDeliveryError(error)) {
         // Repair the socket for subsequent rows, but never replay this row.
-        await recoverSessionTransport(params.sessionId).catch(() => undefined);
+        // Dibatasi: tidak lebih sering dari SESSION_RESTART_MIN_INTERVAL_MS per perangkat.
+        if (shouldRestartSession(params.sessionId)) {
+          await recoverSessionTransport(params.sessionId).catch(() => undefined);
+        }
         throw new GatewayError(
           "Koneksi perangkat terputus saat mengirim. Pengiriman dihentikan sementara untuk mencegah pesan ganda.",
           503,

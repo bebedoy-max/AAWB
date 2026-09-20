@@ -8,16 +8,87 @@
  * dijalankan lewat fungsi database khusus server (claim_blast_batch_for dan
  * credit_message_reward) yang tidak boleh dipanggil dengan token pengguna.
  */
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
+import { BREAKER_THRESHOLD, RETRY_MAX_ATTEMPTS, backoffMs, classifyFailure } from "@/lib/blast-retry";
 import { speedDelayMs } from "@/lib/blast-speed";
 import { buildMessageBody } from "@/lib/whatsapp";
 import type { MediaType, TemplateButton } from "@/types/wa";
 
 const TICK_BUDGET_MS = 20_000;
 const CLAIM_SIZE = 25;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 3; // galat lain-lain (bukan masalah perangkat)
 const RETRY_BASE_DELAY_MS = 5_000;
+
+function logDbError(label: string, error: { message: string } | null | undefined) {
+  // Galat supabase-js TIDAK dilempar; tanpa pencatatan ini kegagalan tulis tidak terlihat.
+  if (error) console.error(`[blast] ${label} gagal:`, error.message);
+}
+
+/** Kembalikan baris ke antrean supaya perangkat lain bisa mengirimnya. user_id TIDAK diubah. */
+async function requeueRow(
+  supabase: SupabaseClient,
+  itemId: string,
+  attemptId: string,
+  opts: { attempts: number; reason: string; delayMs: number; sessionId: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("message_queue")
+    .update({
+      status: "pending",
+      attempts: opts.attempts,
+      error_log: opts.reason,
+      scheduled_at: new Date(Date.now() + opts.delayMs).toISOString(),
+      claimed_by: null,
+      claimed_at: null,
+      session_id: null,
+      last_session_id: opts.sessionId,
+      attempt_id: null,
+      locked_at: null,
+    })
+    .eq("id", itemId)
+    .eq("attempt_id", attemptId);
+  logDbError("mengembalikan pesan ke antrean", error);
+}
+
+async function failRow(
+  supabase: SupabaseClient,
+  itemId: string,
+  attemptId: string,
+  opts: { attempts: number; kind: "invalid" | "exhausted"; message: string },
+): Promise<void> {
+  const { error } = await supabase
+    .from("message_queue")
+    .update({
+      status: "failed",
+      attempts: opts.attempts,
+      failure_kind: opts.kind,
+      error_log: opts.message,
+      locked_at: null,
+    })
+    .eq("id", itemId)
+    .eq("attempt_id", attemptId);
+  logDbError("menandai pesan gagal", error);
+}
+
+/** Catat kegagalan perangkat. Mengembalikan waktu akhir pendinginan bila perangkat kini didinginkan. */
+async function deviceFailed(
+  supabase: SupabaseClient,
+  sessionId: string,
+  reason: string,
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc("device_failed", {
+    _session_id: sessionId,
+    _reason: reason.slice(0, 200),
+    _threshold: BREAKER_THRESHOLD,
+  });
+  logDbError("mencatat kegagalan perangkat", error);
+  return typeof data === "string" && new Date(data).getTime() > Date.now() ? data : null;
+}
+
+const hhmm = (iso: string) =>
+  new Date(iso).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" });
 
 interface CampaignContent {
   message_body: string;
@@ -108,6 +179,24 @@ export async function processBlastTick(
     };
   }
 
+  // Perangkat yang sedang didinginkan (kegagalan beruntun) tidak mengambil atau mengirim apa pun.
+  const { data: health } = await supabase
+    .from("wa_sessions")
+    .select("cooldown_until,fail_streak")
+    .eq("id", sessionId)
+    .maybeSingle();
+  const cooldownUntil = (health as { cooldown_until?: string | null } | null)?.cooldown_until ?? null;
+  let failStreak = Number((health as { fail_streak?: number | null } | null)?.fail_streak ?? 0);
+  if (cooldownUntil && new Date(cooldownUntil).getTime() > Date.now()) {
+    return {
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      remaining: 0,
+      error: `Perangkat didinginkan sampai ${hhmm(cooldownUntil)} WIB (kegagalan beruntun)`,
+    };
+  }
+
   // Ambil pekerjaan baru dari kolam bila sisa pekerjaan perangkat ini sedikit.
   let claimed = 0;
   const { count: own } = await supabase
@@ -160,13 +249,15 @@ export async function processBlastTick(
     return row;
   }
 
-  while (Date.now() - startedAt < TICK_BUDGET_MS) {
+  let stop = false;
+  while (!stop && Date.now() - startedAt < TICK_BUDGET_MS) {
     const { data: batch } = await supabase
       .from("message_queue")
       .select("id,campaign_id,recipient_phone,message_body,attempts")
       .eq("session_id", sessionId)
       .eq("user_id", ownerId)
       .eq("status", "pending")
+      .lte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true })
       .limit(20);
 
@@ -188,15 +279,19 @@ export async function processBlastTick(
     }
 
     for (const item of queue) {
-      if (Date.now() - startedAt >= TICK_BUDGET_MS) break;
+      if (stop || Date.now() - startedAt >= TICK_BUDGET_MS) break;
 
-      const { data: locked } = await supabase
+      // Kunci baris. attempt_id mengikat penyelesaian ke percobaan INI: bila baris sudah
+      // dikembalikan sapuan lalu diambil perangkat lain, penyelesaian terlambat tidak menimpanya.
+      const attemptId = randomUUID();
+      const { data: locked, error: lockError } = await supabase
         .from("message_queue")
-        .update({ status: "processing" })
+        .update({ status: "processing", locked_at: new Date().toISOString(), attempt_id: attemptId })
         .eq("id", item.id)
         .eq("status", "pending")
         .select("id")
         .maybeSingle();
+      logDbError("mengunci pesan (sudah menjalankan migrasi 024?)", lockError);
       if (!locked) continue;
 
       const attempts = item.attempts + 1;
@@ -224,18 +319,33 @@ export async function processBlastTick(
           buttons: campaign?.buttons_json ?? null,
         });
 
-        await supabase
+        const { data: done, error: doneError } = await supabase
           .from("message_queue")
           .update({
             status: "sent",
             attempts,
             sent_at: new Date().toISOString(),
             error_log: null,
+            failure_kind: null,
+            locked_at: null,
             // Simpan perangkat pengirim agar nomor pengirim muncul di laporan.
             session_id: sessionId,
+            last_session_id: sessionId,
             sender_phone: senderPhone,
           })
-          .eq("id", item.id);
+          .eq("id", item.id)
+          .eq("attempt_id", attemptId)
+          .select("id")
+          .maybeSingle();
+        logDbError("menandai pesan terkirim", doneError);
+        if (!done) {
+          // Baris sudah dikembalikan/diambil perangkat lain saat pengiriman ini berjalan.
+          // Jangan menimpa dan jangan mengkredit dua kali; pengirim yang menyelesaikan
+          // baris itu yang dibayar.
+          console.warn("[blast] penyelesaian terlambat diabaikan (baris sudah diambil lagi):", item.id);
+          continue;
+        }
+
         // Kegagalan mencatat reward tidak boleh menghentikan pengiriman, tetapi
         // harus terlihat di log (rpc tidak melempar; galatnya ada di hasil).
         const { error: creditError } = await supabase.rpc("credit_message_reward", {
@@ -243,54 +353,82 @@ export async function processBlastTick(
         });
         if (creditError) console.error("[blast] credit_message_reward gagal:", creditError.message);
         sent += 1;
+        if (failStreak > 0) {
+          failStreak = 0;
+          const { error: okError } = await supabase.rpc("device_ok", { _session_id: sessionId });
+          logDbError("memulihkan status perangkat", okError);
+        }
       } catch (err) {
         const message =
           err instanceof GatewayError ? err.message : ((err as Error).message ?? "Pengiriman gagal");
-        const deliveryUnknown = err instanceof GatewayError && err.deliveryUnknown;
-        if (deliveryUnknown) {
-          await supabase
-            .from("message_queue")
-            .update({ status: "failed", attempts, error_log: message })
-            .eq("id", item.id);
+        const kind = classifyFailure({
+          message,
+          status: err instanceof GatewayError ? err.status : undefined,
+          deliveryUnknown: err instanceof GatewayError && err.deliveryUnknown,
+        });
+        let deviceProblem = false;
+
+        if (kind === "invalid") {
+          // Nomor tidak valid: hasilnya tidak akan berubah, jadi final.
+          await failRow(supabase, item.id, attemptId, { attempts, kind: "invalid", message });
           failed += 1;
-          // Sambungan terputus di tengah jalan: perangkat TIDAK dimatikan.
-          // Saklar "siap blast" hanya boleh dimatikan oleh worker sendiri.
-          // Di sini cukup coba sambungkan ulang, lalu lanjut mengirim.
-          const again = await ensureConnected(supabase, sessionId);
-          if (!again.connected) {
-            note = "Perangkat terputus — pengiriman dilanjutkan otomatis setelah tersambung";
-          }
-        } else if (attempts < MAX_ATTEMPTS) {
-          await supabase
-            .from("message_queue")
-            .update({
-              status: "pending",
+        } else if (kind === "not_sent") {
+          // PASTI belum terkirim: kembalikan tanpa menghabiskan percobaan pesan.
+          await requeueRow(supabase, item.id, attemptId, {
+            attempts: item.attempts,
+            reason: `${message} (dikembalikan ke antrean, percobaan tidak dihitung)`,
+            delayMs: 0,
+            sessionId,
+          });
+          deviceProblem = true;
+        } else if (kind === "unknown" || kind === "device_reject") {
+          // Tidak pasti / ditolak lewat perangkat ini: diulang otomatis oleh perangkat lain.
+          if (attempts >= RETRY_MAX_ATTEMPTS) {
+            await failRow(supabase, item.id, attemptId, {
               attempts,
-              error_log: `${message} (percobaan ${attempts}/${MAX_ATTEMPTS})`,
-              scheduled_at: new Date(Date.now() + RETRY_BASE_DELAY_MS * attempts).toISOString(),
-              claimed_by: null,
-              claimed_at: null,
-              session_id: null,
-              user_id: null,
-            })
-            .eq("id", item.id);
+              kind: "exhausted",
+              message: `${message} (percobaan habis ${attempts}/${RETRY_MAX_ATTEMPTS})`,
+            });
+            failed += 1;
+          } else {
+            await requeueRow(supabase, item.id, attemptId, {
+              attempts,
+              reason: `${message} (percobaan ${attempts}/${RETRY_MAX_ATTEMPTS}, diulang otomatis oleh perangkat lain)`,
+              delayMs: backoffMs(attempts),
+              sessionId,
+            });
+          }
+          deviceProblem = true;
+        } else if (attempts < MAX_ATTEMPTS) {
+          await requeueRow(supabase, item.id, attemptId, {
+            attempts,
+            reason: `${message} (percobaan ${attempts}/${MAX_ATTEMPTS})`,
+            delayMs: RETRY_BASE_DELAY_MS * attempts,
+            sessionId,
+          });
         } else {
-          await supabase
-            .from("message_queue")
-            .update({ status: "failed", attempts, error_log: message })
-            .eq("id", item.id);
+          await failRow(supabase, item.id, attemptId, { attempts, kind: "exhausted", message });
           failed += 1;
         }
-        if (!deliveryUnknown && /perangkat whatsapp|session status|error 463|koneksi perangkat/i.test(message)) {
-          // Coba sambungkan ulang lalu LANJUT mengirim. Tidak ada penghentian
-          // di tengah jalan; kalau masih putus, siklus berikutnya mencoba lagi.
-          const again = await ensureConnected(supabase, sessionId);
-          if (!again.connected) {
-            note = "Perangkat terputus — pengiriman dilanjutkan otomatis setelah tersambung";
-            await sleep(1500);
-          } else {
-            note = undefined;
+
+        if (deviceProblem) {
+          // Kegagalan yang berasal dari perangkat/koneksi, bukan dari pesan. Hitung ke pemutus
+          // sirkuit; bila sudah melewati batas, perangkat didinginkan dan tugasnya dilepas.
+          failStreak += 1;
+          const cooled = await deviceFailed(supabase, sessionId, message);
+          const again = cooled ? { connected: false } : await ensureConnected(supabase, sessionId);
+          if (cooled || !again.connected) {
+            const { error: releaseError } = await supabase.rpc("release_device_rows", {
+              _session_id: sessionId,
+            });
+            logDbError("melepas tugas perangkat", releaseError);
+            note = cooled
+              ? `Perangkat didinginkan sampai ${hhmm(cooled)} WIB — tugasnya dialihkan ke perangkat lain`
+              : "Perangkat terputus — tugasnya dialihkan, dilanjutkan otomatis setelah tersambung";
+            stop = true;
+            break;
           }
+          note = undefined;
         }
       }
 

@@ -116,21 +116,15 @@ export const getAdminOverview = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     const overview = { ...EMPTY, ...((data ?? {}) as Partial<AdminOverview>) };
 
-    // Perangkat harus mengikuti pengguna yang masih ada. Bersihkan sesi milik
-    // akun yang sudah dihapus, lalu hitung ulang dari data bersih tersebut.
+    // KEAMANAN: jalur BACA tidak boleh menghapus data. Dulu fungsi ini menghapus perangkat yang
+    // pemiliknya tidak ada di daftar 1000 pengguna pertama; daftar kosong atau parsial (layanan auth
+    // sibuk, atau pengguna lebih dari 1000) membuat perangkat sungguhan ikut terhapus. Sekarang hanya
+    // menghitung dari data apa adanya.
     try {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const admin = supabaseAdmin as any;
-      const [{ data: users }, { data: sessions }] = await Promise.all([
-        admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-        admin.from("wa_sessions").select("id,user_id,status,blast_ready"),
-      ]);
-      const alive = new Set<string>(((users as any)?.users ?? []).map((u: any) => u.id));
-      const rows = ((sessions ?? []) as any[]).filter((s) => alive.has(s.user_id));
-      const orphans = ((sessions ?? []) as any[])
-        .filter((s) => !alive.has(s.user_id))
-        .map((s) => s.id);
-      if (orphans.length) await admin.from("wa_sessions").delete().in("id", orphans);
+      const { data: sessions } = await admin.from("wa_sessions").select("id,user_id,status,blast_ready");
+      const rows = (sessions ?? []) as any[];
 
       overview.devices_total = rows.length;
       overview.devices_connected = rows.filter((s) => s.status === "connected").length;
