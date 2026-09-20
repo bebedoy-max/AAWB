@@ -44,9 +44,22 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
         if (campaignError) return json({ error: campaignError.message }, 400);
         if (!campaign) return json({ error: "Kampanye tidak ditemukan" }, 404);
 
+        // KEAMANAN: pengguna tidak punya hak tulis langsung ke message_queue.
+        // Semua perubahan antrean lewat klien server (admin), setelah memastikan
+        // kampanye ini milik pemanggil. Admin yang hanya bisa MEMBACA kampanye
+        // orang lain (kebijakan baca-semua) tidak boleh mengubahnya di sini.
+        const { data: who } = await supabase.auth.getUser();
+        const userId = who?.user?.id;
+        if (!userId) return unauthorized();
+        if (campaign.user_id !== userId) {
+          return json({ error: "Kampanye ini bukan milik Anda" }, 403);
+        }
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const admin = supabaseAdmin as unknown as typeof supabase;
+
         if (action === "retry") {
           // Kirim ulang semua pesan yang gagal atau tersangkut di "processing".
-          const { error: retryError } = await supabase
+          const { error: retryError } = await admin
             .from("message_queue")
             .update({
               status: "pending",
@@ -55,6 +68,7 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
               scheduled_at: new Date().toISOString(),
             })
             .eq("campaign_id", campaign_id)
+            .eq("user_id", userId)
             .in("status", ["failed", "processing"]);
           if (retryError) return json({ error: retryError.message }, 400);
           await supabase.from("campaigns").update({ status: "running" }).eq("id", campaign_id);
@@ -74,10 +88,11 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
             action === "pause" ? "paused" : action === "resume" ? "running" : "failed";
           await supabase.from("campaigns").update({ status }).eq("id", campaign_id);
           if (action === "abort") {
-            await supabase
+            await admin
               .from("message_queue")
               .update({ status: "failed", error_log: "Dibatalkan oleh pengguna" })
               .eq("campaign_id", campaign_id)
+              .eq("user_id", userId)
               .in("status", ["pending", "processing"]);
           }
           return json({ ok: true, status });
@@ -174,7 +189,10 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
             };
           });
 
-          const { error: insertError } = await supabase.from("message_queue").insert(rows);
+          // user_id baris dipaksa milik pemanggil (sudah dipastikan pemilik kampanye).
+          const { error: insertError } = await admin
+            .from("message_queue")
+            .insert(rows.map((row) => ({ ...row, user_id: userId })));
           if (insertError) return json({ error: insertError.message }, 400);
 
           await supabase
@@ -206,9 +224,19 @@ export const Route = createFileRoute("/api/campaign/dispatch")({
 
 
         // action === "process": one rate-limited worker tick against the real gateway.
+        // Perangkat pengirim harus milik pemanggil (bukan sekadar UUID yang dikenal).
+        if (campaign.session_id) {
+          const { data: ownDevice } = await supabase
+            .from("wa_sessions")
+            .select("id")
+            .eq("id", campaign.session_id)
+            .eq("user_id", userId)
+            .maybeSingle();
+          if (!ownDevice) return json({ error: "Perangkat kampanye tidak ditemukan" }, 404);
+        }
         const { processCampaignTick } = await import("@/lib/queue-worker.server");
         const tick = await processCampaignTick(
-          supabase,
+          admin,
           {
             id: campaign.id,
             user_id: campaign.user_id,

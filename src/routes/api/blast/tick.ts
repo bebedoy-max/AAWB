@@ -25,6 +25,13 @@ export const Route = createFileRoute("/api/blast/tick")({
         // Pemilik perangkat boleh menjalankan perangkatnya sendiri. Admin juga
         // boleh menjalankan pekerja otomatis global, tetapi hanya setelah
         // perannya diverifikasi dari server.
+        //
+        // KEAMANAN: token pengguna HANYA dipakai untuk membuktikan siapa
+        // pemanggilnya dan membaca baris perangkatnya. Semua penulisan status
+        // antrean, klaim nomor, dan pembayaran reward memakai klien server
+        // (adminClient) dengan pemilik perangkat yang dibaca dari database,
+        // sehingga pengguna tidak perlu (dan tidak boleh) punya hak tulis ke
+        // antrean maupun fungsi reward lewat API database.
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const adminClient = supabaseAdmin as unknown as typeof supabase;
         const { data: roleRows } = await adminClient
@@ -54,10 +61,10 @@ export const Route = createFileRoute("/api/blast/tick")({
 
         const { processBlastTick } = await import("@/lib/member-worker.server");
         const result = await processBlastTick(
-          isAdmin ? adminClient : supabase,
+          adminClient,
           parsed.data.session_id,
           sess.blast_speed ?? "santai",
-          isAdmin ? session.user_id : undefined,
+          session.user_id,
         );
         return json({ ok: true, running: true, ...result });
       },

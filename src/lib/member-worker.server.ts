@@ -2,6 +2,11 @@
  * Pekerja blast untuk member. Setiap tick: mengambil sebagian nomor dari kolam
  * proyek admin, lalu mengirimnya lewat perangkat member dengan jeda sesuai
  * kecepatan yang dipilih. Reward otomatis dikreditkan ke member.
+ *
+ * KEAMANAN: fungsi ini HARUS dipanggil dengan klien server (service role) dan
+ * ownerId (pemilik perangkat) yang dibaca dari database. Klaim nomor dan reward
+ * dijalankan lewat fungsi database khusus server (claim_blast_batch_for dan
+ * credit_message_reward) yang tidak boleh dipanggil dengan token pengguna.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
@@ -60,11 +65,34 @@ async function ensureConnected(
   }
 }
 
+/**
+ * Mengambil nomor dari antrean untuk satu perangkat. Isolasi antar-pengguna
+ * dijaga di fungsi database: hanya kampanye milik admin (kolam bersama) atau
+ * milik pemilik perangkat itu sendiri yang bisa diklaim.
+ */
+async function claimBatch(
+  supabase: SupabaseClient,
+  sessionId: string,
+  ownerId: string,
+): Promise<number> {
+  const { data, error } = await supabase.rpc("claim_blast_batch_for", {
+    _user_id: ownerId,
+    _session_id: sessionId,
+    _limit: CLAIM_SIZE,
+  });
+  if (error) {
+    // Gagal tertutup: tanpa fungsi/izin yang benar, tidak ada nomor yang diklaim.
+    console.error("[blast] claim_blast_batch_for gagal:", error.message);
+    return 0;
+  }
+  return Number(data ?? 0);
+}
+
 export async function processBlastTick(
   supabase: SupabaseClient,
   sessionId: string,
   speed: string,
-  ownerId?: string,
+  ownerId: string,
 ): Promise<BlastTickResult> {
   const connection = await ensureConnected(supabase, sessionId);
   // Nomor perangkat pengirim disimpan di setiap baris terkirim agar laporan
@@ -86,63 +114,10 @@ export async function processBlastTick(
     .from("message_queue")
     .select("id", { count: "exact", head: true })
     .eq("session_id", sessionId)
+    .eq("user_id", ownerId)
     .eq("status", "pending");
   if ((own ?? 0) < CLAIM_SIZE) {
-    const { data, error } = await supabase.rpc("claim_blast_batch", {
-      _session_id: sessionId,
-      _limit: CLAIM_SIZE,
-    });
-    if (!error) claimed = Number(data ?? 0);
-
-    // Pekerja global admin memakai klien server, sehingga auth.uid() pada RPC
-    // klaim milik member tidak tersedia. Klaim langsung hanya dijalankan pada
-    // jalur admin yang sudah diverifikasi dan ownerId berasal dari sesi DB.
-    if (error && ownerId) {
-      const { data: runningCampaigns } = await supabase
-        .from("campaigns")
-        .select("id")
-        .eq("status", "running");
-      const campaignIds = (runningCampaigns ?? []).map((row) => row.id);
-      if (campaignIds.length) {
-        const activeSince = new Date(Date.now() - 90_000).toISOString();
-        const { data: activeSessions } = await supabase
-          .from("wa_sessions")
-          .select("id")
-          .eq("blast_ready", true)
-          .eq("status", "connected")
-          .gte("last_ping", activeSince);
-        const activeSessionIds = new Set((activeSessions ?? []).map((row) => row.id));
-        const { data: candidates } = await supabase
-          .from("message_queue")
-          .select("id,claimed_by,session_id")
-          .in("status", ["pending", "processing"])
-          .in("campaign_id", campaignIds)
-          .order("created_at", { ascending: true })
-          .limit(CLAIM_SIZE * 4);
-        const ids = (candidates ?? [])
-          .filter(
-            (row) =>
-              !row.claimed_by || !row.session_id || !activeSessionIds.has(row.session_id),
-          )
-          .slice(0, CLAIM_SIZE)
-          .map((row) => row.id);
-        if (ids.length) {
-          const { data: assigned } = await supabase
-            .from("message_queue")
-            .update({
-              claimed_by: ownerId,
-              user_id: ownerId,
-              session_id: sessionId,
-              claimed_at: new Date().toISOString(),
-              scheduled_at: new Date().toISOString(),
-              status: "pending",
-            })
-            .in("id", ids)
-            .select("id");
-          claimed = assigned?.length ?? 0;
-        }
-      }
-    }
+    claimed = await claimBatch(supabase, sessionId, ownerId);
   }
 
   const startedAt = Date.now();
@@ -190,6 +165,7 @@ export async function processBlastTick(
       .from("message_queue")
       .select("id,campaign_id,recipient_phone,message_body,attempts")
       .eq("session_id", sessionId)
+      .eq("user_id", ownerId)
       .eq("status", "pending")
       .order("scheduled_at", { ascending: true })
       .limit(20);
@@ -205,11 +181,7 @@ export async function processBlastTick(
       // Tidak ada sisa untuk perangkat ini: ambil lagi dari kolam kampanye
       // berjalan. Pengiriman TIDAK pernah dihentikan di sini — selama masih
       // ada kampanye aktif, perangkat terus mencari pekerjaan.
-      const { data: more } = await supabase.rpc("claim_blast_batch", {
-        _session_id: sessionId,
-        _limit: CLAIM_SIZE,
-      });
-      const got = Number(more ?? 0);
+      const got = await claimBatch(supabase, sessionId, ownerId);
       claimed += got;
       if (!got) await sleep(1500);
       continue;
@@ -264,11 +236,12 @@ export async function processBlastTick(
             sender_phone: senderPhone,
           })
           .eq("id", item.id);
-        try {
-          await supabase.rpc("credit_message_reward", { _message_id: item.id });
-        } catch {
-          // Kegagalan mencatat reward tidak boleh menghentikan pengiriman.
-        }
+        // Kegagalan mencatat reward tidak boleh menghentikan pengiriman, tetapi
+        // harus terlihat di log (rpc tidak melempar; galatnya ada di hasil).
+        const { error: creditError } = await supabase.rpc("credit_message_reward", {
+          _message_id: item.id,
+        });
+        if (creditError) console.error("[blast] credit_message_reward gagal:", creditError.message);
         sent += 1;
       } catch (err) {
         const message =
@@ -336,6 +309,7 @@ export async function processBlastTick(
     .from("message_queue")
     .select("id", { count: "exact", head: true })
     .eq("session_id", sessionId)
+    .eq("user_id", ownerId)
     .in("status", ["pending", "processing"]);
 
   return { claimed, sent, failed, remaining: remaining ?? 0, ...(note ? { error: note } : {}) };
