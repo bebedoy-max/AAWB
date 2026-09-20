@@ -18,7 +18,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CampaignComposer, type CampaignDraft } from "@/components/campaign-composer";
+import {
+  CampaignComposer,
+  clearCampaignDraft,
+  type CampaignDraft,
+} from "@/components/campaign-composer";
 import {
   createBlastProject,
   deleteBlastProject,
@@ -102,6 +106,7 @@ function KampanyePage() {
       }),
     onSuccess: (res) => {
       toast.success(res.queued ? `Kampanye diluncurkan — ${angka(res.queued)} nomor masuk antrean` : "Kampanye dibuat sebagai draf — tambahkan nomor di menu Data Nomor.");
+      clearCampaignDraft();
       setOpen(false);
       invalidate();
     },

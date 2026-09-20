@@ -47,11 +47,18 @@ function writeDraft(draft: CampaignDraft) {
   try {
     window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
   } catch {
-    // Kuota penyimpanan penuh (mis. poster besar) — draf teks tetap jalan.
+    // Kuota penuh (poster besar berbentuk data URL bisa melebihi batas ~5 MB).
+    // Simpan teksnya saja supaya isian tidak hilang; poster perlu diunggah ulang.
+    try {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...draft, mediaUrl: null }));
+    } catch {
+      /* penyimpanan tidak tersedia: abaikan */
+    }
   }
 }
 
-function clearDraft() {
+/** Hapus draf kampanye baru. Dipanggil setelah kampanye BERHASIL dibuat. */
+export function clearCampaignDraft() {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(DRAFT_KEY);
@@ -152,7 +159,8 @@ export function CampaignComposer({
       toast.error("Teks pesan wajib diisi.");
       return;
     }
-    if (!initialRef.current) clearDraft();
+    // Draf sengaja TIDAK dihapus di sini: bila pembuatan kampanye gagal (mis. jaringan
+    // putus), isian masih aman. Penghapusan dilakukan pemanggil saat berhasil.
     onSubmit({ name: name.trim(), message: message.trim(), mediaUrl, ctaText, ctaUrl });
   };
 

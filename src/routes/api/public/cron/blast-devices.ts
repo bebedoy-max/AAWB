@@ -10,6 +10,20 @@ import { json } from "@/lib/supabase-user.server";
  */
 const RUN_BUDGET_MS = 50_000;
 
+/**
+ * Penjadwal eksternal (cron-job.org) hanya menunggu sekitar 30 detik lalu menandai
+ * panggilan sebagai GAGAL (timeout), sedangkan satu putaran pekerja bisa berjalan
+ * sampai RUN_BUDGET_MS. Karena itu putaran dijalankan di LATAR BELAKANG dan
+ * panggilan langsung dijawab 202. Status berhasil/gagal di penjadwal kembali
+ * bermakna: gagal berarti otorisasi, konfigurasi, atau database bermasalah.
+ *
+ * Penanda putaran berjalan hidup di memori satu proses. Bila putaran sebelumnya
+ * macet lebih lama dari STALE_RUN_MS, putaran baru boleh dimulai. Putaran yang
+ * tumpang tindih aman: pesan dikunci per baris di database (tidak terkirim ganda).
+ */
+const STALE_RUN_MS = 120_000;
+let activeRunStartedAt = 0; // 0 = tidak ada putaran yang sedang berjalan
+
 export const Route = createFileRoute("/api/public/cron/blast-devices")({
   server: {
     handlers: {
@@ -49,48 +63,81 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
         }>;
         if (!devices.length) return json({ ok: true, running_campaigns: running, devices: 0 });
 
-        const startedAt = Date.now();
-        const results = await Promise.all(
-          devices.map(async (device) => {
-            let sent = 0;
-            let failed = 0;
-            let claimed = 0;
-            let lastError: string | undefined;
-            // Loop per perangkat: terus mengirim sampai anggaran waktu habis,
-            // perangkat dihentikan worker, atau kampanye tidak berjalan lagi.
-            while (Date.now() - startedAt < RUN_BUDGET_MS) {
-              const { data: fresh } = await supabaseAdmin
-                .from("wa_sessions")
-                .select("blast_ready,blast_speed")
-                .eq("id", device.id)
-                .maybeSingle();
-              const row = (fresh ?? null) as {
-                blast_ready?: boolean | null;
-                blast_speed?: string | null;
-              } | null;
-              if (!row?.blast_ready) break;
+        // Putaran sebelumnya masih berjalan (mis. anggaran 50 detik belum habis): lewati.
+        if (activeRunStartedAt && Date.now() - activeRunStartedAt < STALE_RUN_MS) {
+          return json({ ok: true, started: false, reason: "putaran sebelumnya masih berjalan" }, 202);
+        }
+        const runToken = Date.now();
+        activeRunStartedAt = runToken;
 
-              const tick = await processBlastTick(
-                supabaseAdmin,
-                device.id,
-                row.blast_speed ?? device.blast_speed ?? "santai",
-                device.user_id,
-              );
-              sent += tick.sent;
-              failed += tick.failed;
-              claimed += tick.claimed;
-              if (tick.error) lastError = tick.error;
-              // Perangkat belum siap kirim (misal sedang tersambung ulang):
-              // beri jeda singkat lalu coba lagi, jangan dimatikan.
-              if (!tick.sent && !tick.claimed) {
-                await new Promise((resolve) => setTimeout(resolve, 1500));
-              }
-            }
-            return { session_id: device.id, sent, failed, claimed, error: lastError };
-          }),
+        void (async () => {
+          const startedAt = Date.now();
+          try {
+            const results = await Promise.all(
+              devices.map(async (device) => {
+                let sent = 0;
+                let failed = 0;
+                let claimed = 0;
+                let lastError: string | undefined;
+                // Loop per perangkat: terus mengirim sampai anggaran waktu habis,
+                // perangkat dihentikan worker, atau kampanye tidak berjalan lagi.
+                while (Date.now() - startedAt < RUN_BUDGET_MS) {
+                  const { data: fresh } = await supabaseAdmin
+                    .from("wa_sessions")
+                    .select("blast_ready,blast_speed")
+                    .eq("id", device.id)
+                    .maybeSingle();
+                  const row = (fresh ?? null) as {
+                    blast_ready?: boolean | null;
+                    blast_speed?: string | null;
+                  } | null;
+                  if (!row?.blast_ready) break;
+
+                  let tick: Awaited<ReturnType<typeof processBlastTick>>;
+                  try {
+                    tick = await processBlastTick(
+                      supabaseAdmin,
+                      device.id,
+                      row.blast_speed ?? device.blast_speed ?? "santai",
+                      device.user_id,
+                    );
+                  } catch (error) {
+                    // Galat satu perangkat tidak boleh menghentikan perangkat lain.
+                    lastError = error instanceof Error ? error.message : String(error);
+                    console.error(`[blast-devices] perangkat ${device.id} gagal:`, lastError);
+                    break;
+                  }
+                  sent += tick.sent;
+                  failed += tick.failed;
+                  claimed += tick.claimed;
+                  if (tick.error) lastError = tick.error;
+                  // Perangkat belum siap kirim (misal sedang tersambung ulang):
+                  // beri jeda singkat lalu coba lagi, jangan dimatikan.
+                  if (!tick.sent && !tick.claimed) {
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
+                  }
+                }
+                return { session_id: device.id, sent, failed, claimed, error: lastError };
+              }),
+            );
+            const total = results.reduce(
+              (acc, r) => ({ sent: acc.sent + r.sent, failed: acc.failed + r.failed }),
+              { sent: 0, failed: 0 },
+            );
+            console.log(
+              `[blast-devices] putaran selesai: ${devices.length} perangkat, terkirim=${total.sent}, gagal=${total.failed}`,
+            );
+          } catch (error) {
+            console.error("[blast-devices] putaran gagal:", error instanceof Error ? error.message : error);
+          } finally {
+            if (activeRunStartedAt === runToken) activeRunStartedAt = 0;
+          }
+        })();
+
+        return json(
+          { ok: true, started: true, running_campaigns: running, devices: devices.length },
+          202,
         );
-
-        return json({ ok: true, running_campaigns: running, devices: devices.length, results });
       },
     },
   },

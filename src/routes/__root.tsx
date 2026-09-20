@@ -17,6 +17,7 @@ import { CampaignAutoRunner } from "../components/campaign-auto-runner";
 import { supabase } from "../integrations/supabase/my-client";
 import { getGlobalAppTheme } from "../lib/admin.functions";
 import { applyAppTheme, DEFAULT_APP_THEME, type AppThemeId } from "../lib/app-theme";
+import { authEventNeedsReset, type AuthEventState } from "../lib/auth-events";
 
 function NotFoundComponent() {
   return (
@@ -150,13 +151,18 @@ function RootComponent() {
 
   // Saat akun berganti (login/logout), buang data lama agar peran & isi halaman
   // tidak tertukar antar akun.
+  //
+  // PENTING: supabase-js memancarkan SIGNED_IN lagi setiap pengguna kembali ke tab.
+  // Akun yang sedang masuk harus sudah diketahui lebih dulu, kalau tidak event itu
+  // dikira login baru: cache dikosongkan dan halaman terpasang ulang, sehingga
+  // isian formulir yang belum disimpan (mis. teks kampanye) hilang.
   useEffect(() => {
-    let lastUserId: string | null | undefined;
+    const state: AuthEventState = { lastUserId: undefined };
+    void supabase.auth.getSession().then(({ data }) => {
+      if (state.lastUserId === undefined) state.lastUserId = data.session?.user?.id ?? null;
+    });
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      const userId = session?.user?.id ?? null;
-      if (event === "SIGNED_IN" && userId === lastUserId) return;
-      lastUserId = userId;
+      if (!authEventNeedsReset(state, event, session?.user?.id ?? null)) return;
       queryClient.clear();
       router.invalidate();
     });
