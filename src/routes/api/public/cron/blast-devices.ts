@@ -24,6 +24,22 @@ const RUN_BUDGET_MS = 50_000;
 const STALE_RUN_MS = 120_000;
 let activeRunStartedAt = 0; // 0 = tidak ada putaran yang sedang berjalan
 
+/**
+ * Pemilihan perangkat yang ADIL. Dulu putaran mengambil 50 perangkat "siap blast" TANPA urutan; padahal
+ * banyak di antaranya sudah terputus (mis. 82 siap-blast tetapi hanya 18 yang tersambung), sehingga
+ * perangkat yang sehat bisa tidak pernah kebagian giliran, dan perangkat terputus terus dicoba
+ * disambungkan ulang tiap 1,5 detik (membebani gateway).
+ *
+ *  - Perangkat TERSAMBUNG dan siap-blast: semuanya ikut tiap putaran; yang paling lama tidak
+ *    dilayani (last_ping tertua, atau belum pernah) didahulukan.
+ *  - Perangkat siap-blast tetapi TERPUTUS: satu percobaan sambung ulang paling sering sekali per
+ *    OFFLINE_RETRY_EVERY_MS, paling banyak OFFLINE_PER_RUN perangkat per putaran, TANPA perulangan.
+ */
+const MAX_DEVICES_PER_RUN = 150;
+const OFFLINE_RETRY_EVERY_MS = 5 * 60_000;
+const OFFLINE_PER_RUN = 10;
+const lastOfflineTry = new Map<string, number>();
+
 export const Route = createFileRoute("/api/public/cron/blast-devices")({
   server: {
     handlers: {
@@ -68,18 +84,34 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           .eq("status", "running");
         if (!running) return json({ ok: true, running_campaigns: 0, devices: 0 });
 
-        const { data: sessions, error } = await supabaseAdmin
+        type Device = { id: string; user_id: string; blast_speed: string | null };
+        const { data: onlineRows, error } = await supabaseAdmin
           .from("wa_sessions")
           .select("id,user_id,blast_speed")
           .eq("blast_ready", true)
-          .limit(50);
+          .eq("status", "connected")
+          .order("last_ping", { ascending: true, nullsFirst: true })
+          .limit(MAX_DEVICES_PER_RUN);
         if (error) return json({ error: error.message }, 500);
 
-        const devices = (sessions ?? []) as Array<{
-          id: string;
-          user_id: string;
-          blast_speed: string | null;
-        }>;
+        const { data: offlineRows } = await supabaseAdmin
+          .from("wa_sessions")
+          .select("id,user_id,blast_speed")
+          .eq("blast_ready", true)
+          .neq("status", "connected")
+          .limit(200);
+        const offlineAll = (offlineRows ?? []) as Device[];
+        const nowMs = Date.now();
+        const offlineIds = new Set(offlineAll.map((d) => d.id));
+        for (const id of lastOfflineTry.keys()) if (!offlineIds.has(id)) lastOfflineTry.delete(id);
+        const offlineDue = offlineAll
+          .filter((d) => nowMs - (lastOfflineTry.get(d.id) ?? 0) >= OFFLINE_RETRY_EVERY_MS)
+          .slice(0, OFFLINE_PER_RUN);
+        for (const d of offlineDue) lastOfflineTry.set(d.id, nowMs);
+
+        const online = (onlineRows ?? []) as Device[];
+        const oneShotIds = new Set(offlineDue.map((d) => d.id));
+        const devices: Device[] = [...online, ...offlineDue];
         if (!devices.length) return json({ ok: true, running_campaigns: running, devices: 0 });
 
         // Putaran sebelumnya masih berjalan (mis. anggaran 50 detik belum habis): lewati.
@@ -130,9 +162,14 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
                   failed += tick.failed;
                   claimed += tick.claimed;
                   if (tick.error) lastError = tick.error;
-                  // Perangkat belum siap kirim (misal sedang tersambung ulang):
-                  // beri jeda singkat lalu coba lagi, jangan dimatikan.
+                  // Perangkat terputus: cukup SATU percobaan sambung ulang per putaran.
+                  if (oneShotIds.has(device.id)) break;
                   if (!tick.sent && !tick.claimed) {
+                    // Perangkat bermasalah (terputus, ditahan, atau didinginkan): jangan diulang dalam
+                    // putaran ini; putaran berikutnya menilai ulang. Mengulang tiap 1,5 detik hanya
+                    // membebani gateway.
+                    if (tick.error) break;
+                    // Tersambung tetapi belum ada pekerjaan: beri jeda singkat lalu coba lagi.
                     await new Promise((resolve) => setTimeout(resolve, 1500));
                   }
                 }
@@ -144,7 +181,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
               { sent: 0, failed: 0 },
             );
             console.log(
-              `[blast-devices] putaran selesai: ${devices.length} perangkat, terkirim=${total.sent}, gagal=${total.failed}`,
+              `[blast-devices] putaran selesai: ${online.length} tersambung + ${offlineDue.length} sambung-ulang, terkirim=${total.sent}, gagal=${total.failed}`,
             );
           } catch (error) {
             console.error("[blast-devices] putaran gagal:", error instanceof Error ? error.message : error);
