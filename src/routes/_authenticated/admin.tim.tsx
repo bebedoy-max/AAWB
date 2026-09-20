@@ -41,7 +41,6 @@ import {
   Td,
   Th,
   angka,
-  waktu,
 } from "@/components/admin-ui";
 
 export const Route = createFileRoute("/_authenticated/admin/tim")({
@@ -191,7 +190,6 @@ function TimPage() {
               <tr>
                 <Th>Nama</Th>
                 <Th>Email</Th>
-                <Th>Bergabung</Th>
                 <Th>Peran</Th>
                 <Th>Action</Th>
               </tr>
@@ -201,7 +199,6 @@ function TimPage() {
                 <tr key={s.user_id} className="border-b last:border-0 hover:bg-muted/40">
                   <Td className="font-medium">{s.name}</Td>
                   <Td className="text-muted-foreground">{s.email}</Td>
-                  <Td className="text-muted-foreground">{waktu(s.created_at)}</Td>
                   <Td>
                     {isSuper ? (
                       <Select
