@@ -27,8 +27,14 @@ export interface FailureLike {
 // Nomor tidak terdaftar / tidak valid: hasilnya tidak akan berubah bila diulang.
 const INVALID_NUMBER =
   /tidak terdaftar di whatsapp|not registered|not on whatsapp|nomor (?:tidak valid|salah)|invalid (?:phone|number|jid)|bad jid/i;
-// WhatsApp menolak lewat perangkat ini (mis. kode 463, nomor dibatasi): perangkat lain masih bisa mencoba.
-const DEVICE_REJECT = /ditolak server whatsapp|dibatasi whatsapp|ditahan sampai/i;
+// WhatsApp MENOLAK satu pengiriman nyata (mis. kode 463 "reach-out time-lock" untuk kontak baru): pesan
+// tidak sampai, dan perangkat lain masih bisa mencoba. Hanya pesan yang DIAWALI kalimat ini yang dihitung
+// sebagai penolakan; kalimat berikutnya (mis. "nomor pengirim dibatasi ...") hanya penjelasan.
+const REJECTED_BY_WHATSAPP = /^\s*pesan ditolak server whatsapp/i;
+// Perangkat TIDAK dipakai mengirim sama sekali: ditahan gateway setelah penolakan sebelumnya, atau gagal
+// disambungkan kembali. Pesan pasti belum terkirim, jadi TIDAK boleh menghabiskan percobaan pesan.
+const HELD_OR_RECONNECT =
+  /perangkat gagal (?:disambungkan|dimulai ulang)|nomor pengirim dibatasi whatsapp|ditahan sampai/i;
 // Gagal SEBELUM pesan sampai ke WhatsApp: pasti belum terkirim.
 const NOT_SENT =
   /perangkat whatsapp|session status is not as expected|belum siap|menyambungkan ulang|tidak dapat terhubung ke gateway|gateway menolak permintaan/i;
@@ -37,8 +43,8 @@ export function classifyFailure(err: FailureLike): FailureClass {
   const message = String(err?.message ?? "");
   if (INVALID_NUMBER.test(message)) return "invalid";
   if (err?.deliveryUnknown) return "unknown";
-  if (DEVICE_REJECT.test(message)) return "device_reject";
-  if (NOT_SENT.test(message)) return "not_sent";
+  if (REJECTED_BY_WHATSAPP.test(message)) return "device_reject";
+  if (HELD_OR_RECONNECT.test(message) || NOT_SENT.test(message)) return "not_sent";
   return "other";
 }
 
