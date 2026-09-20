@@ -287,7 +287,6 @@ export const createBlastProject = createServerFn({ method: "POST" })
       const phones = Array.from(
         new Set((input.phones ?? []).map((p) => String(p).replace(/\D/g, "")).filter(Boolean)),
       );
-      if (phones.length > 50000) throw new Error("Maksimal 50.000 nomor per proyek.");
       return { name, message: base, phones, mediaUrl, buttons };
     },
   )

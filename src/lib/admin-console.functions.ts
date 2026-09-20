@@ -675,7 +675,6 @@ export const addTargets = createServerFn({ method: "POST" })
       new Set((input.phones ?? []).map((p) => String(p).replace(/\D/g, "")).filter(Boolean)),
     );
     if (!phones.length) throw new Error("Tidak ada nomor yang valid.");
-    if (phones.length > 50000) throw new Error("Maksimal 50.000 nomor sekali tambah.");
     return { campaignId: String(input.campaignId), phones };
   })
   .handler(async ({ data, context }) => {
