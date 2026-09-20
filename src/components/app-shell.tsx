@@ -357,37 +357,47 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isAdminAccount) return;
     const IDLE_MS = 15 * 60 * 1000;
-    let timer: number | undefined;
-
-    const logoutIdle = () => {
-      toast.info("Anda keluar otomatis karena 15 menit tidak ada aktivitas.");
-      void signOutRef.current();
-    };
+    // Waktu terakhir ada aktivitas. Dicek berkala, bukan lewat satu timer
+    // panjang: di ponsel timer ditahan saat layar mati lalu langsung berjalan
+    // begitu aplikasi dibuka lagi, sehingga pengguna aktif ikut terlempar.
+    let lastActivity = Date.now();
+    let signedOut = false;
 
     const reset = () => {
-      if (timer) window.clearTimeout(timer);
-      timer = window.setTimeout(logoutIdle, IDLE_MS);
+      lastActivity = Date.now();
     };
 
-    const events: (keyof WindowEventMap)[] = [
+    const events: (keyof DocumentEventMap)[] = [
       "mousemove",
       "mousedown",
       "keydown",
       "wheel",
       "touchstart",
+      "touchmove",
+      "touchend",
+      "pointerdown",
+      "click",
+      "input",
       "scroll",
+      "visibilitychange",
     ];
-    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
-    const onVisible = () => {
-      if (document.visibilityState === "visible") reset();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    reset();
+    // capture: true agar gulir di dalam panel (yang tidak merambat ke window)
+    // tetap terhitung sebagai aktivitas.
+    events.forEach((e) =>
+      document.addEventListener(e, reset, { passive: true, capture: true }),
+    );
+
+    const interval = window.setInterval(() => {
+      if (signedOut) return;
+      if (Date.now() - lastActivity < IDLE_MS) return;
+      signedOut = true;
+      toast.info("Anda keluar otomatis karena 15 menit tidak ada aktivitas.");
+      void signOutRef.current();
+    }, 30_000);
 
     return () => {
-      if (timer) window.clearTimeout(timer);
-      events.forEach((e) => window.removeEventListener(e, reset));
-      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+      events.forEach((e) => document.removeEventListener(e, reset, { capture: true }));
     };
   }, [isAdminAccount]);
 
