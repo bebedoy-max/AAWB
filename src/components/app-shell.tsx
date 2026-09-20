@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { BrandLogo } from "@/components/brand-logo";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -346,6 +347,50 @@ export function AppShell({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
   };
+
+  // Admin & super admin: keluar otomatis setelah 15 menit tanpa aktivitas.
+  // Worker (member) tetap masuk sampai menekan tombol keluar sendiri.
+  const signOutRef = useRef(signOut);
+  signOutRef.current = signOut;
+  const isAdminAccount = !!myRole?.is_admin;
+
+  useEffect(() => {
+    if (!isAdminAccount) return;
+    const IDLE_MS = 15 * 60 * 1000;
+    let timer: number | undefined;
+
+    const logoutIdle = () => {
+      toast.info("Anda keluar otomatis karena 15 menit tidak ada aktivitas.");
+      void signOutRef.current();
+    };
+
+    const reset = () => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(logoutIdle, IDLE_MS);
+    };
+
+    const events: (keyof WindowEventMap)[] = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "wheel",
+      "touchstart",
+      "scroll",
+    ];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    const onVisible = () => {
+      if (document.visibilityState === "visible") reset();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    reset();
+
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [isAdminAccount]);
+
 
   return (
     <div className={cn("flex min-h-screen w-full max-w-full overflow-x-hidden bg-background member-surface", adminLayout && "lg:font-sans")}>
