@@ -780,7 +780,7 @@ export const listReport = createServerFn({ method: "POST" })
     let query = admin
       .from("message_queue")
       .select(
-        "id,campaign_id,session_id,user_id,claimed_by,recipient_phone,message_body,status,error_log,sent_at,created_at",
+        "id,campaign_id,session_id,user_id,claimed_by,recipient_phone,message_body,status,error_log,sent_at,created_at,sender_phone",
       )
       .neq("status", "processing")
       .order("created_at", { ascending: false })
@@ -827,7 +827,12 @@ export const listReport = createServerFn({ method: "POST" })
           campaign_id: r.campaign_id,
           campaign_name: campaignById.get(r.campaign_id) ?? r.campaign_id,
           user_id: r.user_id,
-          sender: s ? (s.phone_number ?? s.session_name) : "—",
+          // Utamakan nomor yang tersimpan di baris pesan (tetap ada walau sesi
+          // perangkat sudah terhapus), lalu data sesi sebagai cadangan.
+          sender:
+            r.sender_phone ??
+            (s ? (s.phone_number ?? (/^\d+$/.test(s.session_name ?? "") ? s.session_name : null)) : null) ??
+            "—",
           // Nama pengirim harus mengikuti pemilik perangkat yang benar-benar
           // mengirim pesan, bukan pemilik kampanye/admin yang membuat antrean.
           sender_owner:

@@ -43,7 +43,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function ensureConnected(
   supabase: SupabaseClient,
   sessionId: string,
-): Promise<{ connected: boolean; error?: string }> {
+): Promise<{ connected: boolean; phone?: string | null; error?: string }> {
   try {
     let live = await sessionStatus(sessionId);
     if (live.status !== "connected") {
@@ -59,7 +59,7 @@ async function ensureConnected(
         updated_at: new Date().toISOString(),
       })
       .eq("id", sessionId);
-    return { connected: live.status === "connected" };
+    return { connected: live.status === "connected", phone: live.phone ?? null };
   } catch (err) {
     return {
       connected: false,
@@ -92,6 +92,8 @@ export async function processCampaignTick(
 
   const sessionId = campaign.session_id;
   const first = await ensureConnected(supabase, sessionId);
+  // Nomor perangkat pengirim ikut disimpan di baris terkirim untuk laporan.
+  const senderPhone = first.phone ?? null;
   if (!first.connected) {
     // Never pause the campaign: keep it running so the next tick continues
     // automatically as soon as the device is back.
@@ -196,6 +198,7 @@ export async function processCampaignTick(
             error_log: null,
             // Simpan perangkat pengirim agar nomor pengirim muncul di laporan.
             session_id: sessionId,
+            sender_phone: senderPhone,
           })
           .eq("id", item.id);
         try {

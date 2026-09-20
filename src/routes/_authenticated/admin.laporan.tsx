@@ -190,7 +190,6 @@ function LaporanPage() {
     "Penerima",
     "Teks",
     "Status",
-    "Alasan",
     "Jam Kirim",
   ];
 
@@ -209,7 +208,6 @@ function LaporanPage() {
       nomor(r.recipient_phone),
       r.message_body,
       r.status === "sent" ? "SUCCESS" : r.status.toUpperCase(),
-      r.error_log || "-",
       jamKirim(r.sent_at ?? r.created_at),
     ]);
 
@@ -261,7 +259,7 @@ function LaporanPage() {
       sheet["!freeze"] = { xSplit: 0, ySplit: 1 };
       sheet["!cols"] = [
         { wch: 6 }, { wch: 36 }, { wch: 18 }, { wch: 36 }, { wch: 18 },
-        { wch: 18 }, { wch: 40 }, { wch: 12 }, { wch: 30 }, { wch: 22 },
+        { wch: 18 }, { wch: 40 }, { wch: 12 }, { wch: 22 },
       ];
       const headerStyle = {
         font: { bold: true, color: { rgb: "FFFFFF" }, name: "Arial" },

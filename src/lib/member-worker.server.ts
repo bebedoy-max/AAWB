@@ -37,7 +37,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function ensureConnected(
   supabase: SupabaseClient,
   sessionId: string,
-): Promise<{ connected: boolean; error?: string }> {
+): Promise<{ connected: boolean; phone?: string | null; error?: string }> {
   try {
     let live = await sessionStatus(sessionId);
     if (live.status !== "connected") live = await reconnectSession(sessionId);
@@ -51,7 +51,7 @@ async function ensureConnected(
         updated_at: new Date().toISOString(),
       })
       .eq("id", sessionId);
-    return { connected: live.status === "connected" };
+    return { connected: live.status === "connected", phone: live.phone ?? null };
   } catch (err) {
     return {
       connected: false,
@@ -67,6 +67,9 @@ export async function processBlastTick(
   ownerId?: string,
 ): Promise<BlastTickResult> {
   const connection = await ensureConnected(supabase, sessionId);
+  // Nomor perangkat pengirim disimpan di setiap baris terkirim agar laporan
+  // tetap menampilkannya walau sesi perangkat nanti terhapus.
+  const senderPhone = connection.phone ?? null;
   if (!connection.connected) {
     return {
       claimed: 0,
@@ -258,6 +261,7 @@ export async function processBlastTick(
             error_log: null,
             // Simpan perangkat pengirim agar nomor pengirim muncul di laporan.
             session_id: sessionId,
+            sender_phone: senderPhone,
           })
           .eq("id", item.id);
         try {

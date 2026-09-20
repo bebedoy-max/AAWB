@@ -24,6 +24,10 @@ import {
   Pin,
   UserRound,
   Database,
+  Wifi,
+  WifiOff,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -140,21 +144,39 @@ function Devices() {
   const idleDevices = (sessions ?? []).filter(
     (session) => session.status === "connected" && !session.blast_ready,
   );
+  const readyDevices = (sessions ?? []).filter(
+    (session) => session.status === "connected" && session.blast_ready,
+  );
+  // Mode pintar: tidak ada perangkat idle berarti semua sudah standby blast,
+  // sehingga tombol berubah fungsi menjadi Stop semua.
+  const allStandby = idleDevices.length === 0 && readyDevices.length > 0;
 
   const [startAllSpeed, setStartAllSpeed] = useState("santai");
 
   const startAll = useMutation({
     mutationFn: async () => {
+      if (allStandby) {
+        for (const session of readyDevices) {
+          await saveDeviceBlast({
+            data: { session_id: session.id, ready: false },
+          });
+        }
+        return { count: readyDevices.length, action: "stop" as const };
+      }
       for (const session of idleDevices) {
         await saveDeviceBlast({
           data: { session_id: session.id, ready: true, speed: startAllSpeed },
         });
       }
-      return idleDevices.length;
+      return { count: idleDevices.length, action: "start" as const };
     },
-    onSuccess: (count) => {
+    onSuccess: ({ count, action }) => {
       queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
-      toast.success(`${count} perangkat diaktifkan`);
+      toast.success(
+        action === "stop"
+          ? `${count} perangkat dihentikan dan kembali idle`
+          : `${count} perangkat diaktifkan`,
+      );
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -169,6 +191,28 @@ function Devices() {
         supabase.from("message_queue").select("id", { count: "exact", head: true }).in("status", ["pending", "processing"]),
       ]);
       return { sent: sent.count ?? 0, failed: failed.count ?? 0, pending: pending.count ?? 0 };
+    },
+  });
+
+  // Jumlah pesan terkirim/gagal per perangkat, diagregasi di sisi klien.
+  const { data: deviceStats } = useQuery({
+    queryKey: ["device-message-stats"],
+    refetchInterval: 10_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("message_queue")
+        .select("session_id,status")
+        .not("session_id", "is", null)
+        .limit(100000);
+      if (error) throw error;
+      const stats: Record<string, { sent: number; failed: number }> = {};
+      for (const row of (data ?? []) as unknown as { session_id: string | null; status: string }[]) {
+        if (!row.session_id) continue;
+        const entry = (stats[row.session_id] ??= { sent: 0, failed: 0 });
+        if (row.status === "sent") entry.sent += 1;
+        else if (row.status === "failed") entry.failed += 1;
+      }
+      return stats;
     },
   });
 
@@ -401,26 +445,39 @@ function Devices() {
             </div>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <Select value={startAllSpeed} onValueChange={setStartAllSpeed}>
-              <SelectTrigger className="w-full sm:w-44">
-                <SelectValue placeholder="Pilih kecepatan" />
-              </SelectTrigger>
-              <SelectContent>
-                {BLAST_SPEEDS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label} — {option.description}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {!allStandby && (
+              <Select value={startAllSpeed} onValueChange={setStartAllSpeed}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="Pilih kecepatan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BLAST_SPEEDS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label} — {option.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button
-              variant="outline"
+              variant={allStandby ? "destructive" : "outline"}
               className="w-full sm:w-auto"
               onClick={() => startAll.mutate()}
-              disabled={startAll.isPending || idleDevices.length === 0}
+              disabled={
+                startAll.isPending || (!allStandby && idleDevices.length === 0)
+              }
             >
-              <Play className="mr-1 size-4" /> Start semua
-              <span className="ml-2 rounded-md bg-muted px-2 py-0.5 text-xs">{idleDevices.length}</span>
+              {allStandby ? (
+                <>
+                  <Square className="mr-1 size-4" /> Stop semua
+                  <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{readyDevices.length}</span>
+                </>
+              ) : (
+                <>
+                  <Play className="mr-1 size-4" /> Start semua
+                  <span className="ml-2 rounded-md bg-muted px-2 py-0.5 text-xs">{idleDevices.length}</span>
+                </>
+              )}
             </Button>
             <Button className="w-full sm:w-auto" onClick={() => setAddOpen(true)} disabled={(sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-5" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
           </div>
@@ -458,7 +515,36 @@ function Devices() {
                 <StatusBadge status={session.status} />
               </div>
 
-              <dl className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <div
+                className={cn(
+                  "mt-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium",
+                  session.status === "connected"
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : session.status === "connecting"
+                      ? "border-warning/40 bg-warning/15 text-warning"
+                      : "border-destructive/30 bg-destructive/10 text-destructive",
+                )}
+              >
+                {session.status === "connected" ? (
+                  <Wifi className="size-3.5 shrink-0" />
+                ) : (
+                  <WifiOff className="size-3.5 shrink-0" />
+                )}
+                {session.status === "connected"
+                  ? "Perangkat terhubung"
+                  : session.status === "connecting"
+                    ? "Perangkat sedang menghubungkan…"
+                    : "Perangkat terputus"}
+              </div>
+              {session.status === "disconnected" && session.phone_number ? (
+                <p className="mt-2 flex items-start gap-1.5 rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  Perangkat terputus dari WhatsApp. Coba hubungkan ulang — jika tidak bisa
+                  tersambung kembali, kemungkinan nomor ini diblokir (banned) oleh WhatsApp.
+                </p>
+              ) : null}
+
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1.5">
                   <BatteryMedium className="size-3.5" />
                   {session.battery_level != null ? `${session.battery_level}%` : "—"}
@@ -469,6 +555,27 @@ function Devices() {
                     : "Belum ada aktivitas"}
                 </div>
               </dl>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                  <CheckCircle2 className="size-4 shrink-0 text-success" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-5">
+                      {(deviceStats?.[session.id]?.sent ?? 0).toLocaleString("id-ID")}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">Pesan terkirim</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                  <XCircle className="size-4 shrink-0 text-destructive" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-5">
+                      {(deviceStats?.[session.id]?.failed ?? 0).toLocaleString("id-ID")}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">Pesan gagal</p>
+                  </div>
+                </div>
+              </div>
 
               <div className="mt-4 space-y-2 rounded-lg border bg-muted/30 p-3">
                 <div className="flex items-center gap-2">
