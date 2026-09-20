@@ -105,20 +105,39 @@ export async function sendTelegramMessage(chatId: string | number, text: string)
   await callTelegram("sendMessage", { chat_id: chatId, text, parse_mode: "HTML" });
 }
 
+/** Daftarkan ulang webhook bot ke URL aplikasi (dipakai saat token bot diganti). */
+export async function registerWebhook(baseUrl: string): Promise<string> {
+  const url = `${baseUrl.replace(/\/+$/, "")}/api/public/telegram/webhook`;
+  await callTelegram("setWebhook", {
+    url,
+    secret_token: await webhookSecret(),
+    allowed_updates: ["message", "edited_message"],
+    drop_pending_updates: true,
+  });
+  return url;
+}
+
 /** Kirim notifikasi ke akun Telegram milik seorang pengguna (diam bila belum tersambung). */
 export async function notifyUserTelegram(userId: string, text: string): Promise<boolean> {
   try {
-    if (!(await isTelegramConfigured())) return false;
+    if (!(await isTelegramConfigured())) {
+      console.warn("[telegram] notifikasi dilewati: bot belum dikonfigurasi");
+      return false;
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data } = await (supabaseAdmin as any)
       .from("telegram_links")
       .select("chat_id")
       .eq("user_id", userId)
       .maybeSingle();
-    if (!data?.chat_id) return false;
+    if (!data?.chat_id) {
+      console.warn(`[telegram] notifikasi dilewati: user ${userId} belum menyambungkan Telegram`);
+      return false;
+    }
     await sendTelegramMessage(data.chat_id, text);
     return true;
-  } catch {
+  } catch (err) {
+    console.error(`[telegram] gagal kirim notifikasi ke user ${userId}:`, (err as Error).message);
     return false;
   }
 }

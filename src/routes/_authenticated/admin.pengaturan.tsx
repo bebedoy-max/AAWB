@@ -311,10 +311,17 @@ function TelegramBotPanel() {
 
   const saveTg = useMutation({
     mutationFn: (vars: { clearToken?: boolean }) =>
-      persistTg({ data: { token, username, clearToken: vars.clearToken === true } }),
-    onSuccess: () => {
+      persistTg({
+        data: {
+          token,
+          username,
+          clearToken: vars.clearToken === true,
+          baseUrl: typeof window === "undefined" ? "" : window.location.origin,
+        },
+      }),
+    onSuccess: (res) => {
       setToken("");
-      toast.success("Pengaturan Telegram tersimpan");
+      toast.success(res?.notice ?? "Pengaturan Telegram tersimpan");
       queryClient.invalidateQueries({ queryKey: ["telegram-settings"] });
     },
     onError: (e: Error) => toast.error(e.message),

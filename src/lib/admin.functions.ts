@@ -278,10 +278,11 @@ export const getTelegramSettings = createServerFn({ method: "GET" })
 /** Simpan token & username bot Telegram. Token kosong = biarkan nilai lama. */
 export const saveTelegramSettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { token: string; username: string; clearToken?: boolean }) => ({
+  .inputValidator((input: { token: string; username: string; clearToken?: boolean; baseUrl?: string }) => ({
     token: (input?.token ?? "").trim(),
     username: (input?.username ?? "").trim().replace(/^@/, ""),
     clearToken: Boolean(input?.clearToken),
+    baseUrl: (input?.baseUrl ?? "").trim(),
   }))
   .handler(async ({ data, context }) => {
     await assertAdmin(context, true);
@@ -312,9 +313,28 @@ export const saveTelegramSettings = createServerFn({ method: "POST" })
       .from("app_settings")
       .upsert(patch, { onConflict: "id" });
     if (error) throw new Error(error.message);
-    const { invalidateTelegramConfig } = await import("@/lib/telegram.server");
+    const { invalidateTelegramConfig, registerWebhook } = await import("@/lib/telegram.server");
     invalidateTelegramConfig();
-    return { ok: true };
+
+    // Mengganti token berarti bot berbeda: chat lama milik bot lama tidak bisa
+    // lagi dikirimi pesan, dan webhook harus didaftarkan ulang ke bot baru.
+    let notice: string | null = null;
+    if (data.token && !data.clearToken) {
+      const { count } = await (supabaseAdmin as any)
+        .from("telegram_links")
+        .delete({ count: "exact" })
+        .not("chat_id", "is", null);
+      notice = `Bot baru aktif. ${count ?? 0} sambungan Telegram lama direset — pengguna perlu menyambungkan ulang.`;
+      if (data.baseUrl) {
+        try {
+          await registerWebhook(data.baseUrl);
+          notice += " Webhook bot baru berhasil didaftarkan.";
+        } catch (err) {
+          notice += ` Webhook gagal didaftarkan: ${(err as Error).message}`;
+        }
+      }
+    }
+    return { ok: true, notice };
   });
 
 /** Uji token bot Telegram tersimpan dengan memanggil getMe. */
