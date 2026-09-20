@@ -76,6 +76,7 @@ function NomorPage() {
 
   const [campaignId, setCampaignId] = useState("all");
   const [status, setStatus] = useState("all");
+  const [page, setPage] = useState(1);
   const [targetCampaign, setTargetCampaign] = useState("");
   const [raw, setRaw] = useState("");
   const [imported, setImported] = useState<string[]>([]);
@@ -86,9 +87,15 @@ function NomorPage() {
   });
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
-    queryKey: ["admin-targets", campaignId, status],
-    queryFn: () => fetchTargets({ data: { campaignId, status } }),
+    queryKey: ["admin-targets", campaignId, status, page],
+    queryFn: () => fetchTargets({ data: { campaignId, status, page } }),
   });
+
+  const pageCount = Math.max(1, Math.ceil((data?.filtered ?? 0) / (data?.pageSize ?? 20)));
+  const changeFilters = (fn: () => void) => {
+    fn();
+    setPage(1);
+  };
 
   const parsed = parsePhoneList(raw, "62").map((r) => r.phone);
   const pending = Array.from(new Set([...parsed, ...imported]));
@@ -234,11 +241,15 @@ function NomorPage() {
 
         <Panel
           title="Daftar target"
-          description="Menampilkan maksimal 500 baris terbaru."
+          description={
+            data?.filtered
+              ? `${angka(data.filtered)} nomor · 20 per halaman`
+              : "Menampilkan seluruh data target."
+          }
           bodyClassName="p-0"
           action={
             <div className="flex flex-wrap gap-2">
-              <Select value={campaignId} onValueChange={setCampaignId}>
+              <Select value={campaignId} onValueChange={(v) => changeFilters(() => setCampaignId(v))}>
                 <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
@@ -251,7 +262,7 @@ function NomorPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={status} onValueChange={setStatus}>
+              <Select value={status} onValueChange={(v) => changeFilters(() => setStatus(v))}>
                 <SelectTrigger className="w-36">
                   <SelectValue />
                 </SelectTrigger>
@@ -275,47 +286,72 @@ function NomorPage() {
               description="Tambahkan nomor pada panel di samping untuk mengisi kolam target."
             />
           ) : (
-            <TableShell>
-              <thead className="border-b bg-muted/40">
-                <tr>
-                  <Th>Nomor</Th>
-                  <Th>Kampanye</Th>
-                  <Th>Status</Th>
-                  <Th>Diambil</Th>
-                  <Th>Waktu</Th>
-                  <Th className="text-right">Aksi</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.rows ?? []).map((r) => (
-                  <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
-                    <Td className="font-medium">+{r.recipient_phone}</Td>
-                    <Td className="text-muted-foreground">{r.campaign_name}</Td>
-                    <Td>
-                      <Badge
-                        variant="outline"
-                        className={STATUS_STYLE[r.status] ?? "text-muted-foreground"}
-                      >
-                        {STATUS_LABEL[r.status] ?? r.status}
-                      </Badge>
-                    </Td>
-                    <Td className="text-muted-foreground">{r.claimed ? "Ya" : "Belum"}</Td>
-                    <Td className="text-muted-foreground">{waktu(r.sent_at ?? r.created_at)}</Td>
-                    <Td className="text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive"
-                        onClick={() => destroy.mutate(r.id)}
-                        disabled={destroy.isPending}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </Td>
+            <>
+              <TableShell>
+                <thead className="border-b bg-muted/40">
+                  <tr>
+                    <Th>Nomor</Th>
+                    <Th>Kampanye</Th>
+                    <Th>Status</Th>
+                    <Th>Diambil</Th>
+                    <Th>Waktu</Th>
+                    <Th className="text-right">Aksi</Th>
                   </tr>
-                ))}
-              </tbody>
-            </TableShell>
+                </thead>
+                <tbody>
+                  {(data?.rows ?? []).map((r) => (
+                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/40">
+                      <Td className="font-medium">+{r.recipient_phone}</Td>
+                      <Td className="text-muted-foreground">{r.campaign_name}</Td>
+                      <Td>
+                        <Badge
+                          variant="outline"
+                          className={STATUS_STYLE[r.status] ?? "text-muted-foreground"}
+                        >
+                          {STATUS_LABEL[r.status] ?? r.status}
+                        </Badge>
+                      </Td>
+                      <Td className="text-muted-foreground">{r.claimed ? "Ya" : "Belum"}</Td>
+                      <Td className="text-muted-foreground">{waktu(r.sent_at ?? r.created_at)}</Td>
+                      <Td className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => destroy.mutate(r.id)}
+                          disabled={destroy.isPending}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableShell>
+              <div className="flex items-center justify-between gap-3 border-t px-4 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Halaman {angka(data?.page ?? 1)} dari {angka(pageCount)}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page <= 1 || isFetching}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Sebelumnya
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={page >= pageCount || isFetching}
+                    onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                  >
+                    Berikutnya
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </Panel>
       </div>

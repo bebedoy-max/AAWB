@@ -332,7 +332,7 @@ function LaporanPage() {
     <>
       <AdminPageTitle
         title="Laporan Pengiriman"
-        description="Riwayat 1.000 pengiriman terbaru beserta status dan penyebab kegagalan."
+        description="Seluruh riwayat pengiriman beserta status dan penyebab kegagalan."
         action={
           <>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>

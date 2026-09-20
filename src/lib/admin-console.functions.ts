@@ -50,6 +50,9 @@ export interface TargetsResult {
   ready: number;
   sent: number;
   failed: number;
+  filtered: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface ReportRow {
@@ -607,14 +610,17 @@ export const listCampaignOptions = createServerFn({ method: "GET" })
 /** Daftar nomor target pada kolam kampanye. */
 export const listTargets = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { campaignId?: string; status?: string }) => ({
+  .inputValidator((input: { campaignId?: string; status?: string; page?: number }) => ({
     campaignId: input?.campaignId && input.campaignId !== "all" ? String(input.campaignId) : null,
     status: input?.status && input.status !== "all" ? String(input.status) : null,
+    page: Math.max(1, Math.floor(Number(input?.page) || 1)),
   }))
   .handler(async ({ data, context }): Promise<TargetsResult> => {
     await assertAdmin(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
+
+    const PAGE_SIZE = 20;
 
     const { data: campaigns } = await admin
       .from("campaigns")
@@ -627,25 +633,44 @@ export const listTargets = createServerFn({ method: "POST" })
 
     // Hanya nomor milik kampanye kolam admin yang dihitung, agar angka di halaman
     // ini selalu selaras dengan daftar kampanye.
-    if (!poolIds.length) return { rows: [], total: 0, ready: 0, sent: 0, failed: 0 };
+    if (!poolIds.length)
+      return { rows: [], total: 0, ready: 0, sent: 0, failed: 0, filtered: 0, page: 1, pageSize: PAGE_SIZE };
 
-    let counter = admin.from("message_queue").select("status,claimed_by").limit(200000);
-    if (data.campaignId) counter = counter.eq("campaign_id", data.campaignId);
-    else counter = counter.in("campaign_id", poolIds);
-    const { data: all } = await counter;
-    const list = (all ?? []) as any[];
+    // Statistik dihitung lewat count exact sehingga seluruh data (tanpa batas)
+    // ikut terhitung, bukan hanya baris yang termuat.
+    const scope = () => {
+      let q = admin.from("message_queue").select("*", { count: "exact", head: true });
+      q = data.campaignId ? q.eq("campaign_id", data.campaignId) : q.in("campaign_id", poolIds);
+      return q;
+    };
+    const byStatus = (q: any) => {
+      if (data.status === "ready") return q.eq("status", "pending");
+      if (data.status) return q.eq("status", data.status);
+      return q;
+    };
+
+    const [tot, rdy, snt, fld, filt] = await Promise.all([
+      scope(),
+      scope().in("status", ["pending", "processing"]),
+      scope().eq("status", "sent"),
+      scope().eq("status", "failed"),
+      byStatus(scope()),
+    ]);
 
     let query = admin
       .from("message_queue")
       .select("id,campaign_id,recipient_phone,status,claimed_by,created_at,sent_at")
-      .order("created_at", { ascending: false })
-      .limit(500);
+      .order("created_at", { ascending: false });
     if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
     else query = query.in("campaign_id", poolIds);
     if (data.status === "ready") query = query.eq("status", "pending");
     else if (data.status) query = query.eq("status", data.status);
 
-    const { data: rows, error } = await query;
+    const filtered = filt.count ?? 0;
+    const pageCount = Math.max(1, Math.ceil(filtered / PAGE_SIZE));
+    const page = Math.min(data.page, pageCount);
+    const from = (page - 1) * PAGE_SIZE;
+    const { data: rows, error } = await query.range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(error.message);
 
     return {
@@ -659,10 +684,13 @@ export const listTargets = createServerFn({ method: "POST" })
         created_at: r.created_at,
         sent_at: r.sent_at,
       })),
-      total: list.length,
-      ready: list.filter((r) => r.status === "pending" || r.status === "processing").length,
-      sent: list.filter((r) => r.status === "sent").length,
-      failed: list.filter((r) => r.status === "failed").length,
+      total: tot.count ?? 0,
+      ready: rdy.count ?? 0,
+      sent: snt.count ?? 0,
+      failed: fld.count ?? 0,
+      filtered,
+      page,
+      pageSize: PAGE_SIZE,
     };
   });
 
@@ -804,17 +832,26 @@ export const listReport = createServerFn({ method: "POST" })
       /* pembersihan bersifat best-effort */
     }
 
-    let query = admin
-      .from("message_queue")
-      .select(
-        "id,campaign_id,session_id,user_id,claimed_by,recipient_phone,message_body,status,error_log,sent_at,created_at,sender_phone",
-      )
-      .neq("status", "processing")
-      .order("created_at", { ascending: false })
-      .limit(1000);
-    if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
-    const { data: rows, error } = await query;
-    if (error) throw new Error(error.message);
+    // Ambil SELURUH baris tanpa batas: penarikan bertahap per 1.000 baris
+    // sampai habis, karena database memotong maksimal 1.000 per permintaan.
+    // Laporan harus mencakup semua data, bukan hanya 1.000 terbaru.
+    const selectCols =
+      "id,campaign_id,session_id,user_id,claimed_by,recipient_phone,message_body,status,error_log,sent_at,created_at,sender_phone";
+    const PAGE = 1000;
+    const rows: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      let query = admin
+        .from("message_queue")
+        .select(selectCols)
+        .neq("status", "processing")
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
+      const { data: chunk, error } = await query;
+      if (error) throw new Error(error.message);
+      rows.push(...((chunk ?? []) as any[]));
+      if (!chunk || chunk.length < PAGE) break;
+    }
 
 
     const { data: sessions } = await admin
