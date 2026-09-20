@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { Send, Smartphone, TrendingUp, AlertTriangle, Download, Pin, UserRound, QrCode, Wallet, Users, Copy, Plus, KeyRound, RefreshCw } from "lucide-react";
+import { Send, Smartphone, TrendingUp, Download, Pin, UserRound, QrCode, Wallet, Users, Copy, Plus, KeyRound, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/my-client";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -359,11 +359,11 @@ function Dashboard() {
         <Card className="rounded-2xl border-border bg-member-panel shadow-panel">
           <CardContent className="flex h-full flex-col p-5">
             <div className="flex items-center gap-3">
-              <div className="grid size-10 place-items-center rounded-xl bg-destructive/10 text-destructive"><AlertTriangle className="size-5" /></div>
-              <p className="text-lg font-semibold">Laporkan Kendala</p>
+              <div className="grid size-10 place-items-center rounded-xl bg-destructive/10 text-destructive"><Send className="size-5" /></div>
+              <p className="text-lg font-semibold">Group Public</p>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
-              Menemukan kendala teknis saat memakai sistem? Tekan tombol di bawah untuk melapor langsung ke tim bantuan kami di Telegram.
+              Menemukan kendala teknis saat memakai sistem? Atau ingin mendapatkan informasi terupdate dari NAROWA.. Tekan tombol di bawah untuk melapor langsung ke tim bantuan dan bergabung di Channel kami di Telegram.
             </p>
             <Button
               className="mt-auto w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -372,7 +372,7 @@ function Dashboard() {
             >
               {support?.url ? (
                 <a href={support.url} target="_blank" rel="noopener noreferrer">
-                  <Send className="mr-2 size-4" /> Hubungi via Telegram
+                  <Send className="mr-2 size-4" /> Join Telegram Channel
                 </a>
               ) : (
                 <span>Kontak Telegram belum diatur admin</span>
