@@ -5,6 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { buttonToken } from "@/lib/whatsapp";
+import { RETRY_MAX_ATTEMPTS } from "@/lib/blast-retry";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -22,6 +23,14 @@ export interface AdminOverview {
   earnings_total: number;
   withdrawal_pending: number;
   withdrawal_paid: number;
+  /** Pesan menunggu percobaan ulang otomatis (percobaan ke-2 dan seterusnya). */
+  retry_total: number;
+  /** Dari retry_total: yang sudah mendekati batas percobaan. */
+  retry_near_limit: number;
+  /** Batas percobaan sebelum pesan ditutup gagal. */
+  retry_max: number;
+  /** Perangkat yang sedang didinginkan pemutus sirkuit. */
+  devices_cooling: number;
 }
 
 export interface DeviceMonitorRow {
@@ -105,6 +114,10 @@ const EMPTY: AdminOverview = {
   earnings_total: 0,
   withdrawal_pending: 0,
   withdrawal_paid: 0,
+  retry_total: 0,
+  retry_near_limit: 0,
+  retry_max: RETRY_MAX_ATTEMPTS,
+  devices_cooling: 0,
 };
 
 /** Ringkasan monitoring untuk dasbor admin. */
@@ -137,6 +150,35 @@ export const getAdminOverview = createServerFn({ method: "GET" })
     } catch {
       // biarkan nilai dari RPC bila pembersihan gagal
     }
+
+    // Kartu "Diulang otomatis" dan "Perangkat didinginkan" (butuh migrasi 024). Blok terpisah supaya
+    // galat di sini (mis. migrasi belum dijalankan) tidak mengganggu angka utama; hasilnya tetap nol.
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const admin = supabaseAdmin as any;
+      const [retry, nearLimit, cooling] = await Promise.all([
+        admin
+          .from("message_queue")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending")
+          .gt("attempts", 0),
+        admin
+          .from("message_queue")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending")
+          .gte("attempts", RETRY_MAX_ATTEMPTS - 2),
+        admin
+          .from("wa_sessions")
+          .select("id", { count: "exact", head: true })
+          .gt("cooldown_until", new Date().toISOString()),
+      ]);
+      overview.retry_total = retry.error ? 0 : (retry.count ?? 0);
+      overview.retry_near_limit = nearLimit.error ? 0 : (nearLimit.count ?? 0);
+      overview.devices_cooling = cooling.error ? 0 : (cooling.count ?? 0);
+    } catch {
+      // biarkan nol
+    }
+    overview.retry_max = RETRY_MAX_ATTEMPTS;
 
     return overview;
   });

@@ -185,6 +185,23 @@ function RingkasanPage() {
         />
       </div>
 
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <StatTile
+          label="Diulang otomatis"
+          value={angka(overview?.retry_total ?? 0)}
+          hint={`Dicoba ulang otomatis (maks. ${overview?.retry_max ?? 8}×) · ${angka(overview?.retry_near_limit ?? 0)} hampir habis`}
+          icon={RefreshCw}
+          tone={(overview?.retry_near_limit ?? 0) > 0 ? "danger" : "warning"}
+        />
+        <StatTile
+          label="Perangkat didinginkan"
+          value={angka(overview?.devices_cooling ?? 0)}
+          hint="Ditahan sementara setelah penolakan atau putus berulang"
+          icon={Smartphone}
+          tone={(overview?.devices_cooling ?? 0) > 0 ? "warning" : "muted"}
+        />
+      </div>
+
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Panel
           title="Kampanye berjalan"
