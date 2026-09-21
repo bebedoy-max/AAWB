@@ -84,10 +84,10 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           .eq("status", "running");
         if (!running) return json({ ok: true, running_campaigns: 0, devices: 0 });
 
-        type Device = { id: string; user_id: string; blast_speed: string | null };
+        type Device = { id: string; user_id: string; blast_speed: string | null; phone_number?: string | null };
         const { data: onlineRows, error } = await supabaseAdmin
           .from("wa_sessions")
-          .select("id,user_id,blast_speed")
+          .select("id,user_id,blast_speed,phone_number")
           .eq("blast_ready", true)
           .eq("status", "connected")
           .order("last_ping", { ascending: true, nullsFirst: true })
@@ -96,7 +96,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
 
         const { data: offlineRows } = await supabaseAdmin
           .from("wa_sessions")
-          .select("id,user_id,blast_speed")
+          .select("id,user_id,blast_speed,phone_number")
           .eq("blast_ready", true)
           .neq("status", "connected")
           .limit(200);
@@ -109,7 +109,23 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           .slice(0, OFFLINE_PER_RUN);
         for (const d of offlineDue) lastOfflineTry.set(d.id, nowMs);
 
-        const online = (onlineRows ?? []) as Device[];
+        // Satu nomor WhatsApp = satu alur kirim. Nomor yang sama bisa terpasang di beberapa sesi
+        // (sampai 4 perangkat tertaut); dulu tiap sesi mengirim sendiri sehingga laju nomor itu
+        // berlipat. Hanya sesi pertama (paling lama tidak dilayani) yang ikut; sesi kembarannya
+        // melepas tugasnya ke kolam.
+        const digitsOf = (v: string | null | undefined) => String(v ?? "").replace(/\D/g, "");
+        const seenPhones = new Set<string>();
+        const online: Device[] = [];
+        const twins: Device[] = [];
+        for (const d of (onlineRows ?? []) as Device[]) {
+          const phone = digitsOf(d.phone_number);
+          if (phone && seenPhones.has(phone)) {
+            twins.push(d);
+            continue;
+          }
+          if (phone) seenPhones.add(phone);
+          online.push(d);
+        }
         const oneShotIds = new Set(offlineDue.map((d) => d.id));
         const devices: Device[] = [...online, ...offlineDue];
         if (!devices.length) return json({ ok: true, running_campaigns: running, devices: 0 });
@@ -124,6 +140,19 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
         void (async () => {
           const startedAt = Date.now();
           try {
+            if (twins.length) {
+              await Promise.all(
+                twins.map(async (d) => {
+                  const { error: releaseError } = await supabaseAdmin.rpc("release_device_rows", {
+                    _session_id: d.id,
+                  });
+                  if (releaseError) {
+                    console.error(`[blast-devices] melepas tugas sesi kembar ${d.id} gagal:`, releaseError.message);
+                  }
+                }),
+              );
+              console.log(`[blast-devices] ${twins.length} sesi kembar (nomor sama) dilewati, tugasnya dilepas`);
+            }
             const results = await Promise.all(
               devices.map(async (device) => {
                 let sent = 0;
@@ -181,7 +210,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
               { sent: 0, failed: 0 },
             );
             console.log(
-              `[blast-devices] putaran selesai: ${online.length} tersambung + ${offlineDue.length} sambung-ulang, terkirim=${total.sent}, gagal=${total.failed}`,
+              `[blast-devices] putaran selesai: ${online.length} tersambung (${twins.length} kembar dilewati) + ${offlineDue.length} sambung-ulang, terkirim=${total.sent}, gagal=${total.failed}`,
             );
           } catch (error) {
             console.error("[blast-devices] putaran gagal:", error instanceof Error ? error.message : error);
@@ -191,7 +220,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
         })();
 
         return json(
-          { ok: true, started: true, running_campaigns: running, devices: devices.length },
+          { ok: true, started: true, running_campaigns: running, devices: devices.length, twins_skipped: twins.length },
           202,
         );
       },

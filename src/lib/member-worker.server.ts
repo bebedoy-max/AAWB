@@ -17,7 +17,8 @@ import { buildMessageBody } from "@/lib/whatsapp";
 import type { MediaType, TemplateButton } from "@/types/wa";
 
 const TICK_BUDGET_MS = 20_000;
-const CLAIM_SIZE = 25;
+// Diperkecil dari 25: dengan jeda aman per nomor, perangkat lambat tidak boleh menimbun banyak nomor.
+const CLAIM_SIZE = 5;
 const MAX_ATTEMPTS = 3; // galat lain-lain (bukan masalah perangkat)
 const RETRY_BASE_DELAY_MS = 5_000;
 
@@ -110,6 +111,137 @@ export interface BlastTickResult {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/* ---------------------------------------------------------------------------------------------
+ * LAJU AMAN PER NOMOR (perbaikan "ghost chat")
+ *
+ * Temuan 21 Sep 2026: satu nomor WhatsApp dipasang sebagai beberapa sesi (sampai 4 perangkat
+ * tertaut), dan tiap sesi mengirim sendiri dengan jeda mode Kilat/Brutal. Hasilnya satu nomor
+ * mengirim ~1 pesan/detik ke orang asing. Aturan baru, dipaksa di server:
+ *  1. Satu nomor = satu alur kirim, berapa pun sesinya (kunci di memori proses).
+ *  2. Jeda acak antar pesan per NOMOR, dihitung dari sent_at terakhir nomor itu di database,
+ *     sehingga berlaku lintas tick, lintas putaran cron, dan lintas sesi.
+ *  3. Batas pesan per jam per nomor.
+ *  4. Pemanasan: nomor yang baru mengirim sedikit pesan memakai jeda lebih panjang.
+ * Mode kecepatan worker hanya bisa MEMPERLAMBAT, tidak bisa lebih cepat dari batas ini.
+ * Angka dibaca dari app_settings (baris 'global'); bila kolom belum ada, dipakai nilai bawaan.
+ * ------------------------------------------------------------------------------------------- */
+interface PacingSettings {
+  minSec: number;
+  maxSec: number;
+  hourlyCap: number;
+  warmupCount: number;
+  warmupMinSec: number;
+  warmupMaxSec: number;
+}
+const PACING_DEFAULTS: PacingSettings = {
+  minSec: 8,
+  maxSec: 20,
+  hourlyCap: 40,
+  warmupCount: 20,
+  warmupMinSec: 30,
+  warmupMaxSec: 60,
+};
+/** Batas bawah mutlak: pengaturan apa pun tidak bisa membuat jeda di bawah ini. */
+const HARD_MIN_DELAY_SEC = 4;
+const PACING_CACHE_MS = 60_000;
+let pacingCache: { value: PacingSettings; at: number } | null = null;
+
+function clampNum(v: unknown, fallback: number, min: number, max: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+async function loadPacing(supabase: SupabaseClient): Promise<PacingSettings> {
+  if (pacingCache && Date.now() - pacingCache.at < PACING_CACHE_MS) return pacingCache.value;
+  let value = PACING_DEFAULTS;
+  try {
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select(
+        "blast_min_delay_sec,blast_max_delay_sec,blast_hourly_cap,blast_warmup_count,blast_warmup_min_sec,blast_warmup_max_sec",
+      )
+      .eq("id", "global")
+      .maybeSingle();
+    if (error) {
+      console.error("[blast] pengaturan laju tidak terbaca (SQL 025 sudah dijalankan?), pakai bawaan:", error.message);
+    } else if (data) {
+      const d = data as Record<string, unknown>;
+      const minSec = clampNum(d.blast_min_delay_sec, PACING_DEFAULTS.minSec, HARD_MIN_DELAY_SEC, 3600);
+      const warmupMinSec = clampNum(d.blast_warmup_min_sec, PACING_DEFAULTS.warmupMinSec, minSec, 3600);
+      value = {
+        minSec,
+        maxSec: clampNum(d.blast_max_delay_sec, PACING_DEFAULTS.maxSec, minSec, 3600),
+        hourlyCap: clampNum(d.blast_hourly_cap, PACING_DEFAULTS.hourlyCap, 1, 1000),
+        warmupCount: clampNum(d.blast_warmup_count, PACING_DEFAULTS.warmupCount, 0, 10_000),
+        warmupMinSec,
+        warmupMaxSec: clampNum(d.blast_warmup_max_sec, PACING_DEFAULTS.warmupMaxSec, warmupMinSec, 3600),
+      };
+    }
+  } catch (err) {
+    console.error("[blast] pengaturan laju gagal dibaca, pakai bawaan:", err instanceof Error ? err.message : err);
+  }
+  pacingCache = { value, at: Date.now() };
+  return value;
+}
+
+/** Jeda berikutnya (ms) untuk satu nomor. Mode kecepatan hanya boleh memperlambat. */
+function pickDelayMs(p: PacingSettings, sentTotal: number, speed: string): number {
+  const warm = sentTotal < p.warmupCount;
+  const lo = warm ? p.warmupMinSec : p.minSec;
+  const hi = warm ? p.warmupMaxSec : p.maxSec;
+  const ms = Math.round((lo + Math.random() * Math.max(0, hi - lo)) * 1000);
+  return Math.max(ms, speedDelayMs(speed), HARD_MIN_DELAY_SEC * 1000);
+}
+
+interface PhoneStats {
+  lastHour: number;
+  total: number;
+  lastSentAt: number; // epoch ms; 0 = belum pernah
+}
+
+/** Riwayat kirim satu nomor dari database (berlaku lintas sesi dan lintas putaran). */
+async function phoneStats(supabase: SupabaseClient, phone: string): Promise<PhoneStats> {
+  const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
+  const [hour, total, last] = await Promise.all([
+    supabase
+      .from("message_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("sender_phone", phone)
+      .eq("status", "sent")
+      .gte("sent_at", hourAgo),
+    supabase
+      .from("message_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("sender_phone", phone)
+      .eq("status", "sent"),
+    supabase
+      .from("message_queue")
+      .select("sent_at")
+      .eq("sender_phone", phone)
+      .eq("status", "sent")
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  logDbError("menghitung pesan per jam", hour.error);
+  logDbError("menghitung total pesan nomor", total.error);
+  const lastIso = (last.data as { sent_at?: string | null } | null)?.sent_at ?? null;
+  return {
+    lastHour: hour.count ?? 0,
+    total: total.count ?? 0,
+    lastSentAt: lastIso ? new Date(lastIso).getTime() : 0,
+  };
+}
+
+/** Nomor yang sedang punya alur kirim aktif di proses ini. Satu nomor = satu alur. */
+const activePhones = new Set<string>();
+
+async function releaseRows(supabase: SupabaseClient, sessionId: string): Promise<void> {
+  const { error } = await supabase.rpc("release_device_rows", { _session_id: sessionId });
+  logDbError("melepas tugas perangkat", error);
+}
+
 async function ensureConnected(
   supabase: SupabaseClient,
   sessionId: string,
@@ -186,7 +318,7 @@ export async function processBlastTick(
     .eq("id", sessionId)
     .maybeSingle();
   const cooldownUntil = (health as { cooldown_until?: string | null } | null)?.cooldown_until ?? null;
-  let failStreak = Number((health as { fail_streak?: number | null } | null)?.fail_streak ?? 0);
+  const failStreak = Number((health as { fail_streak?: number | null } | null)?.fail_streak ?? 0);
   if (cooldownUntil && new Date(cooldownUntil).getTime() > Date.now()) {
     return {
       claimed: 0,
@@ -194,6 +326,56 @@ export async function processBlastTick(
       failed: 0,
       remaining: 0,
       error: `Perangkat didinginkan sampai ${hhmm(cooldownUntil)} WIB (kegagalan beruntun)`,
+    };
+  }
+
+  // Satu nomor = satu alur kirim. Sesi lain dengan nomor yang sama melepas tugasnya dan menunggu.
+  const pacingKey = senderPhone ? `phone:${senderPhone}` : `session:${sessionId}`;
+  if (activePhones.has(pacingKey)) {
+    await releaseRows(supabase, sessionId);
+    return {
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      remaining: 0,
+      error: "Nomor ini sedang mengirim lewat perangkat lain (satu nomor hanya boleh satu alur kirim)",
+    };
+  }
+  activePhones.add(pacingKey);
+  try {
+    return await runTick(supabase, sessionId, speed, ownerId, senderPhone, failStreak);
+  } finally {
+    activePhones.delete(pacingKey);
+  }
+}
+
+async function runTick(
+  supabase: SupabaseClient,
+  sessionId: string,
+  speed: string,
+  ownerId: string,
+  senderPhone: string | null,
+  initialFailStreak: number,
+): Promise<BlastTickResult> {
+  let failStreak = initialFailStreak;
+  const pacing = await loadPacing(supabase);
+  // Tanpa nomor (jarang terjadi saat tersambung) riwayat tidak bisa dihitung: pakai jeda pemanasan.
+  const stats: PhoneStats = senderPhone
+    ? await phoneStats(supabase, senderPhone)
+    : { lastHour: 0, total: 0, lastSentAt: 0 };
+  let sentLastHour = stats.lastHour;
+  let sentTotal = stats.total;
+  let nextAllowedAt = stats.lastSentAt ? stats.lastSentAt + pickDelayMs(pacing, sentTotal, speed) : 0;
+
+  // Batas per jam tercapai: jangan mengambil pekerjaan, lepaskan yang sudah diambil.
+  if (sentLastHour >= pacing.hourlyCap) {
+    await releaseRows(supabase, sessionId);
+    return {
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      remaining: 0,
+      error: `Batas ${pacing.hourlyCap} pesan per jam untuk nomor ini tercapai — dilanjutkan otomatis`,
     };
   }
 
@@ -281,6 +463,25 @@ export async function processBlastTick(
     for (const item of queue) {
       if (stop || Date.now() - startedAt >= TICK_BUDGET_MS) break;
 
+      // Batas per jam per nomor.
+      if (sentLastHour >= pacing.hourlyCap) {
+        await releaseRows(supabase, sessionId);
+        note = `Batas ${pacing.hourlyCap} pesan per jam untuk nomor ini tercapai — dilanjutkan otomatis`;
+        stop = true;
+        break;
+      }
+      // Jeda aman per nomor. Bila jedanya melewati sisa anggaran tick, berhenti; putaran berikutnya
+      // menghitung ulang dari sent_at terakhir di database, jadi jeda tetap terjaga.
+      const wait = nextAllowedAt - Date.now();
+      if (wait > 0) {
+        if (Date.now() + wait - startedAt >= TICK_BUDGET_MS) {
+          note = `Menunggu jeda aman (${Math.ceil(wait / 1000)} detik)`;
+          stop = true;
+          break;
+        }
+        await sleep(wait);
+      }
+
       // Kunci baris. attempt_id mengikat penyelesaian ke percobaan INI: bila baris sudah
       // dikembalikan sapuan lalu diambil perangkat lain, penyelesaian terlambat tidak menimpanya.
       const attemptId = randomUUID();
@@ -353,6 +554,8 @@ export async function processBlastTick(
         });
         if (creditError) console.error("[blast] credit_message_reward gagal:", creditError.message);
         sent += 1;
+        sentLastHour += 1;
+        sentTotal += 1;
         if (failStreak > 0) {
           failStreak = 0;
           const { error: okError } = await supabase.rpc("device_ok", { _session_id: sessionId });
@@ -434,7 +637,8 @@ export async function processBlastTick(
         }
       }
 
-      await sleep(speedDelayMs(speed));
+      // Jeda berikutnya berlaku untuk hasil apa pun (terkirim maupun gagal).
+      nextAllowedAt = Date.now() + pickDelayMs(pacing, sentTotal, speed);
     }
   }
 
