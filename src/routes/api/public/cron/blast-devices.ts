@@ -8,7 +8,10 @@ import { json } from "@/lib/supabase-user.server";
  * worker yang terbuka. Setiap perangkat yang sudah ditekan "Start" oleh
  * worker dijalankan pada alur sendiri dan tidak saling menunggu.
  */
-const RUN_BUDGET_MS = 50_000;
+// 45 detik: putaran (termasuk satu pengiriman terakhir yang sedang berjalan) harus selesai sebelum
+// panggilan cron berikutnya (tiap 60 detik). Kalau melewati 60 detik, panggilan berikutnya dilewati
+// ("putaran sebelumnya masih berjalan") dan perangkat menganggur hampir satu menit penuh.
+const RUN_BUDGET_MS = 45_000;
 
 /**
  * Penjadwal eksternal (cron-job.org) hanya menunggu sekitar 30 detik lalu menandai
@@ -139,6 +142,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
 
         void (async () => {
           const startedAt = Date.now();
+          const deadlineAt = startedAt + RUN_BUDGET_MS;
           try {
             if (twins.length) {
               await Promise.all(
@@ -161,7 +165,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
                 let lastError: string | undefined;
                 // Loop per perangkat: terus mengirim sampai anggaran waktu habis,
                 // perangkat dihentikan worker, atau kampanye tidak berjalan lagi.
-                while (Date.now() - startedAt < RUN_BUDGET_MS) {
+                while (Date.now() < deadlineAt - 1_000) {
                   const { data: fresh } = await supabaseAdmin
                     .from("wa_sessions")
                     .select("blast_ready,blast_speed")
@@ -180,6 +184,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
                       device.id,
                       row.blast_speed ?? device.blast_speed ?? "santai",
                       device.user_id,
+                      deadlineAt,
                     );
                   } catch (error) {
                     // Galat satu perangkat tidak boleh menghentikan perangkat lain.

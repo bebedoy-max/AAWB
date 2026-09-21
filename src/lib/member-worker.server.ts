@@ -132,6 +132,8 @@ interface PacingSettings {
   warmupCount: number;
   warmupMinSec: number;
   warmupMaxSec: number;
+  /** Maks pesan per 24 jam per nomor. 0 = tidak dibatasi. */
+  dailyCap: number;
 }
 const PACING_DEFAULTS: PacingSettings = {
   minSec: 8,
@@ -140,6 +142,7 @@ const PACING_DEFAULTS: PacingSettings = {
   warmupCount: 20,
   warmupMinSec: 30,
   warmupMaxSec: 60,
+  dailyCap: 1000,
 };
 /** Batas bawah mutlak: pengaturan apa pun tidak bisa membuat jeda di bawah ini. */
 const HARD_MIN_DELAY_SEC = 4;
@@ -158,9 +161,9 @@ async function loadPacing(supabase: SupabaseClient): Promise<PacingSettings> {
   try {
     const { data, error } = await supabase
       .from("app_settings")
-      .select(
-        "blast_min_delay_sec,blast_max_delay_sec,blast_hourly_cap,blast_warmup_count,blast_warmup_min_sec,blast_warmup_max_sec",
-      )
+      // "*" supaya kolom pengaturan yang belum ada (SQL belum dijalankan) tidak menggagalkan
+      // seluruh pembacaan; kolom yang tidak ada memakai nilai bawaan.
+      .select("*")
       .eq("id", "global")
       .maybeSingle();
     if (error) {
@@ -176,6 +179,7 @@ async function loadPacing(supabase: SupabaseClient): Promise<PacingSettings> {
         warmupCount: clampNum(d.blast_warmup_count, PACING_DEFAULTS.warmupCount, 0, 10_000),
         warmupMinSec,
         warmupMaxSec: clampNum(d.blast_warmup_max_sec, PACING_DEFAULTS.warmupMaxSec, warmupMinSec, 3600),
+        dailyCap: clampNum(d.blast_daily_cap, PACING_DEFAULTS.dailyCap, 0, 100_000),
       };
     }
   } catch (err) {
@@ -196,6 +200,7 @@ function pickDelayMs(p: PacingSettings, sentTotal: number, speed: string): numbe
 
 interface PhoneStats {
   lastHour: number;
+  lastDay: number;
   total: number;
   lastSentAt: number; // epoch ms; 0 = belum pernah
 }
@@ -203,13 +208,20 @@ interface PhoneStats {
 /** Riwayat kirim satu nomor dari database (berlaku lintas sesi dan lintas putaran). */
 async function phoneStats(supabase: SupabaseClient, phone: string): Promise<PhoneStats> {
   const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
-  const [hour, total, last] = await Promise.all([
+  const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+  const [hour, day, total, last] = await Promise.all([
     supabase
       .from("message_queue")
       .select("id", { count: "exact", head: true })
       .eq("sender_phone", phone)
       .eq("status", "sent")
       .gte("sent_at", hourAgo),
+    supabase
+      .from("message_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("sender_phone", phone)
+      .eq("status", "sent")
+      .gte("sent_at", dayAgo),
     supabase
       .from("message_queue")
       .select("id", { count: "exact", head: true })
@@ -225,10 +237,12 @@ async function phoneStats(supabase: SupabaseClient, phone: string): Promise<Phon
       .maybeSingle(),
   ]);
   logDbError("menghitung pesan per jam", hour.error);
+  logDbError("menghitung pesan per hari", day.error);
   logDbError("menghitung total pesan nomor", total.error);
   const lastIso = (last.data as { sent_at?: string | null } | null)?.sent_at ?? null;
   return {
     lastHour: hour.count ?? 0,
+    lastDay: day.count ?? 0,
     total: total.count ?? 0,
     lastSentAt: lastIso ? new Date(lastIso).getTime() : 0,
   };
@@ -296,6 +310,12 @@ export async function processBlastTick(
   sessionId: string,
   speed: string,
   ownerId: string,
+  /**
+   * Batas waktu (epoch ms) putaran pemanggil. Bila diisi (cron blast-devices), tick terus bekerja
+   * dan menunggu jeda DI DALAM tick sampai batas ini, alih-alih berhenti tiap 20 detik lalu
+   * menganggur sampai panggilan cron berikutnya.
+   */
+  deadlineAt?: number,
 ): Promise<BlastTickResult> {
   const connection = await ensureConnected(supabase, sessionId);
   // Nomor perangkat pengirim disimpan di setiap baris terkirim agar laporan
@@ -343,7 +363,7 @@ export async function processBlastTick(
   }
   activePhones.add(pacingKey);
   try {
-    return await runTick(supabase, sessionId, speed, ownerId, senderPhone, failStreak);
+    return await runTick(supabase, sessionId, speed, ownerId, senderPhone, failStreak, deadlineAt);
   } finally {
     activePhones.delete(pacingKey);
   }
@@ -356,16 +376,30 @@ async function runTick(
   ownerId: string,
   senderPhone: string | null,
   initialFailStreak: number,
+  deadlineAt?: number,
 ): Promise<BlastTickResult> {
   let failStreak = initialFailStreak;
   const pacing = await loadPacing(supabase);
   // Tanpa nomor (jarang terjadi saat tersambung) riwayat tidak bisa dihitung: pakai jeda pemanasan.
   const stats: PhoneStats = senderPhone
     ? await phoneStats(supabase, senderPhone)
-    : { lastHour: 0, total: 0, lastSentAt: 0 };
+    : { lastHour: 0, lastDay: 0, total: 0, lastSentAt: 0 };
   let sentLastHour = stats.lastHour;
+  let sentLastDay = stats.lastDay;
   let sentTotal = stats.total;
   let nextAllowedAt = stats.lastSentAt ? stats.lastSentAt + pickDelayMs(pacing, sentTotal, speed) : 0;
+
+  // Batas per hari tercapai: jangan mengambil pekerjaan, lepaskan yang sudah diambil.
+  if (pacing.dailyCap > 0 && sentLastDay >= pacing.dailyCap) {
+    await releaseRows(supabase, sessionId);
+    return {
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      remaining: 0,
+      error: `Batas ${pacing.dailyCap} pesan per hari untuk nomor ini tercapai — dilanjutkan otomatis besok`,
+    };
+  }
 
   // Batas per jam tercapai: jangan mengambil pekerjaan, lepaskan yang sudah diambil.
   if (sentLastHour >= pacing.hourlyCap) {
@@ -392,6 +426,11 @@ async function runTick(
   }
 
   const startedAt = Date.now();
+  // Akhir kerja tick ini: batas putaran pemanggil bila ada, selain itu 20 detik (jalur lama).
+  const budgetEnd = deadlineAt ?? startedAt + TICK_BUDGET_MS;
+  const timeLeft = () => budgetEnd - Date.now();
+  // Saklar "Start/Stop" worker dibaca ulang berkala, karena tick kini bisa berjalan hingga ±45 detik.
+  let lastReadyCheck = Date.now();
   let sent = 0;
   let failed = 0;
   let note: string | undefined;
@@ -432,7 +471,16 @@ async function runTick(
   }
 
   let stop = false;
-  while (!stop && Date.now() - startedAt < TICK_BUDGET_MS) {
+  while (!stop && timeLeft() > 0) {
+    if (Date.now() - lastReadyCheck > 15_000) {
+      lastReadyCheck = Date.now();
+      const { data: ready } = await supabase
+        .from("wa_sessions")
+        .select("blast_ready")
+        .eq("id", sessionId)
+        .maybeSingle();
+      if (!(ready as { blast_ready?: boolean | null } | null)?.blast_ready) break;
+    }
     const { data: batch } = await supabase
       .from("message_queue")
       .select("id,campaign_id,recipient_phone,message_body,attempts")
@@ -456,13 +504,23 @@ async function runTick(
       // ada kampanye aktif, perangkat terus mencari pekerjaan.
       const got = await claimBatch(supabase, sessionId, ownerId);
       claimed += got;
-      if (!got) await sleep(1500);
+      if (!got) {
+        if (timeLeft() < 5_000) break;
+        await sleep(5_000);
+      }
       continue;
     }
 
     for (const item of queue) {
-      if (stop || Date.now() - startedAt >= TICK_BUDGET_MS) break;
+      if (stop || timeLeft() <= 0) break;
 
+      // Batas per hari per nomor.
+      if (pacing.dailyCap > 0 && sentLastDay >= pacing.dailyCap) {
+        await releaseRows(supabase, sessionId);
+        note = `Batas ${pacing.dailyCap} pesan per hari untuk nomor ini tercapai — dilanjutkan otomatis besok`;
+        stop = true;
+        break;
+      }
       // Batas per jam per nomor.
       if (sentLastHour >= pacing.hourlyCap) {
         await releaseRows(supabase, sessionId);
@@ -474,7 +532,7 @@ async function runTick(
       // menghitung ulang dari sent_at terakhir di database, jadi jeda tetap terjaga.
       const wait = nextAllowedAt - Date.now();
       if (wait > 0) {
-        if (Date.now() + wait - startedAt >= TICK_BUDGET_MS) {
+        if (wait >= timeLeft()) {
           note = `Menunggu jeda aman (${Math.ceil(wait / 1000)} detik)`;
           stop = true;
           break;
@@ -555,6 +613,7 @@ async function runTick(
         if (creditError) console.error("[blast] credit_message_reward gagal:", creditError.message);
         sent += 1;
         sentLastHour += 1;
+        sentLastDay += 1;
         sentTotal += 1;
         if (failStreak > 0) {
           failStreak = 0;
