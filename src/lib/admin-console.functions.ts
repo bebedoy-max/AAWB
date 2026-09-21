@@ -824,21 +824,46 @@ export const listReport = createServerFn({ method: "POST" })
     // Laporan harus mencakup semua data, bukan hanya 1.000 terbaru.
     const selectCols =
       "id,campaign_id,session_id,user_id,claimed_by,recipient_phone,message_body,status,error_log,sent_at,created_at,sender_phone";
+    //
+    // PERBAIKAN baris dobel (21 Sep 2026): dulu diurutkan HANYA dengan created_at, padahal ribuan
+    // baris satu kampanye dibuat dalam satu insert sehingga created_at-nya identik. Urutan baris
+    // yang nilainya sama tidak dijamin tetap antar-permintaan, jadi satu baris bisa terambil di dua
+    // halaman (tampil dobel) dan baris lain terlewat. Ditambah lagi, filter status "processing" di
+    // query membuat isi halaman bergeser saat kampanye berjalan. Sekarang:
+    //  - urutan selalu unik: created_at, lalu id sebagai pemutus seri;
+    //  - hanya status akhir (terkirim/gagal) yang diambil, lihat catatan di bawah;
+    //  - hasil diduplikasi-hapus berdasarkan id sebagai pengaman terakhir.
+    //
+    // Laporan HANYA berisi hasil akhir (terkirim atau gagal). Pesan yang masih menunggu tidak
+    // ditarik baris per baris (bisa ratusan ribu); jumlahnya dihitung langsung di database.
+    // Himpunan terkirim/gagal hanya bertambah selama pengambilan, sehingga pergeseran halaman
+    // paling-paling menghasilkan baris ganda, dan itu disaring lewat id.
     const PAGE = 1000;
-    const rows: any[] = [];
+    const byId = new Map<string, any>();
     for (let from = 0; ; from += PAGE) {
       let query = admin
         .from("message_queue")
         .select(selectCols)
-        .neq("status", "processing")
+        .in("status", ["sent", "failed"])
         .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .range(from, from + PAGE - 1);
       if (data.campaignId) query = query.eq("campaign_id", data.campaignId);
       const { data: chunk, error } = await query;
       if (error) throw new Error(error.message);
-      rows.push(...((chunk ?? []) as any[]));
+      for (const r of (chunk ?? []) as any[]) if (!byId.has(r.id)) byId.set(r.id, r);
       if (!chunk || chunk.length < PAGE) break;
     }
+    const rows: any[] = [...byId.values()].filter((r) => r.status === "sent" || r.status === "failed");
+
+    // Jumlah pesan yang masih menunggu: dihitung di database, tanpa menarik barisnya.
+    let pendingQuery = admin
+      .from("message_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    if (data.campaignId) pendingQuery = pendingQuery.eq("campaign_id", data.campaignId);
+    const { count: pendingCount, error: pendingError } = await pendingQuery;
+    if (pendingError) throw new Error(pendingError.message);
 
 
     const { data: sessions } = await admin
@@ -898,7 +923,7 @@ export const listReport = createServerFn({ method: "POST" })
       }),
       sent: list.filter((r) => r.status === "sent").length,
       failed: list.filter((r) => r.status === "failed").length,
-      ready: list.filter((r) => r.status === "pending").length,
+      ready: Number(pendingCount ?? 0),
 
     };
   });
