@@ -8,10 +8,10 @@ import { json } from "@/lib/supabase-user.server";
  * worker yang terbuka. Setiap perangkat yang sudah ditekan "Start" oleh
  * worker dijalankan pada alur sendiri dan tidak saling menunggu.
  */
-// 45 detik: putaran (termasuk satu pengiriman terakhir yang sedang berjalan) harus selesai sebelum
+// 50 detik: putaran (termasuk satu pengiriman terakhir yang sedang berjalan) harus selesai sebelum
 // panggilan cron berikutnya (tiap 60 detik). Kalau melewati 60 detik, panggilan berikutnya dilewati
 // ("putaran sebelumnya masih berjalan") dan perangkat menganggur hampir satu menit penuh.
-const RUN_BUDGET_MS = 45_000;
+const RUN_BUDGET_MS = 50_000;
 
 /**
  * Penjadwal eksternal (cron-job.org) hanya menunggu sekitar 30 detik lalu menandai

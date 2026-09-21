@@ -17,8 +17,9 @@ import { buildMessageBody } from "@/lib/whatsapp";
 import type { MediaType, TemplateButton } from "@/types/wa";
 
 const TICK_BUDGET_MS = 20_000;
-// Diperkecil dari 25: dengan jeda aman per nomor, perangkat lambat tidak boleh menimbun banyak nomor.
-const CLAIM_SIZE = 5;
+// Nomor yang diambil sekaligus per perangkat. 10: cukup untuk laju cepat (pengambilan tidak terlalu
+// sering), tetapi perangkat lambat tidak menimbun banyak nomor.
+const CLAIM_SIZE = 10;
 const MAX_ATTEMPTS = 3; // galat lain-lain (bukan masalah perangkat)
 const RETRY_BASE_DELAY_MS = 5_000;
 
@@ -144,8 +145,11 @@ const PACING_DEFAULTS: PacingSettings = {
   warmupMaxSec: 60,
   dailyCap: 1000,
 };
-/** Batas bawah mutlak: pengaturan apa pun tidak bisa membuat jeda di bawah ini. */
-const HARD_MIN_DELAY_SEC = 4;
+/**
+ * Batas bawah mutlak jeda (detik). Diturunkan dari 4 ke 1 atas keputusan owner (target ±30 pesan/menit
+ * untuk nomor mapan). Jeda sebenarnya diatur lewat app_settings; nilai 4 di sana = perilaku lama.
+ */
+const HARD_MIN_DELAY_SEC = 1;
 const PACING_CACHE_MS = 60_000;
 let pacingCache: { value: PacingSettings; at: number } | null = null;
 
