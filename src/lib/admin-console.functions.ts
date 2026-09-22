@@ -814,6 +814,17 @@ export const listReport = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
+    // Pembersihan otomatis: riwayat selesai (terkirim/gagal) yang umurnya sudah
+    // lebih dari 3 bulan dihapus. Tidak ada penghapusan manual lagi.
+    {
+      const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      await admin
+        .from("message_queue")
+        .delete()
+        .in("status", ["sent", "failed"])
+        .lt("created_at", cutoff);
+    }
+
     // Catatan: pesan macet di "processing" TIDAK lagi ditandai gagal di sini. Dulu pembersihan ini
     // memakai waktu baris DIBUAT (bukan waktu diproses) dan hanya jalan saat laporan dibuka, sehingga
     // pesan yang sedang berjalan ikut ditandai gagal. Sekarang ditangani sapuan terjadwal

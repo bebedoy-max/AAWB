@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { CheckCircle2, Clock, Download, RefreshCw, Search, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Download, RefreshCw, Search, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +29,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  clearReportHistory,
   listCampaignOptions,
   listReport,
 } from "@/lib/admin-console.functions";
@@ -116,7 +115,6 @@ const PAGE_SIZE = 20;
 function LaporanPage() {
   const fetchOptions = useServerFn(listCampaignOptions);
   const fetchReport = useServerFn(listReport);
-  const clearHistory = useServerFn(clearReportHistory);
 
   const [campaignId, setCampaignId] = useState("all");
   const [dateMode, setDateMode] = useState<"all" | "month" | "custom">("all");
@@ -125,8 +123,6 @@ function LaporanPage() {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<ReportRow | null>(null);
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [clearing, setClearing] = useState(false);
 
   const { data: campaigns } = useQuery({
     queryKey: ["admin-campaign-options"],
@@ -312,41 +308,16 @@ function LaporanPage() {
     win.print();
   };
 
-  const handleClear = async () => {
-    setClearing(true);
-    try {
-      await clearHistory();
-      toast.success("Riwayat pengiriman dihapus");
-      setConfirmClear(false);
-      setDetail(null);
-      setPage(1);
-      refetch();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setClearing(false);
-    }
-  };
-
   return (
     <>
       <AdminPageTitle
         title="Laporan Pengiriman"
-        description="Seluruh riwayat pengiriman beserta status dan penyebab kegagalan."
+        description="Seluruh riwayat pengiriman beserta status dan penyebab kegagalan. Riwayat lebih dari 3 bulan terhapus otomatis."
         action={
           <>
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
               <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
               Muat ulang
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={() => setConfirmClear(true)}
-            >
-              <Trash2 className="mr-2 size-4" />
-              Bersihkan riwayat
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -588,26 +559,6 @@ function LaporanPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={confirmClear} onOpenChange={(o) => !clearing && setConfirmClear(o)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Bersihkan riwayat?</DialogTitle>
-            <DialogDescription>
-              Riwayat terkirim dan gagal akan dihapus permanen, termasuk antrean menunggu dari
-              kampanye yang sudah tidak berjalan. Antrean kampanye yang sedang berjalan tetap aman.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" size="sm" onClick={() => setConfirmClear(false)} disabled={clearing}>
-              Batal
-            </Button>
-            <Button variant="destructive" size="sm" onClick={handleClear} disabled={clearing}>
-              <Trash2 className="mr-2 size-4" />
-              {clearing ? "Menghapus…" : "Ya, hapus semua"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

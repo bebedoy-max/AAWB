@@ -84,6 +84,7 @@ const PRESETS = [
 ] as const;
 
 const MEDALS = ["🥇", "🥈", "🥉"];
+const WORKER_PER_PAGE = 20;
 
 function tanggal(value: string): string {
   return new Date(`${value}T00:00:00Z`).toLocaleDateString("id-ID", {
@@ -100,6 +101,7 @@ function KeuanganPage() {
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
   const [cari, setCari] = useState("");
+  const [workerPageRaw, setWorkerPage] = useState(0);
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["finance-report", from, to],
@@ -108,13 +110,14 @@ function KeuanganPage() {
 
   function pilihPreset(value: string) {
     setPreset(value);
+    setWorkerPage(0);
     if (value === "custom") return;
     const r = rangeFor(value);
     setFrom(r.from);
     setTo(r.to);
   }
 
-  const workers = useMemo(() => {
+  const filteredWorkers = useMemo(() => {
     const q = cari.trim().toLowerCase();
     const list = data?.workers ?? [];
     if (!q) return list;
@@ -122,6 +125,14 @@ function KeuanganPage() {
       (w) => w.name.toLowerCase().includes(q) || w.email.toLowerCase().includes(q),
     );
   }, [data, cari]);
+
+  const workerTotal = filteredWorkers.length;
+  const workerTotalPages = Math.max(1, Math.ceil(workerTotal / WORKER_PER_PAGE));
+  const workerPage = Math.min(workerPageRaw, workerTotalPages - 1);
+  const workerRows = filteredWorkers.slice(
+    workerPage * WORKER_PER_PAGE,
+    (workerPage + 1) * WORKER_PER_PAGE,
+  );
 
   const maxSeries = useMemo(() => {
     const list = data?.series ?? [];
@@ -340,7 +351,10 @@ function KeuanganPage() {
             <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" />
             <Input
               value={cari}
-              onChange={(e) => setCari(e.target.value)}
+              onChange={(e) => {
+                setCari(e.target.value);
+                setWorkerPage(0);
+              }}
               placeholder="Cari worker…"
               className="w-56 pl-8"
             />
@@ -349,50 +363,84 @@ function KeuanganPage() {
       >
         {error ? (
           <EmptyState title="Gagal memuat" description={(error as Error).message} />
-        ) : workers.length === 0 ? (
+        ) : filteredWorkers.length === 0 ? (
           <EmptyState
             title={isLoading ? "Memuat data…" : "Belum ada data worker"}
             description="Data muncul setelah ada pengiriman atau transaksi pada periode ini."
           />
         ) : (
-          <TableShell>
-            <thead>
-              <tr>
-                <Th>#</Th>
-                <Th>Worker</Th>
-                <Th className="text-right">Pesan</Th>
-                <Th className="text-right">Pendapatan pesan</Th>
-                <Th className="text-right">Referal</Th>
-                <Th className="text-right">Total</Th>
-                <Th className="text-right">Dicairkan</Th>
-                <Th className="text-right">Menunggu</Th>
-                <Th className="text-right">Saldo berjalan</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {workers.map((w, i) => (
-                <tr key={w.user_id}>
-                  <Td>{MEDALS[i] ?? i + 1}</Td>
-                  <Td>
-                    <div className="font-medium">{w.name}</div>
-                    <div className="text-muted-foreground text-xs">{w.email}</div>
-                    {w.role !== "member" ? (
-                      <Badge variant="outline" className="mt-1 text-[10px]">
-                        {w.role === "super_admin" ? "Super Admin" : "Admin"}
-                      </Badge>
-                    ) : null}
-                  </Td>
-                  <Td className="text-right">{angka(w.messages)}</Td>
-                  <Td className="text-right">{rupiah(w.from_messages)}</Td>
-                  <Td className="text-right">{rupiah(w.from_referral)}</Td>
-                  <Td className="text-right font-semibold">{rupiah(w.earned)}</Td>
-                  <Td className="text-right">{rupiah(w.paid)}</Td>
-                  <Td className="text-right">{rupiah(w.pending)}</Td>
-                  <Td className="text-right">{rupiah(w.balance_all_time)}</Td>
+          <>
+            <TableShell>
+              <thead>
+                <tr>
+                  <Th>#</Th>
+                  <Th>Worker</Th>
+                  <Th className="text-right">Pesan</Th>
+                  <Th className="text-right">Pendapatan pesan</Th>
+                  <Th className="text-right">Referal</Th>
+                  <Th className="text-right">Total</Th>
+                  <Th className="text-right">Dicairkan</Th>
+                  <Th className="text-right">Menunggu</Th>
+                  <Th className="text-right">Saldo berjalan</Th>
                 </tr>
-              ))}
-            </tbody>
-          </TableShell>
+              </thead>
+              <tbody>
+                {workerRows.map((w, i) => {
+                  const rank = workerPage * WORKER_PER_PAGE + i;
+                  return (
+                    <tr key={w.user_id}>
+                      <Td>{MEDALS[rank] ?? rank + 1}</Td>
+                      <Td>
+                        <div className="font-medium">{w.name}</div>
+                        <div className="text-muted-foreground text-xs">{w.email}</div>
+                        {w.role !== "member" ? (
+                          <Badge variant="outline" className="mt-1 text-[10px]">
+                            {w.role === "super_admin" ? "Super Admin" : "Admin"}
+                          </Badge>
+                        ) : null}
+                      </Td>
+                      <Td className="text-right">{angka(w.messages)}</Td>
+                      <Td className="text-right">{rupiah(w.from_messages)}</Td>
+                      <Td className="text-right">{rupiah(w.from_referral)}</Td>
+                      <Td className="text-right font-semibold">{rupiah(w.earned)}</Td>
+                      <Td className="text-right">{rupiah(w.paid)}</Td>
+                      <Td className="text-right">{rupiah(w.pending)}</Td>
+                      <Td className="text-right">{rupiah(w.balance_all_time)}</Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </TableShell>
+            {workerTotalPages > 1 && (
+              <div className="mt-3 flex items-center justify-between gap-2 px-4 pb-4 text-xs text-muted-foreground sm:px-5">
+                <span>
+                  Menampilkan {workerPage * WORKER_PER_PAGE + 1}–
+                  {Math.min((workerPage + 1) * WORKER_PER_PAGE, workerTotal)} dari {angka(workerTotal)} worker
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={workerPage === 0}
+                    onClick={() => setWorkerPage(workerPage - 1)}
+                  >
+                    Sebelumnya
+                  </Button>
+                  <span className="whitespace-nowrap">
+                    Halaman {workerPage + 1} / {workerTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={workerPage >= workerTotalPages - 1}
+                    onClick={() => setWorkerPage(workerPage + 1)}
+                  >
+                    Berikutnya
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Panel>
     </>
