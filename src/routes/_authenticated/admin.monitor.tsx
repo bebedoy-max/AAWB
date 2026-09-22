@@ -6,6 +6,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -80,7 +81,7 @@ function diagnose(d: BlastMonitor): Finding[] {
   const out: Finding[] = [];
   const e = d.errors ?? {};
   const t = d.totals;
-  const working = d.gateway?.WORKING ?? null;
+  const working = d.gateway?.["WORKING"] ?? null;
 
   if (!d.campaigns.length) {
     out.push({ tone: "warn", text: "Tidak ada kampanye berstatus berjalan." });
@@ -160,6 +161,8 @@ const TONE_CLASS: Record<Tone, string> = {
   bad: "border-destructive/40 bg-destructive/10 text-destructive",
 };
 
+const BLASTER_PER_PAGE = 20;
+
 function MonitorPage() {
   const fetchMonitor = useServerFn(getBlastMonitor);
   const { data, isFetching, refetch, error, dataUpdatedAt } = useQuery({
@@ -207,6 +210,11 @@ function MonitorPage() {
 }
 
 function MonitorBody({ data, now, updatedAt }: { data: BlastMonitor; now: number; updatedAt: number }) {
+  const [blasterPageRaw, setBlasterPage] = useState(0);
+  const blasterTotal = data.blasters.length;
+  const blasterTotalPages = Math.max(1, Math.ceil(blasterTotal / BLASTER_PER_PAGE));
+  const blasterPage = Math.min(blasterPageRaw, blasterTotalPages - 1);
+  const blasterRows = data.blasters.slice(blasterPage * BLASTER_PER_PAGE, (blasterPage + 1) * BLASTER_PER_PAGE);
   const t = data.totals;
   const e = data.errors ?? {};
   const findings = diagnose(data);
@@ -337,47 +345,77 @@ function MonitorBody({ data, now, updatedAt }: { data: BlastMonitor; now: number
 
       <Panel title="Blaster 60 menit terakhir" description="Median = jarak khas antar pesan saat nomor aktif">
         {data.blasters.length ? (
-          <TableShell className="min-w-[860px]">
-            <thead className="border-b">
-              <tr>
-                <Th>Nomor</Th>
-                <Th>Worker</Th>
-                <Th>Mode</Th>
-                <Th>Golongan</Th>
-                <Th className="text-right">10 mnt</Th>
-                <Th className="text-right">1 jam</Th>
-                <Th className="text-right">Median</Th>
-                <Th>Terakhir kirim</Th>
-                <Th>Status</Th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {data.blasters.map((b) => {
-                const st = statusOf(b, now);
-                const mapan = b.total_sent >= warm;
-                return (
-                  <tr key={b.phone}>
-                    <Td className="font-mono text-xs">{b.phone}</Td>
-                    <Td className="max-w-[160px] truncate">{b.worker || "—"}</Td>
-                    <Td>{b.mode ?? "—"}</Td>
-                    <Td>
-                      <span className={mapan ? "text-success" : "text-muted-foreground"}>
-                        {mapan ? "Mapan" : "Pemanasan"}
-                      </span>
-                      <span className="ml-1 text-xs text-muted-foreground">({angka(b.total_sent)})</span>
-                    </Td>
-                    <Td className="text-right">{angka(b.sent_10m)}</Td>
-                    <Td className="text-right">{angka(b.sent_60m)}</Td>
-                    <Td className="text-right">{b.median_sec === null ? "—" : `${b.median_sec} dtk`}</Td>
-                    <Td className="whitespace-nowrap text-xs">{sejak(b.last_sent, now)}</Td>
-                    <Td>
-                      <span className={cn("rounded-md border px-2 py-0.5 text-xs", TONE_CLASS[st.tone])}>{st.label}</span>
-                    </Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </TableShell>
+          <>
+            <TableShell className="min-w-[860px]">
+              <thead className="border-b">
+                <tr>
+                  <Th>Nomor</Th>
+                  <Th>Worker</Th>
+                  <Th>Mode</Th>
+                  <Th>Golongan</Th>
+                  <Th className="text-right">10 mnt</Th>
+                  <Th className="text-right">1 jam</Th>
+                  <Th className="text-right">Median</Th>
+                  <Th>Terakhir kirim</Th>
+                  <Th>Status</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {blasterRows.map((b) => {
+                  const st = statusOf(b, now);
+                  const mapan = b.total_sent >= warm;
+                  return (
+                    <tr key={b.phone}>
+                      <Td className="font-mono text-xs">{b.phone}</Td>
+                      <Td className="max-w-[160px] truncate">{b.worker || "—"}</Td>
+                      <Td>{b.mode ?? "—"}</Td>
+                      <Td>
+                        <span className={mapan ? "text-success" : "text-muted-foreground"}>
+                          {mapan ? "Mapan" : "Pemanasan"}
+                        </span>
+                        <span className="ml-1 text-xs text-muted-foreground">({angka(b.total_sent)})</span>
+                      </Td>
+                      <Td className="text-right">{angka(b.sent_10m)}</Td>
+                      <Td className="text-right">{angka(b.sent_60m)}</Td>
+                      <Td className="text-right">{b.median_sec === null ? "—" : `${b.median_sec} dtk`}</Td>
+                      <Td className="whitespace-nowrap text-xs">{sejak(b.last_sent, now)}</Td>
+                      <Td>
+                        <span className={cn("rounded-md border px-2 py-0.5 text-xs", TONE_CLASS[st.tone])}>{st.label}</span>
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </TableShell>
+            {blasterTotalPages > 1 && (
+              <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>
+                  Menampilkan {blasterPage * BLASTER_PER_PAGE + 1}–{Math.min((blasterPage + 1) * BLASTER_PER_PAGE, blasterTotal)} dari {angka(blasterTotal)} blaster
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={blasterPage === 0}
+                    onClick={() => setBlasterPage(blasterPage - 1)}
+                  >
+                    Sebelumnya
+                  </Button>
+                  <span className="whitespace-nowrap">
+                    Halaman {blasterPage + 1} / {blasterTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={blasterPage >= blasterTotalPages - 1}
+                    onClick={() => setBlasterPage(blasterPage + 1)}
+                  >
+                    Berikutnya
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <EmptyState title="Belum ada blaster yang mengirim dalam 60 menit terakhir" />
         )}

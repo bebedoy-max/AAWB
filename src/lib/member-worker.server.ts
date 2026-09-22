@@ -174,16 +174,16 @@ async function loadPacing(supabase: SupabaseClient): Promise<PacingSettings> {
       console.error("[blast] pengaturan laju tidak terbaca (SQL 025 sudah dijalankan?), pakai bawaan:", error.message);
     } else if (data) {
       const d = data as Record<string, unknown>;
-      const minSec = clampNum(d.blast_min_delay_sec, PACING_DEFAULTS.minSec, HARD_MIN_DELAY_SEC, 3600);
-      const warmupMinSec = clampNum(d.blast_warmup_min_sec, PACING_DEFAULTS.warmupMinSec, minSec, 3600);
+      const minSec = clampNum(d["blast_min_delay_sec"], PACING_DEFAULTS.minSec, HARD_MIN_DELAY_SEC, 3600);
+      const warmupMinSec = clampNum(d["blast_warmup_min_sec"], PACING_DEFAULTS.warmupMinSec, minSec, 3600);
       value = {
         minSec,
-        maxSec: clampNum(d.blast_max_delay_sec, PACING_DEFAULTS.maxSec, minSec, 3600),
-        hourlyCap: clampNum(d.blast_hourly_cap, PACING_DEFAULTS.hourlyCap, 1, 1000),
-        warmupCount: clampNum(d.blast_warmup_count, PACING_DEFAULTS.warmupCount, 0, 10_000),
+        maxSec: clampNum(d["blast_max_delay_sec"], PACING_DEFAULTS.maxSec, minSec, 3600),
+        hourlyCap: clampNum(d["blast_hourly_cap"], PACING_DEFAULTS.hourlyCap, 1, 1000),
+        warmupCount: clampNum(d["blast_warmup_count"], PACING_DEFAULTS.warmupCount, 0, 10_000),
         warmupMinSec,
-        warmupMaxSec: clampNum(d.blast_warmup_max_sec, PACING_DEFAULTS.warmupMaxSec, warmupMinSec, 3600),
-        dailyCap: clampNum(d.blast_daily_cap, PACING_DEFAULTS.dailyCap, 0, 100_000),
+        warmupMaxSec: clampNum(d["blast_warmup_max_sec"], PACING_DEFAULTS.warmupMaxSec, warmupMinSec, 3600),
+        dailyCap: clampNum(d["blast_daily_cap"], PACING_DEFAULTS.dailyCap, 0, 100_000),
       };
     }
   } catch (err) {

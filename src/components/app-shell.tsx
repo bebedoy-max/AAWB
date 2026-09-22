@@ -23,6 +23,7 @@ import {
   Clock3,
   Globe2,
   Gauge,
+  PiggyBank,
 } from "lucide-react";
 
 import { getMyRole } from "@/lib/admin.functions";
@@ -58,6 +59,7 @@ const ADMIN_NAV = [
   { to: "/admin/kampanye", label: "Kampanye", icon: Send },
   { to: "/admin/nomor", label: "Data Nomor", icon: ListChecks },
   { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/keuangan", label: "Laporan Keuangan", icon: PiggyBank },
   { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
   { to: "/admin/tim", label: "Tim Admin", icon: ShieldCheck },
   { to: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
@@ -69,6 +71,7 @@ const ADMIN_MOBILE_NAV = [
   { to: "/admin/monitor", label: "Monitor Blast", icon: Gauge },
   { to: "/admin/pengguna", label: "Pengguna", icon: Users },
   { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/keuangan", label: "Laporan Keuangan", icon: PiggyBank },
   { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
 ] as const;
 

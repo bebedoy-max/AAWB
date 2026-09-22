@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
@@ -277,12 +277,11 @@ function AuthPage() {
   return (
     <div className="member-surface flex min-h-screen items-center justify-center bg-secondary/50 px-4 py-8">
       <div className="relative mx-auto w-full max-w-md">
-        <Link to="/" className="absolute bottom-[calc(100%-2.5rem)] left-1/2 flex -translate-x-1/2 justify-center"><BrandLogo className="h-44" /></Link>
         <div className="rounded-lg border bg-card p-6 shadow-panel sm:p-8">
           {mode === "login" ? (
             <>
               <div className="mb-6 text-center">
-                <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-accent text-primary"><UserRound className="size-5" /></div>
+                <div className="mx-auto mb-3 flex justify-center"><BrandLogo className="h-24" /></div>
                 <h1 className="font-display text-2xl font-bold">Selamat datang kembali</h1>
                 <p className="mt-1 text-sm text-muted-foreground">Masuk untuk melanjutkan perjalanan Anda.</p>
               </div>

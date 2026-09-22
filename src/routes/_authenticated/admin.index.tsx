@@ -8,6 +8,7 @@ import {
   FileText,
   ListChecks,
   OctagonX,
+  PiggyBank,
   RefreshCw,
   Send,
   Smartphone,
@@ -58,6 +59,7 @@ const SHORTCUTS = [
   { to: "/admin/kampanye", label: "Kampanye", icon: Send },
   { to: "/admin/nomor", label: "Data Nomor", icon: ListChecks },
   { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/keuangan", label: "Laporan Keuangan", icon: PiggyBank },
   { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
 ] as const;
 

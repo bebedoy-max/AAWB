@@ -31,6 +31,7 @@ import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authentica
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminKampanyeRouteImport } from './routes/_authenticated/admin.kampanye'
+import { Route as AuthenticatedAdminKeuanganRouteImport } from './routes/_authenticated/admin.keuangan'
 import { Route as AuthenticatedAdminKlaimRouteImport } from './routes/_authenticated/admin.klaim'
 import { Route as AuthenticatedAdminLaporanRouteImport } from './routes/_authenticated/admin.laporan'
 import { Route as AuthenticatedAdminMonitorRouteImport } from './routes/_authenticated/admin.monitor'
@@ -158,6 +159,12 @@ const AuthenticatedAdminKampanyeRoute =
     path: '/kampanye',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminKeuanganRoute =
+  AuthenticatedAdminKeuanganRouteImport.update({
+    id: '/keuangan',
+    path: '/keuangan',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminKlaimRoute = AuthenticatedAdminKlaimRouteImport.update({
   id: '/klaim',
   path: '/klaim',
@@ -262,6 +269,7 @@ export interface FileRoutesByFullPath {
   '/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/admin/keuangan': typeof AuthenticatedAdminKeuanganRoute
   '/admin/klaim': typeof AuthenticatedAdminKlaimRoute
   '/admin/laporan': typeof AuthenticatedAdminLaporanRoute
   '/admin/monitor': typeof AuthenticatedAdminMonitorRoute
@@ -299,6 +307,7 @@ export interface FileRoutesByTo {
   '/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/admin/keuangan': typeof AuthenticatedAdminKeuanganRoute
   '/admin/klaim': typeof AuthenticatedAdminKlaimRoute
   '/admin/laporan': typeof AuthenticatedAdminLaporanRoute
   '/admin/monitor': typeof AuthenticatedAdminMonitorRoute
@@ -339,6 +348,7 @@ export interface FileRoutesById {
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/_authenticated/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/_authenticated/admin/keuangan': typeof AuthenticatedAdminKeuanganRoute
   '/_authenticated/admin/klaim': typeof AuthenticatedAdminKlaimRoute
   '/_authenticated/admin/laporan': typeof AuthenticatedAdminLaporanRoute
   '/_authenticated/admin/monitor': typeof AuthenticatedAdminMonitorRoute
@@ -379,6 +389,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/auth/callback'
     | '/admin/kampanye'
+    | '/admin/keuangan'
     | '/admin/klaim'
     | '/admin/laporan'
     | '/admin/monitor'
@@ -416,6 +427,7 @@ export interface FileRouteTypes {
     | '/templates'
     | '/auth/callback'
     | '/admin/kampanye'
+    | '/admin/keuangan'
     | '/admin/klaim'
     | '/admin/laporan'
     | '/admin/monitor'
@@ -455,6 +467,7 @@ export interface FileRouteTypes {
     | '/_authenticated/templates'
     | '/auth/callback'
     | '/_authenticated/admin/kampanye'
+    | '/_authenticated/admin/keuangan'
     | '/_authenticated/admin/klaim'
     | '/_authenticated/admin/laporan'
     | '/_authenticated/admin/monitor'
@@ -645,6 +658,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminKampanyeRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/keuangan': {
+      id: '/_authenticated/admin/keuangan'
+      path: '/keuangan'
+      fullPath: '/admin/keuangan'
+      preLoaderRoute: typeof AuthenticatedAdminKeuanganRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/klaim': {
       id: '/_authenticated/admin/klaim'
       path: '/klaim'
@@ -755,6 +775,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminKampanyeRoute: typeof AuthenticatedAdminKampanyeRoute
+  AuthenticatedAdminKeuanganRoute: typeof AuthenticatedAdminKeuanganRoute
   AuthenticatedAdminKlaimRoute: typeof AuthenticatedAdminKlaimRoute
   AuthenticatedAdminLaporanRoute: typeof AuthenticatedAdminLaporanRoute
   AuthenticatedAdminMonitorRoute: typeof AuthenticatedAdminMonitorRoute
@@ -767,6 +788,7 @@ interface AuthenticatedAdminRouteChildren {
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminKampanyeRoute: AuthenticatedAdminKampanyeRoute,
+  AuthenticatedAdminKeuanganRoute: AuthenticatedAdminKeuanganRoute,
   AuthenticatedAdminKlaimRoute: AuthenticatedAdminKlaimRoute,
   AuthenticatedAdminLaporanRoute: AuthenticatedAdminLaporanRoute,
   AuthenticatedAdminMonitorRoute: AuthenticatedAdminMonitorRoute,
