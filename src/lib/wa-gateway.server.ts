@@ -314,6 +314,27 @@ export async function pingGateway(): Promise<{ ok: boolean; message: string }> {
   }
 }
 
+/**
+ * Jumlah sesi per status langsung dari gateway (WORKING, STOPPED, SCAN_QR_CODE, …), untuk Monitor
+ * Blast admin. Status di database bisa tertinggal; ini kondisi sebenarnya. Daftar sesi gateway bisa
+ * ribuan baris, jadi hasilnya disimpan 60 detik.
+ */
+let sessionCountCache: { at: number; value: Record<string, number> } | null = null;
+export async function gatewaySessionCounts(): Promise<Record<string, number>> {
+  if (sessionCountCache && Date.now() - sessionCountCache.at < 60_000) return sessionCountCache.value;
+  const res = await request("/api/sessions/?all=true");
+  if (res.status < 200 || res.status >= 300 || !Array.isArray(res.body)) {
+    throw new GatewayError(`Gateway menjawab HTTP ${res.status}.`, 502);
+  }
+  const counts: Record<string, number> = {};
+  for (const item of res.body as unknown[]) {
+    const status = String((item as { status?: unknown } | null)?.status ?? "UNKNOWN").toUpperCase();
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+  sessionCountCache = { at: Date.now(), value: counts };
+  return counts;
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const pairingCooldowns = new Map<string, number>();
 const PAIRING_COOLDOWN_MS = 60 * 60 * 1000;

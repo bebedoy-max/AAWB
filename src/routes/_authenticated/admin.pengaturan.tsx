@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
+  Gauge,
   Coins,
   MessageCircle,
   PlugZap,
@@ -37,6 +38,7 @@ import {
 import { getWaProfileSettings, saveWaProfileSettings } from "@/lib/wa-profile.functions";
 import { AdminRewardSettings } from "@/components/admin-rewards";
 import { AdminActivityLog } from "@/components/admin-activity-log";
+import { AdminBlastSpeedSettings } from "@/components/admin-blast-speed";
 import { useMyRole } from "./admin";
 import { AdminPageTitle, Panel } from "@/components/admin-ui";
 import { APP_THEMES, applyAppTheme, DEFAULT_APP_THEME, type AppThemeId } from "@/lib/app-theme";
@@ -56,6 +58,7 @@ export const Route = createFileRoute("/_authenticated/admin/pengaturan")({
 });
 
 type SectionId =
+  | "kecepatan"
   | "gateway"
   | "telegram-bot"
   | "reward"
@@ -71,6 +74,7 @@ const SECTIONS: {
   icon: LucideIcon;
   superOnly?: boolean;
 }[] = [
+  { id: "kecepatan", label: "Kecepatan Blast", hint: "Preset & batas kirim", icon: Gauge, superOnly: true },
   { id: "gateway", label: "WA Gateway", hint: "URL & API key", icon: PlugZap, superOnly: true },
   { id: "telegram-bot", label: "Bot Telegram", hint: "Token & username", icon: Send, superOnly: true },
   { id: "reward", label: "Reward & Keuangan", hint: "Nilai reward, referal", icon: Coins, superOnly: true },
@@ -84,7 +88,7 @@ function PengaturanPage() {
   const { data: me } = useMyRole();
   const isSuper = Boolean(me?.is_super_admin);
   const sections = SECTIONS.filter((s) => !s.superOnly || isSuper);
-  const [active, setActive] = useState<SectionId>(isSuper ? "gateway" : "log");
+  const [active, setActive] = useState<SectionId>(isSuper ? "kecepatan" : "log");
 
   useEffect(() => {
     if (!sections.some((s) => s.id === active)) setActive(sections[0]?.id ?? "log");
@@ -124,6 +128,7 @@ function PengaturanPage() {
         </nav>
 
         <div className="min-w-0 space-y-4">
+          {active === "kecepatan" && isSuper ? <AdminBlastSpeedSettings /> : null}
           {active === "gateway" && isSuper ? <GatewayPanel /> : null}
           {active === "telegram-bot" && isSuper ? <TelegramBotPanel /> : null}
           {active === "reward" && isSuper ? <AdminRewardSettings /> : null}
