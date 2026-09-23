@@ -511,6 +511,7 @@ export const setCampaignTestMode = createServerFn({ method: "POST" })
     return { ok: true, test_mode: data.testMode };
   });
 
+<<<<<<< HEAD
 
 
 /** Rincian perangkat yang sedang tersambung: siapa pemiliknya dan apa statusnya. */
@@ -560,3 +561,5 @@ export const getActiveDeviceDetail = createServerFn({ method: "GET" })
       };
     });
   });
+=======
+>>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
