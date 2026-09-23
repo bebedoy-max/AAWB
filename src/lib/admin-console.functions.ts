@@ -109,11 +109,24 @@ async function assertAdmin(context: any, superOnly = false): Promise<AppRole> {
   return role;
 }
 
+/** Ambil SEMUA akun Auth (daftar dipecah 1000 per halaman). */
+async function listAllAuthUsers(admin: any): Promise<any[]> {
+  const all: any[] = [];
+  for (let page = 1; page <= 50; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw new Error(error.message);
+    const batch = (data?.users ?? []) as any[];
+    all.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  return all;
+}
+
 async function loadDirectory(admin: any) {
-  const [{ data: users }, { data: roleRows }, { data: profileRows }] = await Promise.all([
-    admin.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    admin.from("user_roles").select("user_id,role"),
-    admin.from("profiles").select("user_id,organization_name"),
+  const [users, { data: roleRows }, { data: profileRows }] = await Promise.all([
+    listAllAuthUsers(admin),
+    admin.from("user_roles").select("user_id,role").limit(200000),
+    admin.from("profiles").select("user_id,organization_name").limit(200000),
   ]);
 
   const roleMap = new Map<string, AppRole[]>();
@@ -124,7 +137,7 @@ async function loadDirectory(admin: any) {
   for (const p of (profileRows ?? []) as { user_id: string; organization_name: string | null }[]) {
     if (p.organization_name) nameMap.set(p.user_id, p.organization_name);
   }
-  return { users: (users?.users ?? []) as any[], roleMap, nameMap };
+  return { users, roleMap, nameMap };
 }
 
 function displayName(u: any, nameMap: Map<string, string>): string {
