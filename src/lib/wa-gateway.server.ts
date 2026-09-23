@@ -314,6 +314,27 @@ export async function pingGateway(): Promise<{ ok: boolean; message: string }> {
   }
 }
 
+/**
+ * Jumlah sesi per status langsung dari gateway (WORKING, STOPPED, SCAN_QR_CODE, …), untuk Monitor
+ * Blast admin. Status di database bisa tertinggal; ini kondisi sebenarnya. Daftar sesi gateway bisa
+ * ribuan baris, jadi hasilnya disimpan 60 detik.
+ */
+let sessionCountCache: { at: number; value: Record<string, number> } | null = null;
+export async function gatewaySessionCounts(): Promise<Record<string, number>> {
+  if (sessionCountCache && Date.now() - sessionCountCache.at < 60_000) return sessionCountCache.value;
+  const res = await request("/api/sessions/?all=true");
+  if (res.status < 200 || res.status >= 300 || !Array.isArray(res.body)) {
+    throw new GatewayError(`Gateway menjawab HTTP ${res.status}.`, 502);
+  }
+  const counts: Record<string, number> = {};
+  for (const item of res.body as unknown[]) {
+    const status = String((item as { status?: unknown } | null)?.status ?? "UNKNOWN").toUpperCase();
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+  sessionCountCache = { at: Date.now(), value: counts };
+  return counts;
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const pairingCooldowns = new Map<string, number>();
 const PAIRING_COOLDOWN_MS = 60 * 60 * 1000;
@@ -828,6 +849,39 @@ function readMessageId(raw: Record<string, unknown>): string | null {
   }
   return null;
 }
+
+/**
+ * Apakah nomor tujuan benar-benar terdaftar di WhatsApp?
+ *
+ * PENTING untuk kejujuran laporan: gateway menjawab "OK" walau nomornya tidak
+ * punya WhatsApp, sehingga pesan hilang tetapi tercatat sukses. Nomor yang
+ * hasilnya `false` di sini ditandai GAGAL (tidak valid), bukan terkirim.
+ *
+ * Hasil `null` berarti tidak bisa dipastikan (gateway tidak mendukung
+ * pemeriksaan / sedang bermasalah); pengiriman diteruskan seperti biasa supaya
+ * kampanye tidak berhenti.
+ */
+const numberCheckCache = new Map<string, { ok: boolean; at: number }>();
+const NUMBER_CHECK_CACHE_MS = 6 * 60 * 60_000;
+
+export async function numberRegistered(sessionId: string, phone: string): Promise<boolean | null> {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 8) return false;
+  const cached = numberCheckCache.get(digits);
+  if (cached && Date.now() - cached.at < NUMBER_CHECK_CACHE_MS) return cached.ok;
+
+  const res = await request(
+    `/api/contacts/check-exists?phone=${encodeURIComponent(digits)}&session=${encodeURIComponent(sessionId)}`,
+  ).catch(() => null);
+  if (!res || res.status < 200 || res.status >= 300) return null;
+  const body = res.body;
+  if (!body || typeof body !== "object") return null;
+  const exists = (body as Record<string, unknown>)["numberExists"];
+  if (typeof exists !== "boolean") return null;
+  numberCheckCache.set(digits, { ok: exists, at: Date.now() });
+  return exists;
+}
+
 
 /**
  * Pairing by code: WAHA's POST /api/{session}/auth/request-code returns an

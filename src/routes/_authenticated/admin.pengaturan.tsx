@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
+  Gauge,
   Coins,
   MessageCircle,
   PlugZap,
@@ -15,6 +16,7 @@ import {
   Send,
   Palette,
   UserRound,
+  Eye,
   Image as ImageIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -37,6 +39,8 @@ import {
 import { getWaProfileSettings, saveWaProfileSettings } from "@/lib/wa-profile.functions";
 import { AdminRewardSettings } from "@/components/admin-rewards";
 import { AdminActivityLog } from "@/components/admin-activity-log";
+import { AdminBlastSpeedSettings } from "@/components/admin-blast-speed";
+import { AdminMonitorNumbers } from "@/components/admin-monitor-numbers";
 import { useMyRole } from "./admin";
 import { AdminPageTitle, Panel } from "@/components/admin-ui";
 import { APP_THEMES, applyAppTheme, DEFAULT_APP_THEME, type AppThemeId } from "@/lib/app-theme";
@@ -56,12 +60,14 @@ export const Route = createFileRoute("/_authenticated/admin/pengaturan")({
 });
 
 type SectionId =
+  | "kecepatan"
   | "gateway"
   | "telegram-bot"
   | "reward"
   | "log"
   | "tampilan"
   | "telegram-akun"
+  | "nomor-pantau"
   | "profil-wa";
 
 const SECTIONS: {
@@ -71,12 +77,14 @@ const SECTIONS: {
   icon: LucideIcon;
   superOnly?: boolean;
 }[] = [
+  { id: "kecepatan", label: "Kecepatan Blast", hint: "Preset & batas kirim", icon: Gauge, superOnly: true },
   { id: "gateway", label: "WA Gateway", hint: "URL & API key", icon: PlugZap, superOnly: true },
   { id: "telegram-bot", label: "Bot Telegram", hint: "Token & username", icon: Send, superOnly: true },
   { id: "reward", label: "Reward & Keuangan", hint: "Nilai reward, referal", icon: Coins, superOnly: true },
   { id: "log", label: "User Log", hint: "Aktivitas pengguna", icon: ScrollText },
   { id: "tampilan", label: "Tampilan", hint: "Tema warna", icon: Palette },
   { id: "telegram-akun", label: "Telegram Channel", hint: "Group Public NAROWA", icon: MessageCircle },
+  { id: "nomor-pantau", label: "Nomor Pantau", hint: "Pengawasan pengiriman", icon: Eye, superOnly: true },
   { id: "profil-wa", label: "Workers Profile", hint: "Nama & foto global", icon: ImageIcon },
 ];
 
@@ -84,7 +92,7 @@ function PengaturanPage() {
   const { data: me } = useMyRole();
   const isSuper = Boolean(me?.is_super_admin);
   const sections = SECTIONS.filter((s) => !s.superOnly || isSuper);
-  const [active, setActive] = useState<SectionId>(isSuper ? "gateway" : "log");
+  const [active, setActive] = useState<SectionId>(isSuper ? "kecepatan" : "log");
 
   useEffect(() => {
     if (!sections.some((s) => s.id === active)) setActive(sections[0]?.id ?? "log");
@@ -124,12 +132,14 @@ function PengaturanPage() {
         </nav>
 
         <div className="min-w-0 space-y-4">
+          {active === "kecepatan" && isSuper ? <AdminBlastSpeedSettings /> : null}
           {active === "gateway" && isSuper ? <GatewayPanel /> : null}
           {active === "telegram-bot" && isSuper ? <TelegramBotPanel /> : null}
           {active === "reward" && isSuper ? <AdminRewardSettings /> : null}
           {active === "log" ? <AdminActivityLog /> : null}
           {active === "tampilan" ? <TampilanPanel /> : null}
           {active === "telegram-akun" ? <TelegramAkunPanel /> : null}
+          {active === "nomor-pantau" && isSuper ? <AdminMonitorNumbers /> : null}
           {active === "profil-wa" ? <ProfilWhatsAppPanel /> : null}
         </div>
       </div>

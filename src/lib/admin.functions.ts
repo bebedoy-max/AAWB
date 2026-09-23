@@ -475,8 +475,12 @@ export const resetMemberPassword = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Kata sandi worker disimpan dengan akhiran internal yang sama seperti saat
+    // pendaftaran dan login (lihat memberPassword). Tanpa ini, kata sandi hasil
+    // reset admin tidak pernah cocok saat worker mencoba masuk.
+    const { memberPassword } = await import("@/lib/member-auth.functions");
     const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
-      password: data.password,
+      password: memberPassword(data.password),
     });
     if (error) throw new Error(error.message);
     await (await import("@/lib/activity-log.server")).logActivity(context.userId, "password_reset", `Kata sandi pengguna ${data.userId} disetel ulang`);

@@ -67,15 +67,24 @@ export function StatTile({
   hint,
   icon: Icon,
   tone = "primary",
+  onClick,
 }: {
   label: string;
   value: ReactNode;
   hint?: string;
   icon?: LucideIcon;
   tone?: StatTone;
+  onClick?: () => void;
 }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="rounded-xl border bg-card p-4">
+    <Tag
+      {...(onClick ? { type: "button" as const, onClick } : {})}
+      className={cn(
+        "rounded-xl border bg-card p-4",
+        onClick && "w-full text-left transition-colors hover:border-primary hover:bg-muted/50",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -90,7 +99,7 @@ export function StatTile({
           </span>
         ) : null}
       </div>
-    </div>
+    </Tag>
   );
 }
 

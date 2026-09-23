@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -18,6 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { rupiah } from "@/lib/currency";
 import {
   getMyRewards,
@@ -27,6 +35,7 @@ import {
   addPayoutAccount,
   deletePayoutAccount,
   setDefaultPayoutAccount,
+  TELEGRAM_REQUIRED_AMOUNT,
 } from "@/lib/rewards.functions";
 
 export const Route = createFileRoute("/_authenticated/rewards")({
@@ -83,6 +92,8 @@ function RewardsPage() {
   const [holder, setHolder] = useState("");
   const [amount, setAmount] = useState("");
   const [targetId, setTargetId] = useState("");
+  const [needTelegram, setNeedTelegram] = useState(false);
+  const navigate = useNavigate();
   const payoutFormRef = useRef<HTMLDivElement>(null);
 
   const multi = Boolean(data?.accounts_table_ready);
@@ -192,6 +203,10 @@ function RewardsPage() {
       }),
     onSuccess: (res) => {
       if (!res?.ok) {
+        if ((res as { need_telegram?: boolean } | undefined)?.need_telegram) {
+          setNeedTelegram(true);
+          return;
+        }
         toast.error(res?.error ?? "Penarikan tidak dapat diproses.");
         return;
       }
@@ -264,6 +279,31 @@ function RewardsPage() {
            {(history ?? []).length === 0 ? <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed text-center sm:min-h-44 sm:border-0"><div className="grid size-12 place-items-center rounded-full border bg-card"><FileText className="size-5 text-muted-foreground" /></div><p className="mt-4 font-semibold">Belum ada riwayat</p><p className="mt-1 text-sm text-muted-foreground">Data penarikan Anda masih kosong.</p></div> : (history ?? []).map((w) => <div key={w.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3"><div className="min-w-0"><p className="text-sm font-medium">{rupiah(w.amount)}</p><p className="truncate text-xs text-muted-foreground">{w.provider} · {w.account_number} · {new Date(w.created_at).toLocaleString("id-ID")}{w.note ? ` · ${w.note}` : ""}</p></div><Badge variant="outline">{STATUS_LABEL[w.status] ?? w.status}</Badge></div>)}
         </CardContent>
       </Card>
+
+      <Dialog open={needTelegram} onOpenChange={setNeedTelegram}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tautkan akun Telegram dulu</DialogTitle>
+            <DialogDescription>
+              Penarikan {rupiah(TELEGRAM_REQUIRED_AMOUNT)} ke atas hanya bisa diproses bila akun
+              Telegram Anda sudah tertaut. Satu akun Telegram hanya boleh dipakai oleh satu akun.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNeedTelegram(false)}>
+              Nanti saja
+            </Button>
+            <Button
+              onClick={() => {
+                setNeedTelegram(false);
+                navigate({ to: "/pengaturan-akun", search: { telegram: 1 } });
+              }}
+            >
+              Tautkan akun Telegram
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

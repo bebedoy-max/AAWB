@@ -5,8 +5,16 @@
  * campaign's own min/max delay setting, which is baked into scheduled_at.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
+import {
+  GatewayError,
+  numberRegistered,
+  reconnectSession,
+  sendMessage,
+  sessionStatus,
+} from "@/lib/wa-gateway.server";
+
 import { isInvalidNumberError } from "@/lib/anti-ban";
+import { maybeSendMonitorCopy } from "@/lib/monitor-copy.server";
 import type { CampaignStatus, MediaType, QueuedMessage, TemplateButton } from "@/types/wa";
 
 export const MAX_ATTEMPTS = 3;
@@ -174,7 +182,23 @@ export async function processCampaignTick(
       const attempts = item.attempts + 1;
       processed += 1;
       try {
-        await sendMessage({
+        // Nomor tanpa WhatsApp dijawab "OK" oleh gateway; tanpa pemeriksaan ini
+        // pesan hilang tetapi tercatat sukses. null = tidak bisa dipastikan.
+        const registered = await numberRegistered(sessionId, item.recipient_phone).catch(() => null);
+        if (registered === false) {
+          await supabase
+            .from("message_queue")
+            .update({
+              status: "failed",
+              attempts,
+              error_log: "Nomor tidak terdaftar di WhatsApp",
+            })
+            .eq("id", item.id);
+          failed += 1;
+          continue;
+        }
+
+        const result = await sendMessage({
           sessionId,
           to: item.recipient_phone,
           text: item.message_body,
@@ -199,13 +223,33 @@ export async function processCampaignTick(
             // Simpan perangkat pengirim agar nomor pengirim muncul di laporan.
             session_id: sessionId,
             sender_phone: senderPhone,
+            // Id pesan WhatsApp untuk mencocokkan tanda terima (sampai/dibaca).
+            provider_message_id: result?.id ?? null,
+            delivery_status: null,
+            delivered_at: null,
+            read_at: null,
           })
           .eq("id", item.id);
+
         try {
           await supabase.rpc("credit_message_reward", { _message_id: item.id });
         } catch {
           // Reward gagal dicatat tidak boleh menggagalkan pengiriman.
         }
+        // Nomor Pantau: salinan pengawasan (tanpa reward, tidak masuk laporan).
+        await maybeSendMonitorCopy(supabase, {
+          sessionId,
+          senderPhone,
+          ownerId: campaign.user_id,
+          recipientPhone: item.recipient_phone,
+          text: item.message_body,
+          campaignId: campaign.id,
+          mediaUrl: campaign.media_url,
+          mediaType: campaign.media_type ?? null,
+          mediaFilename: campaign.media_filename ?? null,
+          footerText: campaign.footer_text ?? null,
+          buttons: campaign.buttons_json ?? null,
+        });
         sent += 1;
       } catch (err) {
         const message =

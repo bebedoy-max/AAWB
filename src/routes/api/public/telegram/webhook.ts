@@ -62,6 +62,21 @@ export const Route = createFileRoute("/api/public/telegram/webhook")({
           return Response.json({ ok: true });
         }
 
+        // Satu akun Telegram hanya boleh dipakai satu pengguna.
+        const { data: taken } = await (supabaseAdmin as any)
+          .from("telegram_links")
+          .select("user_id")
+          .eq("chat_id", chat.id)
+          .neq("user_id", link.user_id)
+          .maybeSingle();
+        if (taken?.user_id) {
+          await sendTelegramMessage(
+            chat.id,
+            "⚠️ Akun Telegram ini sudah tertaut ke pengguna lain. Satu akun Telegram hanya boleh dipakai oleh satu akun NAROWA.",
+          ).catch(() => undefined);
+          return Response.json({ ok: true, duplicate: true });
+        }
+
         const from = message?.from ?? {};
         const { error } = await (supabaseAdmin as any)
           .from("telegram_links")

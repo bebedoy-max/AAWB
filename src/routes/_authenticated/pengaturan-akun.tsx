@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -13,6 +13,14 @@ import {
 import { PageHeader } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -36,6 +44,8 @@ export const Route = createFileRoute("/_authenticated/pengaturan-akun")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>): { telegram?: 1 } =>
+    Number(search?.['telegram']) === 1 ? { telegram: 1 } : {},
   component: AccountSettings,
 });
 
@@ -271,6 +281,9 @@ function AccountInfoCard({ username, profile }: { username: string; profile: Acc
 
 function TelegramConnectCard() {
   const queryClient = useQueryClient();
+  const search = Route.useSearch();
+  const [linkDialog, setLinkDialog] = useState(false);
+  const autoOpened = useRef(false);
   const { data: status, isLoading } = useQuery({
     queryKey: ["telegram-status"],
     queryFn: () => getTelegramStatus(),
@@ -286,6 +299,18 @@ function TelegramConnectCard() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // Datang dari pop-up penarikan (?telegram=1): buka otomatis dialog penautan.
+  useEffect(() => {
+    if (autoOpened.current) return;
+    if (search.telegram !== 1 || !status || status.connected || !status.configured) return;
+    autoOpened.current = true;
+    setLinkDialog(true);
+  }, [search.telegram, status]);
+
+  useEffect(() => {
+    if (linkDialog && status?.connected) setLinkDialog(false);
+  }, [linkDialog, status?.connected]);
 
   const disconnect = useMutation({
     mutationFn: () => disconnectTelegram(),
@@ -346,6 +371,27 @@ function TelegramConnectCard() {
           </div>
         )}
       </CardContent>
+
+      <Dialog open={linkDialog} onOpenChange={setLinkDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tautkan akun Telegram</DialogTitle>
+            <DialogDescription>
+              Tekan tombol di bawah, lalu tekan <strong>START</strong> pada obrolan bot Telegram
+              yang terbuka. Satu akun Telegram hanya boleh dipakai oleh satu akun NAROWA.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkDialog(false)}>
+              Tutup
+            </Button>
+            <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
+              <Send className="mr-2 size-4" />
+              {connect.isPending ? "Membuka Telegram…" : "Hubungkan Telegram"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

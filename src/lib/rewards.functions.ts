@@ -474,6 +474,9 @@ export const savePayoutAccount = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Batas penarikan yang mewajibkan akun Telegram tertaut. */
+export const TELEGRAM_REQUIRED_AMOUNT = 500_000;
+
 /** Ajukan penarikan saldo; menunggu persetujuan admin. */
 export const requestWithdrawal = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -482,10 +485,27 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Jumlah penarikan tidak valid.");
     return { amount, account_id: (input?.account_id ?? "").trim() || null };
   })
-  .handler(async ({ data, context }): Promise<{ ok: boolean; error?: string }> => {
+  .handler(async ({ data, context }): Promise<{ ok: boolean; error?: string; need_telegram?: boolean }> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const settings = await readSettings();
     const uid = context.userId;
+
+    // Penarikan besar wajib punya akun Telegram tertaut (verifikasi pemilik akun).
+    if (data.amount >= TELEGRAM_REQUIRED_AMOUNT) {
+      const { data: link } = await (supabaseAdmin as any)
+        .from("telegram_links")
+        .select("chat_id")
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (!link?.chat_id) {
+        return {
+          ok: false,
+          need_telegram: true,
+          error: `Penarikan Rp ${TELEGRAM_REQUIRED_AMOUNT.toLocaleString("id-ID")} ke atas wajib menautkan akun Telegram terlebih dahulu.`,
+        };
+      }
+    }
+
 
     let target: { method: string; provider: string; number: string; name: string } | null = null;
 

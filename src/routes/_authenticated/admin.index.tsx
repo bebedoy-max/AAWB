@@ -1,4 +1,5 @@
 /** Ringkasan sistem: statistik utama, pintasan, dan kendali blast global. */
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -8,6 +9,7 @@ import {
   FileText,
   ListChecks,
   OctagonX,
+  PiggyBank,
   RefreshCw,
   Send,
   Smartphone,
@@ -27,7 +29,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { getAdminOverview, listBlastProjects } from "@/lib/monitor.functions";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { getActiveDeviceDetail, getAdminOverview, listBlastProjects } from "@/lib/monitor.functions";
 import { stopAllBlast } from "@/lib/admin-console.functions";
 import {
   AdminPageTitle,
@@ -58,6 +67,7 @@ const SHORTCUTS = [
   { to: "/admin/kampanye", label: "Kampanye", icon: Send },
   { to: "/admin/nomor", label: "Data Nomor", icon: ListChecks },
   { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/keuangan", label: "Laporan Keuangan", icon: PiggyBank },
   { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
 ] as const;
 
@@ -66,6 +76,15 @@ function RingkasanPage() {
   const fetchOverview = useServerFn(getAdminOverview);
   const fetchProjects = useServerFn(listBlastProjects);
   const stopAll = useServerFn(stopAllBlast);
+  const fetchDevices = useServerFn(getActiveDeviceDetail);
+  const [deviceOpen, setDeviceOpen] = useState(false);
+
+  const { data: activeDevices, isFetching: devicesLoading } = useQuery({
+    queryKey: ["admin-active-devices"],
+    queryFn: () => fetchDevices(),
+    enabled: deviceOpen,
+    refetchInterval: deviceOpen ? 20_000 : false,
+  });
 
   const { data: overview, isFetching, refetch } = useQuery({
     queryKey: ["admin-overview"],
@@ -93,6 +112,48 @@ function RingkasanPage() {
 
   return (
     <>
+      <Dialog open={deviceOpen} onOpenChange={setDeviceOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Perangkat aktif</DialogTitle>
+            <DialogDescription>
+              Perangkat yang sedang tersambung, status blast-nya, dan pemiliknya.
+            </DialogDescription>
+          </DialogHeader>
+          {devicesLoading && !activeDevices ? (
+            <p className="text-sm text-muted-foreground">Memuat…</p>
+          ) : (activeDevices ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Belum ada perangkat yang tersambung.</p>
+          ) : (
+            <div className="space-y-2">
+              {(activeDevices ?? []).map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-start justify-between gap-3 rounded-lg border p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {d.session_name}
+                      {d.phone_number ? ` · ${d.phone_number}` : ""}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">{d.owner_email}</p>
+                    {d.last_activity ? (
+                      <p className="text-xs text-muted-foreground">Kirim terakhir {waktu(d.last_activity)}</p>
+                    ) : null}
+                  </div>
+                  <Badge
+                    variant={d.state === "working" ? "default" : d.state === "standby" ? "secondary" : "outline"}
+                    className="shrink-0"
+                  >
+                    {d.state === "working" ? "Sedang mengirim" : d.state === "standby" ? "Standby blast" : "Idle"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <AdminPageTitle
         title="Ringkasan Sistem"
         description="Pantau kondisi Worker's, perangkat, dan kampanye yang sedang berjalan."
@@ -153,6 +214,7 @@ function RingkasanPage() {
           hint={`${angka(overview?.devices_standby ?? 0)} standby blast · ${angka(overview?.devices_working ?? 0)} sedang mengirim`}
           icon={Activity}
           tone="success"
+          onClick={() => setDeviceOpen(true)}
         />
       </div>
 

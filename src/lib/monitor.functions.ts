@@ -45,6 +45,15 @@ export interface DeviceMonitorRow {
   last_activity: string | null;
 }
 
+export interface ActiveDeviceRow {
+  id: string;
+  session_name: string;
+  phone_number: string | null;
+  owner_email: string;
+  state: "working" | "standby" | "idle";
+  last_activity: string | null;
+}
+
 export interface BlastProjectRow {
   id: string;
   name: string;
@@ -58,7 +67,9 @@ export interface BlastProjectRow {
   pending: number;
   created_at: string;
   status: string;
+  test_mode: boolean;
 }
+
 
 /** Pisahkan CTA yang disimpan di akhir pesan ("\n\nTeks: https://…"). */
 function splitCta(body: string): { message: string; cta_text: string | null; cta_url: string | null } {
@@ -234,13 +245,27 @@ export const listBlastProjects = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
-    const { data: projects, error } = await admin
+    // Kolom test_mode ditambahkan migrasi 028; jika belum diterapkan, jatuh
+    // kembali ke kueri lama agar daftar kampanye tetap tampil.
+    const baseColumns = "id,name,message_body,media_url,buttons_json,total_targets,status,created_at";
+    let { data: projects, error } = await admin
       .from("campaigns")
-      .select("id,name,message_body,media_url,buttons_json,total_targets,status,created_at")
+      .select(`${baseColumns},test_mode`)
       .eq("is_pool", true)
       .order("created_at", { ascending: false })
       .limit(100);
+    if (error) {
+      const retry = await admin
+        .from("campaigns")
+        .select(baseColumns)
+        .eq("is_pool", true)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      projects = retry.data;
+      error = retry.error;
+    }
     if (error) throw new Error(error.message);
+
 
     const ids = ((projects ?? []) as any[]).map((p) => p.id);
     const counts = new Map<string, { sent: number; failed: number; pending: number }>();
@@ -291,6 +316,8 @@ export const listBlastProjects = createServerFn({ method: "GET" })
         total_targets: p.total_targets ?? 0,
         created_at: p.created_at,
         status: p.status,
+        test_mode: p.test_mode === true,
+
         ...(counts.get(p.id) ?? { sent: 0, failed: 0, pending: 0 }),
       };
     });
@@ -463,4 +490,73 @@ export const setProjectStatus = createServerFn({ method: "POST" })
     const { error } = await admin.from("campaigns").update({ status: data.status }).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true, status: data.status };
+  });
+
+/** Aktif/nonaktifkan Test Mode: kampanye uji coba tidak memberi reward. */
+export const setCampaignTestMode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; testMode: boolean }) => ({
+    id: String(input.id),
+    testMode: Boolean(input.testMode),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+    const { error } = await admin
+      .from("campaigns")
+      .update({ test_mode: data.testMode })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true, test_mode: data.testMode };
+  });
+
+
+
+/** Rincian perangkat yang sedang tersambung: siapa pemiliknya dan apa statusnya. */
+export const getActiveDeviceDetail = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<ActiveDeviceRow[]> => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+
+    const since = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const [{ data: sessions }, { data: queue }, users] = await Promise.all([
+      admin
+        .from("wa_sessions")
+        .select("id,user_id,session_name,phone_number,status,blast_ready")
+        .eq("status", "connected")
+        .order("created_at"),
+      admin
+        .from("message_queue")
+        .select("session_id,sent_at")
+        .not("session_id", "is", null)
+        .gte("sent_at", since)
+        .limit(20000),
+      admin.auth.admin.listUsers({ page: 1, perPage: 1000 }).catch(() => ({ data: { users: [] } })),
+    ]);
+
+    const emails = new Map<string, string>();
+    for (const u of (users as any)?.data?.users ?? []) emails.set(u.id, u.email ?? "");
+
+    const last = new Map<string, string>();
+    for (const row of (queue ?? []) as any[]) {
+      if (!row.sent_at) continue;
+      const prev = last.get(row.session_id);
+      if (!prev || row.sent_at > prev) last.set(row.session_id, row.sent_at);
+    }
+
+    return ((sessions ?? []) as any[]).map((s) => {
+      const lastAt = last.get(s.id) ?? null;
+      const state: ActiveDeviceRow["state"] = lastAt ? "working" : s.blast_ready ? "standby" : "idle";
+      return {
+        id: s.id,
+        session_name: s.session_name,
+        phone_number: s.phone_number,
+        owner_email: emails.get(s.user_id) ?? "—",
+        state,
+        last_activity: lastAt,
+      };
+    });
   });

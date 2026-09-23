@@ -31,8 +31,10 @@ import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authentica
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
 import { Route as AuthenticatedAdminKampanyeRouteImport } from './routes/_authenticated/admin.kampanye'
+import { Route as AuthenticatedAdminKeuanganRouteImport } from './routes/_authenticated/admin.keuangan'
 import { Route as AuthenticatedAdminKlaimRouteImport } from './routes/_authenticated/admin.klaim'
 import { Route as AuthenticatedAdminLaporanRouteImport } from './routes/_authenticated/admin.laporan'
+import { Route as AuthenticatedAdminMonitorRouteImport } from './routes/_authenticated/admin.monitor'
 import { Route as AuthenticatedAdminNomorRouteImport } from './routes/_authenticated/admin.nomor'
 import { Route as AuthenticatedAdminPengaturanRouteImport } from './routes/_authenticated/admin.pengaturan'
 import { Route as AuthenticatedAdminPenggunaRouteImport } from './routes/_authenticated/admin.pengguna'
@@ -44,6 +46,7 @@ import { Route as ApiPublicCronBlastDevicesRouteImport } from './routes/api/publ
 import { Route as ApiPublicCronProcessQueueRouteImport } from './routes/api/public/cron/process-queue'
 import { Route as ApiPublicDbSplatRouteImport } from './routes/api/public/db/$'
 import { Route as ApiPublicTelegramWebhookRouteImport } from './routes/api/public/telegram/webhook'
+import { Route as ApiPublicWaAckRouteImport } from './routes/api/public/wa/ack'
 import { Route as ApiPublicWaInboundRouteImport } from './routes/api/public/wa/inbound'
 
 const IndexRoute = IndexRouteImport.update({
@@ -157,6 +160,12 @@ const AuthenticatedAdminKampanyeRoute =
     path: '/kampanye',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminKeuanganRoute =
+  AuthenticatedAdminKeuanganRouteImport.update({
+    id: '/keuangan',
+    path: '/keuangan',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminKlaimRoute = AuthenticatedAdminKlaimRouteImport.update({
   id: '/klaim',
   path: '/klaim',
@@ -166,6 +175,12 @@ const AuthenticatedAdminLaporanRoute =
   AuthenticatedAdminLaporanRouteImport.update({
     id: '/laporan',
     path: '/laporan',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminMonitorRoute =
+  AuthenticatedAdminMonitorRouteImport.update({
+    id: '/monitor',
+    path: '/monitor',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const AuthenticatedAdminNomorRoute = AuthenticatedAdminNomorRouteImport.update({
@@ -228,6 +243,11 @@ const ApiPublicTelegramWebhookRoute =
     path: '/api/public/telegram/webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicWaAckRoute = ApiPublicWaAckRouteImport.update({
+  id: '/api/public/wa/ack',
+  path: '/api/public/wa/ack',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWaInboundRoute = ApiPublicWaInboundRouteImport.update({
   id: '/api/public/wa/inbound',
   path: '/api/public/wa/inbound',
@@ -255,8 +275,10 @@ export interface FileRoutesByFullPath {
   '/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/admin/keuangan': typeof AuthenticatedAdminKeuanganRoute
   '/admin/klaim': typeof AuthenticatedAdminKlaimRoute
   '/admin/laporan': typeof AuthenticatedAdminLaporanRoute
+  '/admin/monitor': typeof AuthenticatedAdminMonitorRoute
   '/admin/nomor': typeof AuthenticatedAdminNomorRoute
   '/admin/pengaturan': typeof AuthenticatedAdminPengaturanRoute
   '/admin/pengguna': typeof AuthenticatedAdminPenggunaRoute
@@ -269,6 +291,7 @@ export interface FileRoutesByFullPath {
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+  '/api/public/wa/ack': typeof ApiPublicWaAckRoute
   '/api/public/wa/inbound': typeof ApiPublicWaInboundRoute
 }
 export interface FileRoutesByTo {
@@ -291,8 +314,10 @@ export interface FileRoutesByTo {
   '/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/admin/keuangan': typeof AuthenticatedAdminKeuanganRoute
   '/admin/klaim': typeof AuthenticatedAdminKlaimRoute
   '/admin/laporan': typeof AuthenticatedAdminLaporanRoute
+  '/admin/monitor': typeof AuthenticatedAdminMonitorRoute
   '/admin/nomor': typeof AuthenticatedAdminNomorRoute
   '/admin/pengaturan': typeof AuthenticatedAdminPengaturanRoute
   '/admin/pengguna': typeof AuthenticatedAdminPenggunaRoute
@@ -305,6 +330,7 @@ export interface FileRoutesByTo {
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+  '/api/public/wa/ack': typeof ApiPublicWaAckRoute
   '/api/public/wa/inbound': typeof ApiPublicWaInboundRoute
 }
 export interface FileRoutesById {
@@ -330,8 +356,10 @@ export interface FileRoutesById {
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/_authenticated/admin/kampanye': typeof AuthenticatedAdminKampanyeRoute
+  '/_authenticated/admin/keuangan': typeof AuthenticatedAdminKeuanganRoute
   '/_authenticated/admin/klaim': typeof AuthenticatedAdminKlaimRoute
   '/_authenticated/admin/laporan': typeof AuthenticatedAdminLaporanRoute
+  '/_authenticated/admin/monitor': typeof AuthenticatedAdminMonitorRoute
   '/_authenticated/admin/nomor': typeof AuthenticatedAdminNomorRoute
   '/_authenticated/admin/pengaturan': typeof AuthenticatedAdminPengaturanRoute
   '/_authenticated/admin/pengguna': typeof AuthenticatedAdminPenggunaRoute
@@ -344,6 +372,7 @@ export interface FileRoutesById {
   '/api/public/cron/process-queue': typeof ApiPublicCronProcessQueueRoute
   '/api/public/db/$': typeof ApiPublicDbSplatRoute
   '/api/public/telegram/webhook': typeof ApiPublicTelegramWebhookRoute
+  '/api/public/wa/ack': typeof ApiPublicWaAckRoute
   '/api/public/wa/inbound': typeof ApiPublicWaInboundRoute
 }
 export interface FileRouteTypes {
@@ -369,8 +398,10 @@ export interface FileRouteTypes {
     | '/templates'
     | '/auth/callback'
     | '/admin/kampanye'
+    | '/admin/keuangan'
     | '/admin/klaim'
     | '/admin/laporan'
+    | '/admin/monitor'
     | '/admin/nomor'
     | '/admin/pengaturan'
     | '/admin/pengguna'
@@ -383,6 +414,7 @@ export interface FileRouteTypes {
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
     | '/api/public/telegram/webhook'
+    | '/api/public/wa/ack'
     | '/api/public/wa/inbound'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -405,8 +437,10 @@ export interface FileRouteTypes {
     | '/templates'
     | '/auth/callback'
     | '/admin/kampanye'
+    | '/admin/keuangan'
     | '/admin/klaim'
     | '/admin/laporan'
+    | '/admin/monitor'
     | '/admin/nomor'
     | '/admin/pengaturan'
     | '/admin/pengguna'
@@ -419,6 +453,7 @@ export interface FileRouteTypes {
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
     | '/api/public/telegram/webhook'
+    | '/api/public/wa/ack'
     | '/api/public/wa/inbound'
   id:
     | '__root__'
@@ -443,8 +478,10 @@ export interface FileRouteTypes {
     | '/_authenticated/templates'
     | '/auth/callback'
     | '/_authenticated/admin/kampanye'
+    | '/_authenticated/admin/keuangan'
     | '/_authenticated/admin/klaim'
     | '/_authenticated/admin/laporan'
+    | '/_authenticated/admin/monitor'
     | '/_authenticated/admin/nomor'
     | '/_authenticated/admin/pengaturan'
     | '/_authenticated/admin/pengguna'
@@ -457,6 +494,7 @@ export interface FileRouteTypes {
     | '/api/public/cron/process-queue'
     | '/api/public/db/$'
     | '/api/public/telegram/webhook'
+    | '/api/public/wa/ack'
     | '/api/public/wa/inbound'
   fileRoutesById: FileRoutesById
 }
@@ -473,6 +511,7 @@ export interface RootRouteChildren {
   ApiPublicCronProcessQueueRoute: typeof ApiPublicCronProcessQueueRoute
   ApiPublicDbSplatRoute: typeof ApiPublicDbSplatRoute
   ApiPublicTelegramWebhookRoute: typeof ApiPublicTelegramWebhookRoute
+  ApiPublicWaAckRoute: typeof ApiPublicWaAckRoute
   ApiPublicWaInboundRoute: typeof ApiPublicWaInboundRoute
 }
 
@@ -632,6 +671,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminKampanyeRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/keuangan': {
+      id: '/_authenticated/admin/keuangan'
+      path: '/keuangan'
+      fullPath: '/admin/keuangan'
+      preLoaderRoute: typeof AuthenticatedAdminKeuanganRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/klaim': {
       id: '/_authenticated/admin/klaim'
       path: '/klaim'
@@ -644,6 +690,13 @@ declare module '@tanstack/react-router' {
       path: '/laporan'
       fullPath: '/admin/laporan'
       preLoaderRoute: typeof AuthenticatedAdminLaporanRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/monitor': {
+      id: '/_authenticated/admin/monitor'
+      path: '/monitor'
+      fullPath: '/admin/monitor'
+      preLoaderRoute: typeof AuthenticatedAdminMonitorRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
     '/_authenticated/admin/nomor': {
@@ -723,6 +776,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicTelegramWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/wa/ack': {
+      id: '/api/public/wa/ack'
+      path: '/api/public/wa/ack'
+      fullPath: '/api/public/wa/ack'
+      preLoaderRoute: typeof ApiPublicWaAckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/wa/inbound': {
       id: '/api/public/wa/inbound'
       path: '/api/public/wa/inbound'
@@ -735,8 +795,10 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminKampanyeRoute: typeof AuthenticatedAdminKampanyeRoute
+  AuthenticatedAdminKeuanganRoute: typeof AuthenticatedAdminKeuanganRoute
   AuthenticatedAdminKlaimRoute: typeof AuthenticatedAdminKlaimRoute
   AuthenticatedAdminLaporanRoute: typeof AuthenticatedAdminLaporanRoute
+  AuthenticatedAdminMonitorRoute: typeof AuthenticatedAdminMonitorRoute
   AuthenticatedAdminNomorRoute: typeof AuthenticatedAdminNomorRoute
   AuthenticatedAdminPengaturanRoute: typeof AuthenticatedAdminPengaturanRoute
   AuthenticatedAdminPenggunaRoute: typeof AuthenticatedAdminPenggunaRoute
@@ -746,8 +808,10 @@ interface AuthenticatedAdminRouteChildren {
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminKampanyeRoute: AuthenticatedAdminKampanyeRoute,
+  AuthenticatedAdminKeuanganRoute: AuthenticatedAdminKeuanganRoute,
   AuthenticatedAdminKlaimRoute: AuthenticatedAdminKlaimRoute,
   AuthenticatedAdminLaporanRoute: AuthenticatedAdminLaporanRoute,
+  AuthenticatedAdminMonitorRoute: AuthenticatedAdminMonitorRoute,
   AuthenticatedAdminNomorRoute: AuthenticatedAdminNomorRoute,
   AuthenticatedAdminPengaturanRoute: AuthenticatedAdminPengaturanRoute,
   AuthenticatedAdminPenggunaRoute: AuthenticatedAdminPenggunaRoute,
@@ -818,6 +882,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicCronProcessQueueRoute: ApiPublicCronProcessQueueRoute,
   ApiPublicDbSplatRoute: ApiPublicDbSplatRoute,
   ApiPublicTelegramWebhookRoute: ApiPublicTelegramWebhookRoute,
+  ApiPublicWaAckRoute: ApiPublicWaAckRoute,
   ApiPublicWaInboundRoute: ApiPublicWaInboundRoute,
 }
 export const routeTree = rootRouteImport

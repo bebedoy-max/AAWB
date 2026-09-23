@@ -80,6 +80,15 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           console.error("[blast-devices] sapuan pesan macet gagal:", error instanceof Error ? error.message : error);
         }
 
+        // Rem otomatis kecepatan (hanya bila dinyalakan admin). Galat di sini tidak boleh
+        // menghentikan pengiriman.
+        try {
+          const { maybeAutoBrake } = await import("@/lib/blast-brake.server");
+          await maybeAutoBrake(supabaseAdmin);
+        } catch (error) {
+          console.error("[blast-devices] rem otomatis gagal:", error instanceof Error ? error.message : error);
+        }
+
         // Tidak ada kampanye berjalan → tidak ada pekerjaan.
         const { count: running } = await supabaseAdmin
           .from("campaigns")

@@ -22,6 +22,8 @@ import {
   FileText,
   Clock3,
   Globe2,
+  Gauge,
+  PiggyBank,
 } from "lucide-react";
 
 import { getMyRole } from "@/lib/admin.functions";
@@ -52,10 +54,12 @@ const MEMBER_NAV = [
 /** Menu utama admin (bar horizontal, mengikuti rancangan konsol admin). */
 const ADMIN_NAV = [
   { to: "/admin", label: "Ringkasan", icon: LayoutDashboard },
+  { to: "/admin/monitor", label: "Monitor", icon: Gauge },
   { to: "/admin/pengguna", label: "Pengguna", icon: Users },
   { to: "/admin/kampanye", label: "Kampanye", icon: Send },
   { to: "/admin/nomor", label: "Data Nomor", icon: ListChecks },
   { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/keuangan", label: "Laporan Keuangan", icon: PiggyBank },
   { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
   { to: "/admin/tim", label: "Tim Admin", icon: ShieldCheck },
   { to: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
@@ -64,8 +68,10 @@ const ADMIN_NAV = [
 /** Menu monitoring yang tersedia pada navigasi bawah admin di ponsel. */
 const ADMIN_MOBILE_NAV = [
   { to: "/admin", label: "Ringkasan", icon: LayoutDashboard },
+  { to: "/admin/monitor", label: "Monitor Blast", icon: Gauge },
   { to: "/admin/pengguna", label: "Pengguna", icon: Users },
   { to: "/admin/laporan", label: "Laporan", icon: FileText },
+  { to: "/admin/keuangan", label: "Laporan Keuangan", icon: PiggyBank },
   { to: "/admin/klaim", label: "Klaim Dana", icon: Wallet },
 ] as const;
 
@@ -221,7 +227,7 @@ function AdminBottomNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <nav
-      className="fixed bottom-5 left-1/2 z-40 grid h-[4.5rem] w-[23rem] max-w-[calc(100%-1.5rem)] -translate-x-1/2 grid-cols-4 items-center rounded-[2rem] border bg-card/95 px-3 shadow-glow backdrop-blur lg:hidden"
+      className="fixed bottom-5 left-1/2 z-40 grid h-[4.5rem] w-[23rem] max-w-[calc(100%-1.5rem)] -translate-x-1/2 grid-cols-5 items-center rounded-[2rem] border bg-card/95 px-3 shadow-glow backdrop-blur lg:hidden"
       aria-label="Navigasi admin"
     >
       {ADMIN_MOBILE_NAV.map(({ to, label, icon: Icon }) => {

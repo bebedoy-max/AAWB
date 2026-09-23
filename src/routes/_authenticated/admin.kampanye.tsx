@@ -27,10 +27,12 @@ import {
   createBlastProject,
   deleteBlastProject,
   listBlastProjects,
+  setCampaignTestMode,
   setProjectStatus,
   updateBlastProject,
   type BlastProjectRow,
 } from "@/lib/monitor.functions";
+
 import {
   AdminPageTitle,
   EmptyState,
@@ -65,6 +67,8 @@ function KampanyePage() {
   const updateProject = useServerFn(updateBlastProject);
   const removeProject = useServerFn(deleteBlastProject);
   const changeStatus = useServerFn(setProjectStatus);
+  const changeTestMode = useServerFn(setCampaignTestMode);
+
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<BlastProjectRow | null>(null);
@@ -139,6 +143,19 @@ function KampanyePage() {
     onSuccess: () => invalidate(),
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const toggleTest = useMutation({
+    mutationFn: (vars: { id: string; testMode: boolean }) => changeTestMode({ data: vars }),
+    onSuccess: (res) =>
+      toast.success(
+        res.test_mode
+          ? "Test Mode aktif — kampanye ini tidak memberi reward"
+          : "Test Mode nonaktif — reward kembali normal",
+      ),
+    onError: (e: Error) => toast.error(e.message),
+    onSettled: () => invalidate(),
+  });
+
 
   const destroy = useMutation({
     mutationFn: (id: string) => removeProject({ data: { id } }),
@@ -239,13 +256,21 @@ function KampanyePage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <p className="truncate text-base font-bold tracking-tight">{p.name}</p>
-                      <Badge
-                        variant="outline"
-                        className={`shrink-0 uppercase ${STATUS_STYLE[p.status] ?? "text-muted-foreground"}`}
-                      >
-                        {STATUS_LABEL[p.status] ?? p.status}
-                      </Badge>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {p.test_mode ? (
+                          <Badge variant="outline" className="border-warning/40 uppercase text-warning">
+                            Test Mode
+                          </Badge>
+                        ) : null}
+                        <Badge
+                          variant="outline"
+                          className={`shrink-0 uppercase ${STATUS_STYLE[p.status] ?? "text-muted-foreground"}`}
+                        >
+                          {STATUS_LABEL[p.status] ?? p.status}
+                        </Badge>
+                      </div>
                     </div>
+
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
                       {p.message_body || "(tanpa pesan)"}
                     </p>
@@ -284,7 +309,21 @@ function KampanyePage() {
                     </Button>
                   </div>
 
+                  {/* Test mode */}
+                  <div className="flex shrink-0 flex-col items-center gap-2 border-t pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Test Mode
+                    </span>
+                    <Switch
+                      checked={p.test_mode}
+                      disabled={toggleTest.isPending}
+                      onCheckedChange={(on) => toggleTest.mutate({ id: p.id, testMode: on })}
+                      aria-label={`Test Mode kampanye ${p.name}`}
+                    />
+                  </div>
+
                   {/* Power switch */}
+
                   <div className="flex shrink-0 flex-col items-center gap-2 border-t pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Power Switch

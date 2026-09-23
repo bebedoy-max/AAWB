@@ -114,17 +114,33 @@ function Campaigns() {
     queryKey: ["campaign-progress"],
     refetchInterval: 5000,
     queryFn: async () => {
-      const { data } = await supabase.from("message_queue").select("campaign_id,status").limit(2000);
-      const map: Record<string, { sent: number; failed: number; total: number }> = {};
-      (data ?? []).forEach((r) => {
-        const entry = (map[r.campaign_id] ??= { sent: 0, failed: 0, total: 0 });
+      // delivery_status berasal dari migrasi 033 dan belum ada di tipe hasil
+      // generate Supabase, jadi baris dibaca dengan bentuk manual di bawah.
+      const { data } = await supabase
+        .from("message_queue")
+        .select("campaign_id,status,delivery_status" as "campaign_id,status")
+        .limit(2000);
+      type Row = { campaign_id: string; status: string; delivery_status?: string | null };
+      const rows = (data ?? []) as unknown as Row[];
+      const map: Record<
+        string,
+        { sent: number; failed: number; total: number; delivered: number; read: number }
+      > = {};
+      rows.forEach((r) => {
+        const entry = (map[r.campaign_id] ??= { sent: 0, failed: 0, total: 0, delivered: 0, read: 0 });
         entry.total += 1;
         if (r.status === "sent") entry.sent += 1;
         if (r.status === "failed") entry.failed += 1;
+        // Tanda terima dari WhatsApp: bukti pesan benar-benar sampai / dibaca.
+        const ack = r.delivery_status;
+        if (ack === "device" || ack === "read") entry.delivered += 1;
+        if (ack === "read") entry.read += 1;
+
       });
       return map;
     },
   });
+
 
   // Pengiriman otomatis dijalankan oleh pekerja global (CampaignAutoRunner)
   // di seluruh aplikasi. Halaman ini hanya menyegarkan tampilan.

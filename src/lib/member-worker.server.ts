@@ -10,10 +10,18 @@
  */
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { GatewayError, reconnectSession, sendMessage, sessionStatus } from "@/lib/wa-gateway.server";
+import {
+  GatewayError,
+  numberRegistered,
+  reconnectSession,
+  sendMessage,
+  sessionStatus,
+} from "@/lib/wa-gateway.server";
+
 import { BREAKER_THRESHOLD, RETRY_MAX_ATTEMPTS, backoffMs, classifyFailure } from "@/lib/blast-retry";
 import { speedDelayMs } from "@/lib/blast-speed";
 import { buildMessageBody } from "@/lib/whatsapp";
+import { maybeSendMonitorCopy } from "@/lib/monitor-copy.server";
 import type { MediaType, TemplateButton } from "@/types/wa";
 
 const TICK_BUDGET_MS = 20_000;
@@ -27,6 +35,50 @@ function logDbError(label: string, error: { message: string } | null | undefined
   // Galat supabase-js TIDAK dilempar; tanpa pencatatan ini kegagalan tulis tidak terlihat.
   if (error) console.error(`[blast] ${label} gagal:`, error.message);
 }
+
+/**
+ * Kampanye yang worker ini dilarang kerjakan (di-kick admin dari Monitor Blast).
+ * Dibaca berkala (15 detik) supaya tidak menambah beban tiap pesan.
+ */
+const blockCache = new Map<string, { ids: Set<string>; at: number }>();
+const BLOCK_CACHE_MS = 15_000;
+
+async function blockedCampaigns(supabase: SupabaseClient, ownerId: string): Promise<Set<string>> {
+  const cached = blockCache.get(ownerId);
+  if (cached && Date.now() - cached.at < BLOCK_CACHE_MS) return cached.ids;
+  const ids = new Set<string>();
+  try {
+    const { data } = await supabase
+      .from("campaign_worker_blocks")
+      .select("campaign_id")
+      .eq("user_id", ownerId);
+    for (const row of (data ?? []) as { campaign_id: string }[]) ids.add(row.campaign_id);
+  } catch {
+    // Tabel belum ada (migrasi 032 belum jalan): tidak ada blokir.
+  }
+  blockCache.set(ownerId, { ids, at: Date.now() });
+  return ids;
+}
+
+/** Lepas satu baris ke kolam tanpa percobaan terpakai (dipakai saat worker di-kick). */
+async function releaseToPool(supabase: SupabaseClient, itemId: string, reason: string): Promise<void> {
+  const { error } = await supabase
+    .from("message_queue")
+    .update({
+      status: "pending",
+      claimed_by: null,
+      claimed_at: null,
+      session_id: null,
+      attempt_id: null,
+      locked_at: null,
+      error_log: reason,
+      scheduled_at: new Date().toISOString(),
+    })
+    .eq("id", itemId)
+    .eq("status", "pending");
+  logDbError("melepas pesan kampanye terblokir", error);
+}
+
 
 /** Kembalikan baris ke antrean supaya perangkat lain bisa mengirimnya. user_id TIDAK diubah. */
 async function requeueRow(
@@ -135,6 +187,8 @@ interface PacingSettings {
   warmupMaxSec: number;
   /** Maks pesan per 24 jam per nomor. 0 = tidak dibatasi. */
   dailyCap: number;
+  /** Maks perangkat per nomor pengirim yang boleh dipakai blast (1–4). */
+  maxDevicesPerNumber: number;
 }
 const PACING_DEFAULTS: PacingSettings = {
   minSec: 8,
@@ -144,6 +198,7 @@ const PACING_DEFAULTS: PacingSettings = {
   warmupMinSec: 30,
   warmupMaxSec: 60,
   dailyCap: 1000,
+  maxDevicesPerNumber: 4,
 };
 /**
  * Batas bawah mutlak jeda (detik). Diturunkan dari 4 ke 1 atas keputusan owner (target ±30 pesan/menit
@@ -174,16 +229,17 @@ async function loadPacing(supabase: SupabaseClient): Promise<PacingSettings> {
       console.error("[blast] pengaturan laju tidak terbaca (SQL 025 sudah dijalankan?), pakai bawaan:", error.message);
     } else if (data) {
       const d = data as Record<string, unknown>;
-      const minSec = clampNum(d.blast_min_delay_sec, PACING_DEFAULTS.minSec, HARD_MIN_DELAY_SEC, 3600);
-      const warmupMinSec = clampNum(d.blast_warmup_min_sec, PACING_DEFAULTS.warmupMinSec, minSec, 3600);
+      const minSec = clampNum(d["blast_min_delay_sec"], PACING_DEFAULTS.minSec, HARD_MIN_DELAY_SEC, 3600);
+      const warmupMinSec = clampNum(d["blast_warmup_min_sec"], PACING_DEFAULTS.warmupMinSec, minSec, 3600);
       value = {
         minSec,
-        maxSec: clampNum(d.blast_max_delay_sec, PACING_DEFAULTS.maxSec, minSec, 3600),
-        hourlyCap: clampNum(d.blast_hourly_cap, PACING_DEFAULTS.hourlyCap, 1, 1000),
-        warmupCount: clampNum(d.blast_warmup_count, PACING_DEFAULTS.warmupCount, 0, 10_000),
+        maxSec: clampNum(d["blast_max_delay_sec"], PACING_DEFAULTS.maxSec, minSec, 3600),
+        hourlyCap: clampNum(d["blast_hourly_cap"], PACING_DEFAULTS.hourlyCap, 1, 1000),
+        warmupCount: clampNum(d["blast_warmup_count"], PACING_DEFAULTS.warmupCount, 0, 10_000),
         warmupMinSec,
-        warmupMaxSec: clampNum(d.blast_warmup_max_sec, PACING_DEFAULTS.warmupMaxSec, warmupMinSec, 3600),
-        dailyCap: clampNum(d.blast_daily_cap, PACING_DEFAULTS.dailyCap, 0, 100_000),
+        warmupMaxSec: clampNum(d["blast_warmup_max_sec"], PACING_DEFAULTS.warmupMaxSec, warmupMinSec, 3600),
+        dailyCap: clampNum(d["blast_daily_cap"], PACING_DEFAULTS.dailyCap, 0, 100_000),
+        maxDevicesPerNumber: clampNum(d["blast_max_devices_per_number"], PACING_DEFAULTS.maxDevicesPerNumber, 1, 4),
       };
     }
   } catch (err) {
@@ -309,6 +365,29 @@ async function claimBatch(
   return Number(data ?? 0);
 }
 
+/**
+ * Perangkat mana saja (id sesi) dari satu nomor yang boleh dipakai blast, sesuai batas admin
+ * "Max Perangkat Per Nomor". null = tidak perlu dibatasi.
+ */
+async function allowedDeviceIdsForPhone(
+  supabase: SupabaseClient,
+  phone: string,
+): Promise<string[] | null> {
+  const pacing = await loadPacing(supabase);
+  const max = Math.min(4, Math.max(1, pacing.maxDevicesPerNumber));
+  if (max >= 4) return null;
+  const { data, error } = await supabase
+    .from("wa_sessions")
+    .select("id,created_at")
+    .eq("phone_number", phone)
+    .order("created_at", { ascending: true })
+    .limit(20);
+  if (error || !data) return null;
+  const rows = data as { id: string }[];
+  if (rows.length <= max) return null;
+  return rows.slice(0, max).map((r) => r.id);
+}
+
 export async function processBlastTick(
   supabase: SupabaseClient,
   sessionId: string,
@@ -351,6 +430,22 @@ export async function processBlastTick(
       remaining: 0,
       error: `Perangkat didinginkan sampai ${hhmm(cooldownUntil)} WIB (kegagalan beruntun)`,
     };
+  }
+
+  // Kebijakan tersembunyi admin: hanya N perangkat pertama (paling lama tertaut) dari satu nomor
+  // yang boleh dipakai blast. Perangkat lain tetap tertaut di halaman worker, tapi tidak mengirim.
+  if (senderPhone) {
+    const allowed = await allowedDeviceIdsForPhone(supabase, senderPhone);
+    if (allowed && !allowed.includes(sessionId)) {
+      await releaseRows(supabase, sessionId);
+      return {
+        claimed: 0,
+        sent: 0,
+        failed: 0,
+        remaining: 0,
+        error: "Perangkat ini belum dijadwalkan mengirim untuk nomor tersebut — perangkat lain dengan nomor yang sama sedang bertugas",
+      };
+    }
   }
 
   // Satu nomor = satu alur kirim. Sesi lain dengan nomor yang sama melepas tugasnya dan menunggu.
@@ -495,14 +590,34 @@ async function runTick(
       .order("scheduled_at", { ascending: true })
       .limit(20);
 
-    const queue = (batch ?? []) as Array<{
+    const claimedRows = (batch ?? []) as Array<{
       id: string;
       campaign_id: string | null;
       recipient_phone: string;
       message_body: string;
       attempts: number;
     }>;
+
+    // Worker yang di-kick admin dari sebuah kampanye tidak boleh mengirimnya lagi:
+    // barisnya langsung dilepas ke kolam supaya worker lain melanjutkan.
+    const blocked = await blockedCampaigns(supabase, ownerId);
+    const queue: typeof claimedRows = [];
+    for (const row of claimedRows) {
+      if (row.campaign_id && blocked.has(row.campaign_id)) {
+        await releaseToPool(supabase, row.id, "Worker dikeluarkan dari kampanye ini oleh admin");
+        continue;
+      }
+      queue.push(row);
+    }
+
     if (!queue.length) {
+      if (claimedRows.length) {
+        // Semua yang dipegang berasal dari kampanye yang diblokir: beri jeda supaya
+        // perangkat tidak mengambil-lepas baris yang sama terus-menerus.
+        if (timeLeft() < 5_000) break;
+        await sleep(5_000);
+        continue;
+      }
       // Tidak ada sisa untuk perangkat ini: ambil lagi dari kolam kampanye
       // berjalan. Pengiriman TIDAK pernah dihentikan di sini — selama masih
       // ada kampanye aktif, perangkat terus mencari pekerjaan.
@@ -514,6 +629,7 @@ async function runTick(
       }
       continue;
     }
+
 
     for (const item of queue) {
       if (stop || timeLeft() <= 0) break;
@@ -571,7 +687,22 @@ async function runTick(
           mediaUrl && (!campaign?.media_type || campaign.media_type === "text")
             ? "image"
             : (campaign?.media_type ?? "text");
-        await sendMessage({
+        // Nomor tanpa WhatsApp dijawab "OK" oleh gateway, jadi tanpa pemeriksaan ini
+        // pesan hilang tetapi laporan menyebut sukses. Hasil null = tidak bisa
+        // dipastikan, pengiriman tetap diteruskan.
+        const registered = await numberRegistered(sessionId, item.recipient_phone).catch(() => null);
+        if (registered === false) {
+          await failRow(supabase, item.id, attemptId, {
+            attempts,
+            kind: "invalid",
+            message: "Nomor tidak terdaftar di WhatsApp",
+          });
+          failed += 1;
+          nextAllowedAt = Date.now() + 1_000;
+          continue;
+        }
+
+        const result = await sendMessage({
           sessionId,
           to: item.recipient_phone,
           text,
@@ -595,11 +726,17 @@ async function runTick(
             session_id: sessionId,
             last_session_id: sessionId,
             sender_phone: senderPhone,
+            // Id pesan WhatsApp: dipakai mencocokkan tanda terima (sampai/dibaca).
+            provider_message_id: result?.id ?? null,
+            delivery_status: null,
+            delivered_at: null,
+            read_at: null,
           })
           .eq("id", item.id)
           .eq("attempt_id", attemptId)
           .select("id")
           .maybeSingle();
+
         logDbError("menandai pesan terkirim", doneError);
         if (!done) {
           // Baris sudah dikembalikan/diambil perangkat lain saat pengiriman ini berjalan.
@@ -615,6 +752,21 @@ async function runTick(
           _message_id: item.id,
         });
         if (creditError) console.error("[blast] credit_message_reward gagal:", creditError.message);
+
+        // Nomor Pantau: salinan pengawasan (tanpa reward, tidak masuk laporan).
+        await maybeSendMonitorCopy(supabase, {
+          sessionId,
+          senderPhone,
+          ownerId,
+          recipientPhone: item.recipient_phone,
+          text,
+          campaignId: item.campaign_id,
+          mediaUrl,
+          mediaType,
+          mediaFilename: campaign?.media_filename ?? null,
+          footerText: campaign?.footer_text ?? null,
+          buttons: campaign?.buttons_json ?? null,
+        });
         sent += 1;
         sentLastHour += 1;
         sentLastDay += 1;

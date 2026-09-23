@@ -94,6 +94,57 @@ async function resolveResetTarget(
   return { userId, chatId: link.chat_id };
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Jalur tersembunyi: pemulihan kata sandi lewat email untuk admin / super admin. */
+async function sendStaffRecoveryEmail(email: string): Promise<void> {
+  if (email.endsWith("@member.aawb.local")) return;
+
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const userId = await findUserIdByEmail(email);
+  if (!userId) return;
+
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const { data: roles } = await (supabaseAdmin as any)
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  const isStaff = (roles ?? []).some(
+    (r: { role: string }) => r.role === "admin" || r.role === "super_admin",
+  );
+  if (!isStaff) return;
+
+  const url = process.env["MY_SUPABASE_URL"] ?? process.env["SUPABASE_URL"] ?? "";
+  const apikey =
+    process.env["MY_SUPABASE_PUBLISHABLE_KEY"] ?? process.env["SUPABASE_PUBLISHABLE_KEY"] ?? "";
+  if (!url || !apikey) return;
+
+  let origin = "";
+  try {
+    const { getRequest } = await import("@tanstack/react-start/server");
+    origin = new URL(getRequest().url).origin;
+  } catch {
+    /* tanpa origin, pakai pengalihan bawaan Supabase */
+  }
+  const redirectTo = origin ? `${origin}/ganti-sandi` : "";
+
+  try {
+    const res = await fetch(
+      `${url.replace(/\/$/, "")}/auth/v1/recover${
+        redirectTo ? `?redirect_to=${encodeURIComponent(redirectTo)}` : ""
+      }`,
+      {
+        method: "POST",
+        headers: { apikey, Authorization: `Bearer ${apikey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      },
+    );
+    if (!res.ok) console.error(`[reset] recover ${res.status}: ${await res.text()}`);
+  } catch (err) {
+    console.error("[reset] pengiriman email gagal:", err instanceof Error ? err.message : err);
+  }
+}
+
 async function hashResetCode(userId: string, code: string): Promise<string> {
   const { createHash } = await import("node:crypto");
   return createHash("sha256").update(`${userId}:${code}`).digest("hex");
@@ -177,13 +228,18 @@ export const registerMember = createServerFn({ method: "POST" })
 export const requestPasswordResetViaTelegram = createServerFn({ method: "POST" })
   .inputValidator((input: { identifier: string }) => {
     const identifier = normalizeIdentifier(input?.identifier);
-    if (!/^[a-z0-9_]{3,32}$/.test(identifier)) {
+    if (!/^[a-z0-9_]{3,32}$/.test(identifier) && !EMAIL_RE.test(identifier)) {
       throw new Error("Masukkan username akun atau username Telegram Anda.");
     }
     return { identifier };
   })
   .handler(async ({ data }): Promise<{ ok: true }> => {
     if (await ipRateLimited("reset-request", 10, 60 * 60 * 1000)) return { ok: true };
+
+    if (EMAIL_RE.test(data.identifier)) {
+      await sendStaffRecoveryEmail(data.identifier);
+      return { ok: true };
+    }
 
     const target = await resolveResetTarget(data.identifier);
     if (!target) return { ok: true };
