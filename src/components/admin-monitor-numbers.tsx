@@ -196,7 +196,7 @@ export function AdminMonitorNumbers() {
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="monitor-codes">Kode negara penerima</Label>
+              <Label htmlFor="monitor-codes">Kode negara pengirim</Label>
               <Input
                 id="monitor-codes"
                 placeholder="contoh: 62, 60"
@@ -207,7 +207,8 @@ export function AdminMonitorNumbers() {
                 }}
               />
               <p className="text-xs text-muted-foreground">
-                Pisahkan dengan koma. Kosongkan bila tidak memakai aturan kode negara.
+                Pisahkan dengan koma. Contoh: 62 — semua worker dengan nomor pengirim Indonesia
+                ikut mengirim salinan ke nomor pantau. Kosongkan bila tidak memakai aturan ini.
               </p>
             </div>
           </div>

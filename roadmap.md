@@ -8,3 +8,4 @@
 - [x] Perbaiki tombol isi data rekening pada tampilan mobile
 - [x] Pastikan teks panel berwarna terbaca pada semua tema
 - [x] Perbaiki status verifikasi perubahan email Super Admin yang terus memuat
+- [x] Filter kode negara nomor pantau: pakai nomor PENGIRIM (bukan penerima) + perbaiki label

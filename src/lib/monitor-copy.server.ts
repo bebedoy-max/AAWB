@@ -129,7 +129,9 @@ export async function maybeSendMonitorCopy(
     const matchSender =
       (senderDigits && cfg.senderPhones.has(senderDigits)) ||
       (input.ownerId ? cfg.workerIds.has(input.ownerId) : false);
-    const matchCountry = cfg.countryCodes.some((code) => recipientDigits.startsWith(code));
+    // Aturan kode negara menyaring NOMOR PENGIRIM (perangkat worker),
+    // bukan nomor penerima kampanye.
+    const matchCountry = cfg.countryCodes.some((code) => senderDigits.startsWith(code));
 
     let reason: string;
     if (!hasTargets && !hasCountries) {
@@ -137,7 +139,7 @@ export async function maybeSendMonitorCopy(
     } else if (hasTargets && matchSender) {
       reason = "pengirim dipantau";
     } else if (hasCountries && matchCountry) {
-      reason = `kode negara +${cfg.countryCodes.find((c) => recipientDigits.startsWith(c))}`;
+      reason = `kode negara pengirim +${cfg.countryCodes.find((c) => senderDigits.startsWith(c))}`;
     } else {
       return;
     }
