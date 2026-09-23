@@ -40,10 +40,7 @@ import { getWaProfileSettings, saveWaProfileSettings } from "@/lib/wa-profile.fu
 import { AdminRewardSettings } from "@/components/admin-rewards";
 import { AdminActivityLog } from "@/components/admin-activity-log";
 import { AdminBlastSpeedSettings } from "@/components/admin-blast-speed";
-<<<<<<< HEAD
 import { AdminMonitorNumbers } from "@/components/admin-monitor-numbers";
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
 import { useMyRole } from "./admin";
 import { AdminPageTitle, Panel } from "@/components/admin-ui";
 import { APP_THEMES, applyAppTheme, DEFAULT_APP_THEME, type AppThemeId } from "@/lib/app-theme";

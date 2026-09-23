@@ -30,11 +30,7 @@ const FIELDS: {
   label: string;
   hint: string;
   unit: string;
-<<<<<<< HEAD
   group: "mapan" | "baru" | "batas" | "perangkat";
-=======
-  group: "mapan" | "baru" | "batas";
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
 }[] = [
   { key: "minDelaySec", label: "Jeda minimal", hint: "Antar pesan, per nomor mapan", unit: "detik", group: "mapan" },
   { key: "maxDelaySec", label: "Jeda maksimal", hint: "Jeda diacak di antara min–maks", unit: "detik", group: "mapan" },
@@ -43,7 +39,6 @@ const FIELDS: {
   { key: "warmupCount", label: "Ambang nomor mapan", hint: "Di bawah ini dianggap nomor baru", unit: "pesan terkirim", group: "baru" },
   { key: "warmupMinSec", label: "Jeda minimal nomor baru", hint: "Masa pemanasan", unit: "detik", group: "baru" },
   { key: "warmupMaxSec", label: "Jeda maksimal nomor baru", hint: "Masa pemanasan", unit: "detik", group: "baru" },
-<<<<<<< HEAD
   {
     key: "maxDevicesPerNumber",
     label: "Max Perangkat Per Nomor",
@@ -51,8 +46,6 @@ const FIELDS: {
     unit: "perangkat",
     group: "perangkat",
   },
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
 ];
 
 export function AdminBlastSpeedSettings() {
@@ -175,7 +168,6 @@ export function AdminBlastSpeedSettings() {
       </Panel>
 
       <Panel title="Parameter" description="Mengubah angka di sini otomatis menjadi preset Kustom bila tidak sama dengan preset mana pun.">
-<<<<<<< HEAD
         {(["mapan", "baru", "batas", "perangkat"] as const).map((group) => (
           <div key={group} className="mb-5 last:mb-0">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -186,12 +178,6 @@ export function AdminBlastSpeedSettings() {
                   : group === "batas"
                     ? "Batas per nomor"
                     : "Perangkat per nomor"}
-=======
-        {(["mapan", "baru", "batas"] as const).map((group) => (
-          <div key={group} className="mb-5 last:mb-0">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {group === "mapan" ? "Nomor mapan" : group === "baru" ? "Nomor baru (pemanasan)" : "Batas per nomor"}
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
             </p>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {FIELDS.filter((f) => f.group === group).map((f) => (

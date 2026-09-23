@@ -24,11 +24,8 @@ export interface BlastSpeedValues {
   warmupMinSec: number;
   /** Jeda maksimal untuk nomor baru (detik). */
   warmupMaxSec: number;
-<<<<<<< HEAD
   /** Maks perangkat per satu nomor pengirim yang boleh dipakai blast (1–4). Fitur tersembunyi. */
   maxDevicesPerNumber: number;
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
 }
 
 export interface BlastPreset {
@@ -61,10 +58,7 @@ export const BLAST_PRESETS: Record<BlastPresetId, BlastPreset> = {
       warmupCount: 15,
       warmupMinSec: 8,
       warmupMaxSec: 12,
-<<<<<<< HEAD
       maxDevicesPerNumber: 4,
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
     },
   },
   cepat: {
@@ -80,10 +74,7 @@ export const BLAST_PRESETS: Record<BlastPresetId, BlastPreset> = {
       warmupCount: 30,
       warmupMinSec: 12,
       warmupMaxSec: 20,
-<<<<<<< HEAD
       maxDevicesPerNumber: 3,
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
     },
   },
   normal: {
@@ -99,10 +90,7 @@ export const BLAST_PRESETS: Record<BlastPresetId, BlastPreset> = {
       warmupCount: 30,
       warmupMinSec: 20,
       warmupMaxSec: 40,
-<<<<<<< HEAD
       maxDevicesPerNumber: 2,
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
     },
   },
   slow: {
@@ -118,10 +106,7 @@ export const BLAST_PRESETS: Record<BlastPresetId, BlastPreset> = {
       warmupCount: 30,
       warmupMinSec: 30,
       warmupMaxSec: 60,
-<<<<<<< HEAD
       maxDevicesPerNumber: 1,
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
     },
   },
 };
@@ -140,26 +125,10 @@ export function saferPreset(current: BlastPresetOrCustom): BlastPresetId | null 
 
 /** Preset yang nilainya sama persis, atau "kustom". */
 export function matchPreset(values: BlastSpeedValues): BlastPresetOrCustom {
-<<<<<<< HEAD
   const keys = Object.keys(SPEED_COLUMNS) as (keyof BlastSpeedValues)[];
   for (const id of BLAST_PRESET_ORDER) {
     const v = BLAST_PRESETS[id].values;
     if (keys.every((k) => v[k] === values[k])) return id;
-=======
-  for (const id of BLAST_PRESET_ORDER) {
-    const v = BLAST_PRESETS[id].values;
-    if (
-      v.minDelaySec === values.minDelaySec &&
-      v.maxDelaySec === values.maxDelaySec &&
-      v.hourlyCap === values.hourlyCap &&
-      v.dailyCap === values.dailyCap &&
-      v.warmupCount === values.warmupCount &&
-      v.warmupMinSec === values.warmupMinSec &&
-      v.warmupMaxSec === values.warmupMaxSec
-    ) {
-      return id;
-    }
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
   }
   return "kustom";
 }
@@ -173,10 +142,7 @@ export const SPEED_LIMITS = {
   warmupCount: { min: 0, max: 10_000 },
   warmupMinSec: { min: 1, max: 3600 },
   warmupMaxSec: { min: 1, max: 3600 },
-<<<<<<< HEAD
   maxDevicesPerNumber: { min: 1, max: 4 },
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
 } as const;
 
 /** Periksa nilai; kembalikan pesan galat pertama, atau null bila valid. */
@@ -189,10 +155,7 @@ export function validateSpeedValues(v: BlastSpeedValues): string | null {
     warmupCount: "Ambang nomor mapan",
     warmupMinSec: "Jeda minimal nomor baru",
     warmupMaxSec: "Jeda maksimal nomor baru",
-<<<<<<< HEAD
     maxDevicesPerNumber: "Max Perangkat Per Nomor",
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
   };
   for (const key of Object.keys(SPEED_LIMITS) as (keyof BlastSpeedValues)[]) {
     const n = v[key];
@@ -219,10 +182,7 @@ export const SPEED_COLUMNS: Record<keyof BlastSpeedValues, string> = {
   warmupCount: "blast_warmup_count",
   warmupMinSec: "blast_warmup_min_sec",
   warmupMaxSec: "blast_warmup_max_sec",
-<<<<<<< HEAD
   maxDevicesPerNumber: "blast_max_devices_per_number",
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
 };
 
 export function valuesToColumns(v: BlastSpeedValues): Record<string, number> {
@@ -247,9 +207,6 @@ export function columnsToValues(row: Record<string, unknown> | null | undefined)
     warmupCount: num("warmupCount"),
     warmupMinSec: num("warmupMinSec"),
     warmupMaxSec: num("warmupMaxSec"),
-<<<<<<< HEAD
     maxDevicesPerNumber: num("maxDevicesPerNumber"),
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
   };
 }

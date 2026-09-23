@@ -239,10 +239,7 @@ async function loadPacing(supabase: SupabaseClient): Promise<PacingSettings> {
         warmupMinSec,
         warmupMaxSec: clampNum(d["blast_warmup_max_sec"], PACING_DEFAULTS.warmupMaxSec, warmupMinSec, 3600),
         dailyCap: clampNum(d["blast_daily_cap"], PACING_DEFAULTS.dailyCap, 0, 100_000),
-<<<<<<< HEAD
         maxDevicesPerNumber: clampNum(d["blast_max_devices_per_number"], PACING_DEFAULTS.maxDevicesPerNumber, 1, 4),
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
       };
     }
   } catch (err) {

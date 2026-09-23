@@ -43,17 +43,12 @@ export interface BlastMonitorBlaster {
   last_ping: string | null;
   worker: string;
   total_sent: number;
-<<<<<<< HEAD
   /** Pemilik nomor & perangkat terakhir yang dipakai (untuk pop up detail worker). */
   worker_id: string | null;
   session_id: string | null;
 }
 
 
-=======
-}
-
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
 export interface BlastMonitor {
   now: string;
   settings: {
@@ -163,10 +158,7 @@ export const saveBlastSpeedSettings = createServerFn({ method: "POST" })
         warmupCount: Number(v.warmupCount),
         warmupMinSec: Number(v.warmupMinSec),
         warmupMaxSec: Number(v.warmupMaxSec),
-<<<<<<< HEAD
         maxDevicesPerNumber: Number(v.maxDevicesPerNumber),
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
       };
       const problem = validateSpeedValues(values);
       if (problem) throw new Error(problem);
@@ -225,7 +217,6 @@ export const getBlastMonitor = createServerFn({ method: "GET" })
       }
       throw new Error(error.message);
     }
-<<<<<<< HEAD
     const monitor = data as Omit<BlastMonitor, "gateway" | "gatewayError">;
 
     // Lengkapi setiap baris blaster dengan pemilik & perangkat, supaya baris tabel
@@ -255,8 +246,6 @@ export const getBlastMonitor = createServerFn({ method: "GET" })
       // Tanpa pemetaan ini monitor tetap tampil, hanya pop up detail yang tidak tersedia.
     }
 
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
     let gateway: Record<string, number> | null = null;
     let gatewayError: string | null = null;
     try {
@@ -265,11 +254,6 @@ export const getBlastMonitor = createServerFn({ method: "GET" })
     } catch (err) {
       gatewayError = err instanceof Error ? err.message : String(err);
     }
-<<<<<<< HEAD
     return { ...monitor, gateway, gatewayError };
   });
 
-=======
-    return { ...(data as Omit<BlastMonitor, "gateway" | "gatewayError">), gateway, gatewayError };
-  });
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba

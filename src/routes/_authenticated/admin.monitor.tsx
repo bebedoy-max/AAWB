@@ -45,15 +45,10 @@ import {
 } from "@/components/admin-ui";
 import { cn } from "@/lib/utils";
 import { getBlastMonitor, type BlastMonitor, type BlastMonitorBlaster } from "@/lib/blast-control.functions";
-<<<<<<< HEAD
 import { WorkerDetailDialog, type WorkerDialogTarget } from "@/components/WorkerDetailDialog";
 import { BLAST_PRESETS, isBlastPresetId } from "@/lib/blast-presets";
 
 
-=======
-import { BLAST_PRESETS, isBlastPresetId } from "@/lib/blast-presets";
-
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
 export const Route = createFileRoute("/_authenticated/admin/monitor")({
   head: () => ({
     meta: [
@@ -217,13 +212,9 @@ function MonitorPage() {
 }
 
 function MonitorBody({ data, now, updatedAt }: { data: BlastMonitor; now: number; updatedAt: number }) {
-<<<<<<< HEAD
   const [workerTarget, setWorkerTarget] = useState<WorkerDialogTarget | null>(null);
   const [blasterPageRaw, setBlasterPage] = useState(0);
 
-=======
-  const [blasterPageRaw, setBlasterPage] = useState(0);
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
   const blasterTotal = data.blasters.length;
   const blasterTotalPages = Math.max(1, Math.ceil(blasterTotal / BLASTER_PER_PAGE));
   const blasterPage = Math.min(blasterPageRaw, blasterTotalPages - 1);
@@ -377,7 +368,6 @@ function MonitorBody({ data, now, updatedAt }: { data: BlastMonitor; now: number
                 {blasterRows.map((b) => {
                   const st = statusOf(b, now);
                   const mapan = b.total_sent >= warm;
-<<<<<<< HEAD
                   const clickable = Boolean(b.worker_id);
                   return (
                     <tr
@@ -395,10 +385,6 @@ function MonitorBody({ data, now, updatedAt }: { data: BlastMonitor; now: number
                           : undefined
                       }
                     >
-=======
-                  return (
-                    <tr key={b.phone}>
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
                       <Td className="font-mono text-xs">{b.phone}</Td>
                       <Td className="max-w-[160px] truncate">{b.worker || "—"}</Td>
                       <Td>{b.mode ?? "—"}</Td>
@@ -418,10 +404,7 @@ function MonitorBody({ data, now, updatedAt }: { data: BlastMonitor; now: number
                     </tr>
                   );
                 })}
-<<<<<<< HEAD
 
-=======
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
               </tbody>
             </TableShell>
             {blasterTotalPages > 1 && (
@@ -510,15 +493,9 @@ function MonitorBody({ data, now, updatedAt }: { data: BlastMonitor; now: number
           )}
         </Panel>
       </div>
-<<<<<<< HEAD
 
       <WorkerDetailDialog target={workerTarget} onClose={() => setWorkerTarget(null)} />
     </div>
   );
 }
 
-=======
-    </div>
-  );
-}
->>>>>>> 0560bd73f2ccc9a55033f7e79d0c44d555aee2ba
