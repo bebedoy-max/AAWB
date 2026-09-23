@@ -58,7 +58,9 @@ export interface BlastProjectRow {
   pending: number;
   created_at: string;
   status: string;
+  test_mode: boolean;
 }
+
 
 /** Pisahkan CTA yang disimpan di akhir pesan ("\n\nTeks: https://…"). */
 function splitCta(body: string): { message: string; cta_text: string | null; cta_url: string | null } {
@@ -234,13 +236,27 @@ export const listBlastProjects = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
-    const { data: projects, error } = await admin
+    // Kolom test_mode ditambahkan migrasi 028; jika belum diterapkan, jatuh
+    // kembali ke kueri lama agar daftar kampanye tetap tampil.
+    const baseColumns = "id,name,message_body,media_url,buttons_json,total_targets,status,created_at";
+    let { data: projects, error } = await admin
       .from("campaigns")
-      .select("id,name,message_body,media_url,buttons_json,total_targets,status,created_at")
+      .select(`${baseColumns},test_mode`)
       .eq("is_pool", true)
       .order("created_at", { ascending: false })
       .limit(100);
+    if (error) {
+      const retry = await admin
+        .from("campaigns")
+        .select(baseColumns)
+        .eq("is_pool", true)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      projects = retry.data;
+      error = retry.error;
+    }
     if (error) throw new Error(error.message);
+
 
     const ids = ((projects ?? []) as any[]).map((p) => p.id);
     const counts = new Map<string, { sent: number; failed: number; pending: number }>();
@@ -291,6 +307,8 @@ export const listBlastProjects = createServerFn({ method: "GET" })
         total_targets: p.total_targets ?? 0,
         created_at: p.created_at,
         status: p.status,
+        test_mode: p.test_mode === true,
+
         ...(counts.get(p.id) ?? { sent: 0, failed: 0, pending: 0 }),
       };
     });
@@ -464,3 +482,23 @@ export const setProjectStatus = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true, status: data.status };
   });
+
+/** Aktif/nonaktifkan Test Mode: kampanye uji coba tidak memberi reward. */
+export const setCampaignTestMode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; testMode: boolean }) => ({
+    id: String(input.id),
+    testMode: Boolean(input.testMode),
+  }))
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const admin = supabaseAdmin as any;
+    const { error } = await admin
+      .from("campaigns")
+      .update({ test_mode: data.testMode })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true, test_mode: data.testMode };
+  });
+

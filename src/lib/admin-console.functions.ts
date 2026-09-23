@@ -699,9 +699,9 @@ export const addTargets = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { campaignId: string; phones: string[] }) => {
     if (!input?.campaignId) throw new Error("Pilih kampanye target terlebih dahulu.");
-    const phones = Array.from(
-      new Set((input.phones ?? []).map((p) => String(p).replace(/\D/g, "")).filter(Boolean)),
-    );
+    // Nomor dobel TIDAK dibuang di sini: kampanye mode test boleh memakai nomor
+    // yang sama berkali-kali (nomor dev). Penyaringan dilakukan di handler.
+    const phones = (input.phones ?? []).map((p) => String(p).replace(/\D/g, "")).filter(Boolean);
     if (!phones.length) throw new Error("Tidak ada nomor yang valid.");
     return { campaignId: String(input.campaignId), phones };
   })
@@ -712,24 +712,34 @@ export const addTargets = createServerFn({ method: "POST" })
 
     const { data: campaign, error: cErr } = await admin
       .from("campaigns")
-      .select("id,message_body,total_targets")
+      .select("id,message_body,total_targets,test_mode")
       .eq("id", data.campaignId)
       .maybeSingle();
     if (cErr) throw new Error(cErr.message);
     if (!campaign) throw new Error("Kampanye tidak ditemukan.");
 
-    const { data: existing } = await admin
-      .from("message_queue")
-      .select("recipient_phone")
-      .eq("campaign_id", data.campaignId)
-      .limit(200000);
-    const known = new Set(((existing ?? []) as any[]).map((r) => r.recipient_phone));
-    const fresh = data.phones.filter((p) => !known.has(p));
+    const isTest = campaign.test_mode === true;
+
+    let fresh: string[];
+    if (isTest) {
+      // Mode test: nomor boleh diulang sebanyak yang diinginkan.
+      fresh = data.phones;
+    } else {
+      const unique = Array.from(new Set(data.phones));
+      const { data: existing } = await admin
+        .from("message_queue")
+        .select("recipient_phone")
+        .eq("campaign_id", data.campaignId)
+        .limit(200000);
+      const known = new Set(((existing ?? []) as any[]).map((r) => r.recipient_phone));
+      fresh = unique.filter((p) => !known.has(p));
+    }
     if (!fresh.length) {
       // Bukan kegagalan: semua nomor memang sudah ada. Kembalikan hasil kosong
       // agar UI menampilkan pesan, bukan layar error.
       return { ok: true, added: 0, skipped: data.phones.length };
     }
+
 
 
     const now = new Date().toISOString();
@@ -830,6 +840,13 @@ export const listReport = createServerFn({ method: "POST" })
     // pesan yang sedang berjalan ikut ditandai gagal. Sekarang ditangani sapuan terjadwal
     // (sweep_stale_processing) yang mengembalikan pesan ke antrean untuk dikirim ulang.
 
+    // Kampanye mode test TIDAK pernah masuk laporan riwayat pengiriman.
+    const { data: testRows } = await admin.from("campaigns").select("id").eq("test_mode", true);
+    const testIds = new Set<string>(((testRows ?? []) as any[]).map((c) => String(c.id)));
+    if (data.campaignId && testIds.has(data.campaignId)) {
+      return { rows: [], sent: 0, failed: 0, ready: 0 };
+    }
+
     // Ambil SELURUH baris tanpa batas: penarikan bertahap per 1.000 baris
     // sampai habis, karena database memotong maksimal 1.000 per permintaan.
     // Laporan harus mencakup semua data, bukan hanya 1.000 terbaru.
@@ -865,7 +882,11 @@ export const listReport = createServerFn({ method: "POST" })
       for (const r of (chunk ?? []) as any[]) if (!byId.has(r.id)) byId.set(r.id, r);
       if (!chunk || chunk.length < PAGE) break;
     }
-    const rows: any[] = [...byId.values()].filter((r) => r.status === "sent" || r.status === "failed");
+    const rows: any[] = [...byId.values()].filter(
+      (r) =>
+        (r.status === "sent" || r.status === "failed") &&
+        !(r.campaign_id && testIds.has(String(r.campaign_id))),
+    );
 
     // Jumlah pesan yang masih menunggu: dihitung di database, tanpa menarik barisnya.
     let pendingQuery = admin
@@ -873,6 +894,10 @@ export const listReport = createServerFn({ method: "POST" })
       .select("id", { count: "exact", head: true })
       .eq("status", "pending");
     if (data.campaignId) pendingQuery = pendingQuery.eq("campaign_id", data.campaignId);
+    else if (testIds.size)
+      pendingQuery = pendingQuery.or(
+        `campaign_id.is.null,campaign_id.not.in.(${[...testIds].join(",")})`,
+      );
     const { count: pendingCount, error: pendingError } = await pendingQuery;
     if (pendingError) throw new Error(pendingError.message);
 
