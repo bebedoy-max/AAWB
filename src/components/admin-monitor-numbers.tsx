@@ -51,6 +51,8 @@ export function AdminMonitorNumbers() {
   const [interval, setIntervalValue] = useState("20");
   const [countryCodes, setCountryCodes] = useState("");
   const [includeNote, setIncludeNote] = useState(true);
+  const [allEnabled, setAllEnabled] = useState(false);
+  const [allInterval, setAllInterval] = useState("50");
   const [touched, setTouched] = useState(false);
 
   const [phone, setPhone] = useState("");
@@ -64,6 +66,8 @@ export function AdminMonitorNumbers() {
       setIntervalValue(String(data.settings.interval));
       setCountryCodes(data.settings.country_codes);
       setIncludeNote(data.settings.include_note);
+      setAllEnabled(data.settings.all_enabled);
+      setAllInterval(String(data.settings.all_interval));
     }
   }, [data, touched]);
 
@@ -73,7 +77,7 @@ export function AdminMonitorNumbers() {
   const settingsMutation = useMutation({
     mutationFn: () =>
       saveSettings({
-        data: { enabled, interval: Number(interval), countryCodes, includeNote },
+        data: { enabled, interval: Number(interval), countryCodes, includeNote, allEnabled, allInterval: Number(allInterval) },
       }),
     onSuccess: () => {
       toast.success("Pengaturan nomor pantau tersimpan");
@@ -211,6 +215,39 @@ export function AdminMonitorNumbers() {
                 ikut mengirim salinan ke nomor pantau. Kosongkan bila tidak memakai aturan ini.
               </p>
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Pantau semua workers</p>
+                <p className="text-xs text-muted-foreground">
+                  Setiap worker mengirim salinan pesan kampanye yang sedang berjalan ke nomor pantau
+                  per jumlah pesan di bawah. Tidak dihitung reward dan tidak masuk laporan pengiriman.
+                </p>
+              </div>
+              <Switch
+                checked={allEnabled}
+                onCheckedChange={(v) => {
+                  setTouched(true);
+                  setAllEnabled(v);
+                }}
+              />
+            </div>
+            {allEnabled ? (
+              <div className="space-y-1.5 sm:max-w-xs">
+                <Label htmlFor="monitor-all-interval">Kirim setiap berapa pesan (semua workers)</Label>
+                <Input
+                  id="monitor-all-interval"
+                  inputMode="numeric"
+                  value={allInterval}
+                  onChange={(e) => {
+                    setTouched(true);
+                    setAllInterval(e.target.value.replace(/\D/g, ""));
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="flex items-center justify-between gap-4 rounded-lg border p-3">

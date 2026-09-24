@@ -1022,3 +1022,8 @@ export async function setWaProfilePicture(
     body: JSON.stringify({ file }),
   });
 }
+
+/** Mulai ulang sambungan perangkat yang tersambung tetapi diam (identitas WhatsApp tetap). */
+export async function restartIdleSession(id: string): Promise<GatewaySessionState> {
+  return recoverSessionTransport(id);
+}

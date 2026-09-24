@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+import { useMyRole } from "./admin";
 import { Calendar, Link2, Pause, Pencil, Play, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function KampanyePage() {
+  const isSuper = Boolean(useMyRole().data?.is_super_admin);
   const queryClient = useQueryClient();
   const fetchProjects = useServerFn(listBlastProjects);
   const createProject = useServerFn(createBlastProject);
@@ -298,6 +300,7 @@ function KampanyePage() {
                       <Pencil className="mr-1.5 size-3.5" />
                       Edit
                     </Button>
+                    {isSuper ? (
                     <Button
                       size="sm"
                       variant="secondary"
@@ -307,6 +310,7 @@ function KampanyePage() {
                       <Trash2 className="mr-1.5 size-3.5" />
                       Hapus
                     </Button>
+                    ) : null}
                   </div>
 
                   {/* Test mode */}

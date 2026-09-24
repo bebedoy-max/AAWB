@@ -92,6 +92,29 @@ export function useIsAdmin(): boolean {
   return Boolean(data?.is_admin);
 }
 
+/** True bila pengguna saat ini super admin (memakai cache peran yang sama). */
+export function useIsSuperAdmin(): boolean {
+  const fetchRole = useServerFn(getMyRole);
+  const { data } = useQuery({
+    queryKey: ["my-role"],
+    queryFn: async () => {
+      const { data: s } = await supabase.auth.getSession();
+      if (!s.session?.access_token) {
+        return { role: "member", is_admin: false, is_super_admin: false, setup_required: false };
+      }
+      return fetchRole();
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+  return Boolean(data?.is_super_admin);
+}
+
+/** Menu Pengaturan admin hanya untuk super admin. */
+function visibleAdminNav(isSuper: boolean) {
+  return ADMIN_NAV.filter((n) => isSuper || n.to !== "/admin/pengaturan");
+}
+
 function isActivePath(pathname: string, to: string): boolean {
   if (to === "/admin") return pathname === "/admin" || pathname === "/admin/";
   return pathname === to || pathname.startsWith(`${to}/`);
@@ -100,7 +123,8 @@ function isActivePath(pathname: string, to: string): boolean {
 function NavLinks({ onNavigate, adminMode = false }: { onNavigate?: () => void; adminMode?: boolean }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = useIsAdmin();
-  const items = adminMode || isAdmin ? [...ADMIN_NAV] : [...MEMBER_NAV];
+  const isSuper = useIsSuperAdmin();
+  const items = adminMode || isAdmin ? visibleAdminNav(isSuper) : [...MEMBER_NAV];
 
   return (
     <nav className="flex flex-col gap-1 px-3 pb-6">
@@ -130,11 +154,12 @@ function NavLinks({ onNavigate, adminMode = false }: { onNavigate?: () => void; 
 /** Bar navigasi horizontal khusus konsol admin. */
 function AdminTopNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isSuper = useIsSuperAdmin();
   return (
     <div className="px-3 lg:px-6">
       <div className="mx-auto flex w-full max-w-[1400px] items-center justify-center gap-2 overflow-x-auto rounded-b-xl bg-card px-3 py-2 lg:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
-        {ADMIN_NAV.map(({ to, label, icon: Icon }) => {
+        {visibleAdminNav(isSuper).map(({ to, label, icon: Icon }) => {
           const active = isActivePath(pathname, to);
           return (
             <Link
@@ -360,10 +385,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 
   return (
-    <div className={cn("flex min-h-screen w-full max-w-full overflow-x-hidden bg-background member-surface", adminLayout && "lg:font-sans")}>
+    <div className={cn("flex min-h-screen w-full max-w-full overflow-x-clip bg-background member-surface", adminLayout && "lg:font-sans")}>
       {adminLayout ? null : (
-        <aside className="hidden w-60 shrink-0 border-r bg-sidebar lg:block">
-          <div className="sticky top-0 flex h-screen flex-col">
+        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 self-start border-r bg-sidebar lg:block">
+          <div className="flex h-full flex-col">
             <Brand />
             <p className="px-6 pb-2 pt-2 text-[10px] font-bold uppercase text-muted-foreground">Menu utama</p>
             <NavLinks />
@@ -451,7 +476,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="col-span-3 w-full lg:hidden">
             <MemberMobileHeader
-              onSettings={() => navigate({ to: adminLayout ? "/admin/pengaturan" : "/settings" })}
+              onSettings={() =>
+                navigate({
+                  to: adminLayout
+                    ? myRole?.is_super_admin
+                      ? "/admin/pengaturan"
+                      : "/pengaturan-akun"
+                    : "/settings",
+                })
+              }
               onSignOut={() => void signOut()}
             />
           </div>
@@ -488,11 +521,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => navigate({ to: adminLayout ? "/admin/pengaturan" : "/settings" })}
-                >
-                  <Settings className="mr-2 size-4" /> Pengaturan
-                </DropdownMenuItem>
+                {myRole?.is_super_admin ? (
+                  <DropdownMenuItem onClick={() => navigate({ to: "/admin/pengaturan" })}>
+                    <Settings className="mr-2 size-4" /> Pengaturan
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem onClick={signOut}>
                   <LogOut className="mr-2 size-4" /> Keluar
                 </DropdownMenuItem>

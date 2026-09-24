@@ -786,7 +786,7 @@ export const deleteTarget = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { id: string }) => ({ id: String(input.id) }))
   .handler(async ({ data, context }) => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await (supabaseAdmin as any)
       .from("message_queue")
@@ -800,7 +800,7 @@ export const deleteTarget = createServerFn({ method: "POST" })
 export const resetTargets = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
 
@@ -981,7 +981,7 @@ export const listReport = createServerFn({ method: "POST" })
 export const clearReportHistory = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context);
+    await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
     // 1) riwayat selesai (terkirim/gagal) selalu dihapus

@@ -17,6 +17,7 @@ import {
   Palette,
   UserRound,
   Eye,
+  Ban,
   Image as ImageIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -41,6 +42,7 @@ import { AdminRewardSettings } from "@/components/admin-rewards";
 import { AdminActivityLog } from "@/components/admin-activity-log";
 import { AdminBlastSpeedSettings } from "@/components/admin-blast-speed";
 import { AdminMonitorNumbers } from "@/components/admin-monitor-numbers";
+import { AdminBlacklist } from "@/components/admin-blacklist";
 import { useMyRole } from "./admin";
 import { AdminPageTitle, Panel } from "@/components/admin-ui";
 import { APP_THEMES, applyAppTheme, DEFAULT_APP_THEME, type AppThemeId } from "@/lib/app-theme";
@@ -68,6 +70,7 @@ type SectionId =
   | "tampilan"
   | "telegram-akun"
   | "nomor-pantau"
+  | "black-list"
   | "profil-wa";
 
 const SECTIONS: {
@@ -85,6 +88,7 @@ const SECTIONS: {
   { id: "tampilan", label: "Tampilan", hint: "Tema warna", icon: Palette },
   { id: "telegram-akun", label: "Telegram Channel", hint: "Group Public NAROWA", icon: MessageCircle },
   { id: "nomor-pantau", label: "Nomor Pantau", hint: "Pengawasan pengiriman", icon: Eye, superOnly: true },
+  { id: "black-list", label: "Black List", hint: "Nomor dilarang blast", icon: Ban, superOnly: true },
   { id: "profil-wa", label: "Workers Profile", hint: "Nama & foto global", icon: ImageIcon },
 ];
 
@@ -97,6 +101,19 @@ function PengaturanPage() {
   useEffect(() => {
     if (!sections.some((s) => s.id === active)) setActive(sections[0]?.id ?? "log");
   }, [active, sections]);
+
+  if (me && !isSuper) {
+    return (
+      <Panel>
+        <div className="py-12 text-center">
+          <p className="text-sm font-medium">Akses ditolak</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Menu Pengaturan hanya untuk super admin.
+          </p>
+        </div>
+      </Panel>
+    );
+  }
 
   return (
     <>
@@ -140,6 +157,7 @@ function PengaturanPage() {
           {active === "tampilan" ? <TampilanPanel /> : null}
           {active === "telegram-akun" ? <TelegramAkunPanel /> : null}
           {active === "nomor-pantau" && isSuper ? <AdminMonitorNumbers /> : null}
+          {active === "black-list" && isSuper ? <AdminBlacklist /> : null}
           {active === "profil-wa" ? <ProfilWhatsAppPanel /> : null}
         </div>
       </div>

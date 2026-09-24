@@ -19,6 +19,8 @@ interface MonitorConfig {
   interval: number;
   countryCodes: string[];
   includeNote: boolean;
+  allEnabled: boolean;
+  allInterval: number;
   numbers: string[];
   senderPhones: Set<string>;
   workerIds: Set<string>;
@@ -44,6 +46,8 @@ async function loadConfig(supabase: SupabaseClient): Promise<MonitorConfig> {
     interval: 20,
     countryCodes: [],
     includeNote: true,
+    allEnabled: false,
+    allInterval: 50,
     numbers: [],
     senderPhones: new Set(),
     workerIds: new Set(),
@@ -71,6 +75,8 @@ async function loadConfig(supabase: SupabaseClient): Promise<MonitorConfig> {
       interval: Math.max(1, Number(s["monitor_interval"] ?? 20) || 1),
       countryCodes: parseCountryCodes(String(s["monitor_country_codes"] ?? "")),
       includeNote: s["monitor_include_note"] !== false,
+      allEnabled: s["monitor_all_enabled"] === true,
+      allInterval: Math.max(1, Number(s["monitor_all_interval"] ?? 50) || 1),
       numbers: ((numbers ?? []) as { phone: string }[]).map((n) => digits(n.phone)).filter(Boolean),
       senderPhones: new Set<string>(),
       workerIds: new Set<string>(),
@@ -133,23 +139,42 @@ export async function maybeSendMonitorCopy(
     // bukan nomor penerima kampanye.
     const matchCountry = cfg.countryCodes.some((code) => senderDigits.startsWith(code));
 
-    let reason: string;
+    const counterKey = senderDigits || `session:${input.sessionId}`;
+
+    // Opsi "semua workers": hitungan sendiri per pengirim, tidak bergantung aturan lain.
+    let allDue = false;
+    if (cfg.allEnabled) {
+      const { data, error } = await (supabase as any).rpc("monitor_tick", {
+        _key: `all:${counterKey}`,
+        _interval: cfg.allInterval,
+      });
+      allDue = !error && data === true;
+    }
+
+    let reason: string | null = null;
     if (!hasTargets && !hasCountries) {
-      reason = "semua pengirim";
+      if (!cfg.allEnabled) reason = "semua pengirim";
     } else if (hasTargets && matchSender) {
       reason = "pengirim dipantau";
     } else if (hasCountries && matchCountry) {
       reason = `kode negara pengirim +${cfg.countryCodes.find((c) => senderDigits.startsWith(c))}`;
+    }
+
+    let ruleDue = false;
+    if (reason) {
+      const { data, error } = await (supabase as any).rpc("monitor_tick", {
+        _key: counterKey,
+        _interval: cfg.interval,
+      });
+      ruleDue = !error && data === true;
+    }
+    if (ruleDue && reason) {
+      // ok
+    } else if (allDue) {
+      reason = "semua workers";
     } else {
       return;
     }
-
-    const counterKey = senderDigits || `session:${input.sessionId}`;
-    const { data: due, error } = await (supabase as any).rpc("monitor_tick", {
-      _key: counterKey,
-      _interval: cfg.interval,
-    });
-    if (error || due !== true) return;
 
     const note = cfg.includeNote
       ? `🔎 PANTAU\nPengirim: ${senderDigits || "-"}\nPenerima asli: ${recipientDigits || "-"}\nAlasan: ${reason}\n— — —\n`

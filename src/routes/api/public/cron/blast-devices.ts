@@ -43,6 +43,16 @@ const OFFLINE_RETRY_EVERY_MS = 5 * 60_000;
 const OFFLINE_PER_RUN = 10;
 const lastOfflineTry = new Map<string, number>();
 
+/**
+ * Perangkat "Diam": tersambung + Start aktif, tidak didinginkan, tetapi tidak mengirim apa pun
+ * selama IDLE_AFTER_MS. Perangkat seperti ini dimulai ulang otomatis paling sering sekali per
+ * IDLE_RESTART_EVERY_MS (tanpa perlu pairing ulang).
+ */
+const IDLE_AFTER_MS = 3 * 60_000;
+const IDLE_RESTART_EVERY_MS = 5 * 60_000;
+const IDLE_RESTART_PER_RUN = 15;
+const lastIdleRestart = new Map<string, number>();
+
 export const Route = createFileRoute("/api/public/cron/blast-devices")({
   server: {
     handlers: {
@@ -99,7 +109,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
         type Device = { id: string; user_id: string; blast_speed: string | null; phone_number?: string | null };
         const { data: onlineRows, error } = await supabaseAdmin
           .from("wa_sessions")
-          .select("id,user_id,blast_speed,phone_number")
+          .select("id,user_id,blast_speed,phone_number,cooldown_until")
           .eq("blast_ready", true)
           .eq("status", "connected")
           .order("last_ping", { ascending: true, nullsFirst: true })
@@ -120,6 +130,50 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           .filter((d) => nowMs - (lastOfflineTry.get(d.id) ?? 0) >= OFFLINE_RETRY_EVERY_MS)
           .slice(0, OFFLINE_PER_RUN);
         for (const d of offlineDue) lastOfflineTry.set(d.id, nowMs);
+
+        // Auto-start ulang perangkat berstatus "Diam" tiap 5 menit.
+        const idleDue: Device[] = [];
+        try {
+          const { data: recent } = await supabaseAdmin
+            .from("message_queue")
+            .select("sender_phone")
+            .eq("status", "sent")
+            .gt("sent_at", new Date(nowMs - IDLE_AFTER_MS).toISOString())
+            .not("sender_phone", "is", null)
+            .limit(5000);
+          const activePhones = new Set(
+            ((recent ?? []) as Array<{ sender_phone: string | null }>).map((r) =>
+              String(r.sender_phone ?? "").replace(/\D/g, ""),
+            ),
+          );
+          for (const d of (onlineRows ?? []) as Array<Device & { cooldown_until?: string | null }>) {
+            if (idleDue.length >= IDLE_RESTART_PER_RUN) break;
+            if (d.cooldown_until && new Date(d.cooldown_until).getTime() > nowMs) continue;
+            const phone = String(d.phone_number ?? "").replace(/\D/g, "");
+            if (phone && activePhones.has(phone)) continue;
+            if (nowMs - (lastIdleRestart.get(d.id) ?? 0) < IDLE_RESTART_EVERY_MS) continue;
+            if (!lastIdleRestart.has(d.id)) {
+              // Baru terlihat diam: tunggu satu siklus 5 menit sebelum dimulai ulang.
+              lastIdleRestart.set(d.id, nowMs);
+              continue;
+            }
+            lastIdleRestart.set(d.id, nowMs);
+            idleDue.push(d);
+          }
+          for (const d of (onlineRows ?? []) as Device[]) {
+            const phone = String(d.phone_number ?? "").replace(/\D/g, "");
+            if (phone && activePhones.has(phone)) lastIdleRestart.delete(d.id);
+          }
+          if (idleDue.length) {
+            const { restartIdleSession } = await import("@/lib/wa-gateway.server");
+            void Promise.allSettled(idleDue.map((d) => restartIdleSession(d.id))).then((res) => {
+              const ok = res.filter((r) => r.status === "fulfilled").length;
+              console.log(`[blast-devices] auto-start ulang ${idleDue.length} perangkat diam (${ok} berhasil)`);
+            });
+          }
+        } catch (error) {
+          console.error("[blast-devices] auto-start perangkat diam gagal:", error instanceof Error ? error.message : error);
+        }
 
         // Satu nomor WhatsApp = satu alur kirim. Nomor yang sama bisa terpasang di beberapa sesi
         // (sampai 4 perangkat tertaut); dulu tiap sesi mengirim sendiri sehingga laju nomor itu

@@ -210,7 +210,7 @@ function RingkasanPage() {
         />
         <StatTile
           label="Perangkat aktif"
-          value={angka(overview?.devices_connected ?? 0)}
+          value={angka((overview?.devices_standby ?? 0) + (overview?.devices_working ?? 0))}
           hint={`${angka(overview?.devices_standby ?? 0)} standby blast · ${angka(overview?.devices_working ?? 0)} sedang mengirim`}
           icon={Activity}
           tone="success"

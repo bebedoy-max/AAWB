@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+import { useMyRole } from "./admin";
 import { CheckCircle2, ListChecks, Plus, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +68,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 function NomorPage() {
+  const isSuper = Boolean(useMyRole().data?.is_super_admin);
   const queryClient = useQueryClient();
   const fetchOptions = useServerFn(listCampaignOptions);
   const fetchTargets = useServerFn(listTargets);
@@ -149,6 +151,7 @@ function NomorPage() {
               <RefreshCw className={isFetching ? "mr-2 size-4 animate-spin" : "mr-2 size-4"} />
               Muat ulang
             </Button>
+            {isSuper ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" size="sm" disabled={reset.isPending}>
@@ -170,6 +173,7 @@ function NomorPage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            ) : null}
           </>
         }
       />
@@ -314,6 +318,7 @@ function NomorPage() {
                       <Td className="text-muted-foreground">{r.claimed ? "Ya" : "Belum"}</Td>
                       <Td className="text-muted-foreground">{waktu(r.sent_at ?? r.created_at)}</Td>
                       <Td className="text-right">
+                        {isSuper ? (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -323,6 +328,7 @@ function NomorPage() {
                         >
                           <Trash2 className="size-3.5" />
                         </Button>
+                        ) : null}
                       </Td>
                     </tr>
                   ))}

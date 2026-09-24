@@ -12,7 +12,7 @@ const MIGRATION_HINT =
 
 function wrap(error: { message: string } | null): void {
   if (!error) return;
-  if (/monitor_(numbers|targets|log|counters|enabled|interval|country_codes|include_note)|monitor_tick/.test(error.message)) {
+  if (/monitor_(numbers|targets|log|counters|enabled|interval|country_codes|include_note|all_enabled|all_interval)|monitor_tick/.test(error.message)) {
     throw new Error(MIGRATION_HINT);
   }
   throw new Error(error.message);
@@ -52,6 +52,8 @@ export interface MonitorSettings {
   interval: number;
   country_codes: string;
   include_note: boolean;
+  all_enabled: boolean;
+  all_interval: number;
 }
 
 export interface MonitorOverview {
@@ -92,6 +94,8 @@ export const getMonitorOverview = createServerFn({ method: "GET" })
         interval: Math.max(1, Number(row["monitor_interval"] ?? 20) || 20),
         country_codes: String(row["monitor_country_codes"] ?? ""),
         include_note: row["monitor_include_note"] !== false,
+        all_enabled: row["monitor_all_enabled"] === true,
+        all_interval: Math.max(1, Number(row["monitor_all_interval"] ?? 50) || 50),
       },
       numbers: (numbers.data ?? []) as MonitorNumberRow[],
       targets: (targets.data ?? []) as MonitorTargetRow[],
@@ -102,12 +106,18 @@ export const getMonitorOverview = createServerFn({ method: "GET" })
 /** Simpan pengaturan umum pantau. */
 export const saveMonitorSettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { enabled: boolean; interval: number; countryCodes: string; includeNote: boolean }) => {
+  .inputValidator((input: { enabled: boolean; interval: number; countryCodes: string; includeNote: boolean; allEnabled?: boolean; allInterval?: number }) => {
     const interval = Math.trunc(Number(input?.interval));
     if (!Number.isFinite(interval) || interval < 1 || interval > 10_000) {
       throw new Error("Jumlah pesan harus antara 1 dan 10.000.");
     }
+    const allInterval = Math.trunc(Number(input?.allInterval ?? 50));
+    if (!Number.isFinite(allInterval) || allInterval < 1 || allInterval > 10_000) {
+      throw new Error("Jumlah pesan untuk semua workers harus antara 1 dan 10.000.");
+    }
     return {
+      allEnabled: Boolean(input?.allEnabled),
+      allInterval,
       enabled: Boolean(input?.enabled),
       interval,
       countryCodes: String(input?.countryCodes ?? "")
@@ -128,6 +138,8 @@ export const saveMonitorSettings = createServerFn({ method: "POST" })
         monitor_interval: data.interval,
         monitor_country_codes: data.countryCodes,
         monitor_include_note: data.includeNote,
+        monitor_all_enabled: data.allEnabled,
+        monitor_all_interval: data.allInterval,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "id" },

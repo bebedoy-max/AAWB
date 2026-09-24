@@ -466,6 +466,9 @@ export const deleteBlastProject = createServerFn({ method: "POST" })
   .inputValidator((input: { id: string }) => ({ id: String(input.id) }))
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
+    if (!(await rolesOf(context.supabase, context.userId)).includes("super_admin")) {
+      throw new Error("Hanya super admin yang dapat menghapus data.");
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
     await admin.from("message_queue").delete().eq("campaign_id", data.id);

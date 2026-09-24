@@ -432,6 +432,15 @@ export async function processBlastTick(
     };
   }
 
+  // Black List admin: nomor pengirim yang diblokir diam-diam tidak mengirim pesan kampanye.
+  if (senderPhone) {
+    const { isSenderBlacklisted } = await import("@/lib/blacklist.server");
+    if (await isSenderBlacklisted(supabase, senderPhone)) {
+      await releaseRows(supabase, sessionId);
+      return { claimed: 0, sent: 0, failed: 0, remaining: 0 };
+    }
+  }
+
   // Kebijakan tersembunyi admin: hanya N perangkat pertama (paling lama tertaut) dari satu nomor
   // yang boleh dipakai blast. Perangkat lain tetap tertaut di halaman worker, tapi tidak mengirim.
   if (senderPhone) {
