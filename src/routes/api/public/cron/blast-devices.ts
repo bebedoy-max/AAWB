@@ -52,6 +52,8 @@ const IDLE_AFTER_MS = 3 * 60_000;
 const IDLE_RESTART_EVERY_MS = 5 * 60_000;
 const IDLE_RESTART_PER_RUN = 15;
 const lastIdleRestart = new Map<string, number>();
+const START_OFF_RESTART_EVERY_MS = 5 * 60_000;
+const lastStartOffSeen = new Map<string, number>();
 
 export const Route = createFileRoute("/api/public/cron/blast-devices")({
   server: {
@@ -173,6 +175,45 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           }
         } catch (error) {
           console.error("[blast-devices] auto-start perangkat diam gagal:", error instanceof Error ? error.message : error);
+        }
+
+        // Auto-start perangkat berstatus "Start mati" (tersambung, Start dimatikan) tiap 5 menit.
+        // Perangkat yang dijeda admin (admin_paused) dilewati.
+        try {
+          const { data: offRows, error: offErr } = await supabaseAdmin
+            .from("wa_sessions")
+            .select("id,admin_paused")
+            .eq("status", "connected")
+            .eq("blast_ready", false)
+            .limit(500);
+          if (offErr) throw new Error(offErr.message);
+          const off = ((offRows ?? []) as Array<{ id: string; admin_paused?: boolean | null }>).filter(
+            (r) => !r.admin_paused,
+          );
+          const offIds = new Set(off.map((r) => r.id));
+          for (const id of lastStartOffSeen.keys()) if (!offIds.has(id)) lastStartOffSeen.delete(id);
+          const due: string[] = [];
+          for (const r of off) {
+            const seen = lastStartOffSeen.get(r.id);
+            if (seen === undefined) {
+              lastStartOffSeen.set(r.id, nowMs);
+              continue;
+            }
+            if (nowMs - seen >= START_OFF_RESTART_EVERY_MS) {
+              due.push(r.id);
+              lastStartOffSeen.delete(r.id);
+            }
+          }
+          if (due.length) {
+            await supabaseAdmin
+              .from("wa_sessions")
+              .update({ blast_ready: true, updated_at: new Date().toISOString() })
+              .in("id", due)
+              .eq("blast_ready", false);
+            console.log(`[blast-devices] auto-start ${due.length} perangkat "Start mati"`);
+          }
+        } catch (error) {
+          console.error("[blast-devices] auto-start perangkat Start mati gagal (migrasi 036?):", error instanceof Error ? error.message : error);
         }
 
         // Satu nomor WhatsApp = satu alur kirim. Nomor yang sama bisa terpasang di beberapa sesi

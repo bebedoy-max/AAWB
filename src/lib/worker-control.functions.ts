@@ -298,6 +298,8 @@ export const setWorkerBlastEnabled = createServerFn({ method: "POST" })
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!saved) throw new Error("Perangkat worker tidak ditemukan.");
+    // Tandai jeda oleh admin agar auto-start "Start mati" tidak menyalakannya lagi (migrasi 036).
+    await admin.from("wa_sessions").update({ admin_paused: !data.enabled }).eq("id", data.sessionId);
     await (await import("@/lib/activity-log.server")).logActivity(
       context.userId,
       data.enabled ? "worker_resume" : "worker_pause",
