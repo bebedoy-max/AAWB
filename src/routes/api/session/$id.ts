@@ -36,6 +36,11 @@ export const Route = createFileRoute("/api/session/$id")({
             updated_at: now,
           };
           await supabase.from("wa_sessions").update(patch).eq("id", params.id);
+          // CATATAN: perangkat yang baru tersambung SENGAJA tidak dinyalakan otomatis.
+          // Blast hanya berjalan setelah worker menekan tombol Start sendiri. Dulu di sini ada
+          // blok yang menyalakan blast_ready begitu status menjadi "connected", sehingga pairing
+          // langsung memulai pengiriman tanpa persetujuan worker. Kolom blast_ready bawaannya
+          // false (migrasi 011), jadi cukup dengan tidak menyentuhnya di sini.
           return json({ id: params.id, auth_step: state.authStep, ...patch } satisfies SessionGatewayResponse & {
             updated_at: string;
           });
@@ -111,6 +116,20 @@ export const Route = createFileRoute("/api/session/$id")({
               .eq("id", params.id);
             if (updateError) return json({ error: updateError.message }, 400);
             return json({ id: params.id, code, phone_number: phone });
+          }
+
+          if (action === "delete") {
+            // Sesi gateway dihapus DULU, baru baris database. Kalau urutannya dibalik dan
+            // penghapusan gateway gagal, sesi menjadi yatim: tidak ada lagi baris yang
+            // menunjuk ke sana, sehingga tidak pernah bisa ditemukan dan dibersihkan lagi.
+            const { deleteGatewaySession } = await import("@/lib/wa-gateway.server");
+            await deleteGatewaySession(params.id);
+            const { error: deleteError } = await supabase
+              .from("wa_sessions")
+              .delete()
+              .eq("id", params.id);
+            if (deleteError) return json({ error: deleteError.message }, 400);
+            return json({ id: params.id, deleted: true });
           }
 
           if (action === "disconnect") {

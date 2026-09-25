@@ -53,6 +53,16 @@ export const sessionAction = (id: string, action: "start" | "reconnect" | "disco
     body: JSON.stringify({ action }),
   });
 
+/**
+ * Hapus perangkat. Sesi di gateway dan barisnya di database dibuang bersama lewat server,
+ * supaya tidak ada sesi yatim yang tertinggal di gateway.
+ */
+export const deleteSession = (id: string) =>
+  authFetch<{ id: string; deleted: boolean }>(`/api/session/${id}`, {
+    method: "POST",
+    body: JSON.stringify({ action: "delete" }),
+  });
+
 /** Ask the gateway for an 8-character pairing code for this phone number. */
 export const requestPairingCode = (id: string, phone: string) =>
   authFetch<PairingCodeResponse>(`/api/session/${id}`, {

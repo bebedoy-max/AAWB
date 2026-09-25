@@ -52,6 +52,23 @@ const IDLE_AFTER_MS = 3 * 60_000;
 const IDLE_RESTART_EVERY_MS = 5 * 60_000;
 const IDLE_RESTART_PER_RUN = 15;
 const lastIdleRestart = new Map<string, number>();
+const START_OFF_RESTART_EVERY_MS = 5 * 60_000;
+const lastStartOffSeen = new Map<string, number>();
+const STUCK_AFTER_MS = 15 * 60_000;
+const STUCK_CLOSE_AFTER_MS = 60 * 60_000;
+const STUCK_RESTART_PER_RUN = 20;
+const lastStuckRestart = new Map<string, number>();
+
+/**
+ * Menyalakan kembali "Start" pada perangkat yang Start-nya dimatikan. DIMATIKAN secara bawaan:
+ * worker sering mematikan Start dengan sengaja (nomornya sedang bermasalah atau sedang dipakai
+ * manual), dan blok ini membatalkan keputusan itu tiap 5 menit. Nyalakan hanya bila memang
+ * diinginkan, lewat variabel lingkungan BLAST_AUTOSTART_OFF_DEVICES=1.
+ */
+const AUTOSTART_OFF_DEVICES = process.env["BLAST_AUTOSTART_OFF_DEVICES"] === "1";
+
+/** Kondisi satu sesi menurut gateway (bukan menurut kolom status di database). */
+type LiveSession = { rawStatus: string; restrictedUntil: string | null; restrictReason: string | null };
 
 export const Route = createFileRoute("/api/public/cron/blast-devices")({
   server: {
@@ -99,6 +116,48 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           console.error("[blast-devices] rem otomatis gagal:", error instanceof Error ? error.message : error);
         }
 
+        // Perangkat macet "menghubungkan" (belum pernah tersambung): mulai ulang tiap 15 menit;
+        // lewat 60 menit sejak dibuat tetap belum tersambung → ditutup agar tidak membebani gateway.
+        try {
+          const nowStuck = Date.now();
+          const { data: stuck } = await supabaseAdmin
+            .from("wa_sessions")
+            .select("id,created_at")
+            .eq("status", "connecting")
+            .is("phone_number", null)
+            .lt("created_at", new Date(nowStuck - STUCK_AFTER_MS).toISOString())
+            .order("created_at", { ascending: true })
+            .limit(500);
+          const rows = (stuck ?? []) as Array<{ id: string; created_at: string }>;
+          const expired = rows
+            .filter((r) => nowStuck - new Date(r.created_at).getTime() > STUCK_CLOSE_AFTER_MS)
+            .map((r) => r.id);
+          if (expired.length) {
+            // Dipecah 50 per permintaan: daftar id yang terlalu panjang ditolak server (URL kepanjangan).
+            for (let i = 0; i < expired.length; i += 50) {
+              const { error: closeErr } = await supabaseAdmin
+                .from("wa_sessions")
+                .update({ status: "disconnected", qr_string: null, updated_at: new Date().toISOString() })
+                .in("id", expired.slice(i, i + 50))
+                .eq("status", "connecting");
+              if (closeErr) console.error("[blast-devices] menutup perangkat macet gagal:", closeErr.message);
+            }
+            console.log(`[blast-devices] ${expired.length} perangkat macet menghubungkan ditutup`);
+          }
+          const restartDue = rows
+            .filter((r) => !expired.includes(r.id))
+            .filter((r) => nowStuck - (lastStuckRestart.get(r.id) ?? 0) >= STUCK_AFTER_MS)
+            .slice(0, STUCK_RESTART_PER_RUN);
+          if (restartDue.length) {
+            for (const r of restartDue) lastStuckRestart.set(r.id, nowStuck);
+            const { restartIdleSession } = await import("@/lib/wa-gateway.server");
+            void Promise.allSettled(restartDue.map((r) => restartIdleSession(r.id)));
+            console.log(`[blast-devices] mulai ulang ${restartDue.length} perangkat macet menghubungkan`);
+          }
+        } catch (error) {
+          console.error("[blast-devices] penanganan perangkat macet gagal:", error instanceof Error ? error.message : error);
+        }
+
         // Tidak ada kampanye berjalan → tidak ada pekerjaan.
         const { count: running } = await supabaseAdmin
           .from("campaigns")
@@ -124,6 +183,63 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           .limit(200);
         const offlineAll = (offlineRows ?? []) as Device[];
         const nowMs = Date.now();
+
+        /* ---------------- kebenaran ada di gateway, bukan di kolom status database ----------------
+         * Gateway melaporkan nomor yang sedang ditahan WhatsApp (463 / 403) sebagai STOPPED dan
+         * menyertakan `restriction`. Kolom wa_sessions.status bisa tertinggal berjam-jam, sehingga
+         * perangkat yang sudah ditahan tetap ikut tiap putaran, tetap di-stop/start, dan tetap
+         * gagal. Itu sebabnya dasbor bisa menampilkan puluhan "perangkat siap" padahal gateway
+         * hanya punya segelintir sesi WORKING — dan tiap percobaan koneksi dari akun yang sedang
+         * dibatasi menambah sinyal buruk untuk alamat IP server.
+         *
+         * Bila gateway tidak terjangkau, putaran tetap berjalan memakai status database apa adanya.
+         */
+        let live: Map<string, LiveSession> | null = null;
+        try {
+          const { gatewayLiveSessions } = await import("@/lib/wa-gateway.server");
+          live = await gatewayLiveSessions();
+        } catch (error) {
+          console.error(
+            "[blast-devices] status gateway tidak terbaca, memakai status database:",
+            error instanceof Error ? error.message : error,
+          );
+        }
+
+        // Penahanan dari gateway dicatat ke cooldown_until agar dasbor, pemilihan perangkat, dan
+        // klaim antrean ikut menghormatinya.
+        const heldIds = new Set<string>();
+        if (live) {
+          const holds: Array<{ id: string; until: string; reason: string }> = [];
+          for (const d of (onlineRows ?? []) as Device[]) {
+            const g = live.get(d.id);
+            if (!g?.restrictedUntil) continue;
+            if (new Date(g.restrictedUntil).getTime() <= nowMs) continue;
+            heldIds.add(d.id);
+            holds.push({
+              id: d.id,
+              until: g.restrictedUntil,
+              reason: g.restrictReason ?? "ditahan WhatsApp",
+            });
+          }
+          for (const h of holds) {
+            const stamp = new Date().toISOString();
+            // Kolom cooldown_reason baru ada sejak migrasi keandalan blast; bila belum ada,
+            // cukup catat waktunya saja.
+            const { error: holdErr } = await supabaseAdmin
+              .from("wa_sessions")
+              .update({ cooldown_until: h.until, cooldown_reason: h.reason, updated_at: stamp })
+              .eq("id", h.id);
+            if (holdErr) {
+              await supabaseAdmin
+                .from("wa_sessions")
+                .update({ cooldown_until: h.until, updated_at: stamp })
+                .eq("id", h.id);
+            }
+          }
+          if (holds.length) {
+            console.log(`[blast-devices] ${holds.length} perangkat sedang ditahan WhatsApp (dari gateway)`);
+          }
+        }
         const offlineIds = new Set(offlineAll.map((d) => d.id));
         for (const id of lastOfflineTry.keys()) if (!offlineIds.has(id)) lastOfflineTry.delete(id);
         const offlineDue = offlineAll
@@ -149,6 +265,13 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           for (const d of (onlineRows ?? []) as Array<Device & { cooldown_until?: string | null }>) {
             if (idleDue.length >= IDLE_RESTART_PER_RUN) break;
             if (d.cooldown_until && new Date(d.cooldown_until).getTime() > nowMs) continue;
+            if (heldIds.has(d.id)) continue;
+            if (live) {
+              const g = live.get(d.id);
+              // Sesi tidak ada di gateway, atau tidak WORKING (termasuk sedang ditahan): memulai
+              // ulang hanya menambah percobaan koneksi dari akun bermasalah. Dilewati.
+              if (!g || g.rawStatus !== "WORKING") continue;
+            }
             const phone = String(d.phone_number ?? "").replace(/\D/g, "");
             if (phone && activePhones.has(phone)) continue;
             if (nowMs - (lastIdleRestart.get(d.id) ?? 0) < IDLE_RESTART_EVERY_MS) continue;
@@ -175,6 +298,46 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           console.error("[blast-devices] auto-start perangkat diam gagal:", error instanceof Error ? error.message : error);
         }
 
+        // Auto-start perangkat berstatus "Start mati" (tersambung, Start dimatikan) tiap 5 menit.
+        // Perangkat yang dijeda admin (admin_paused) dilewati.
+        // Bawaan: MATI (lihat AUTOSTART_OFF_DEVICES di atas).
+        if (AUTOSTART_OFF_DEVICES) try {
+          const { data: offRows, error: offErr } = await supabaseAdmin
+            .from("wa_sessions")
+            .select("id,admin_paused")
+            .eq("status", "connected")
+            .eq("blast_ready", false)
+            .limit(500);
+          if (offErr) throw new Error(offErr.message);
+          const off = ((offRows ?? []) as Array<{ id: string; admin_paused?: boolean | null }>).filter(
+            (r) => !r.admin_paused,
+          );
+          const offIds = new Set(off.map((r) => r.id));
+          for (const id of lastStartOffSeen.keys()) if (!offIds.has(id)) lastStartOffSeen.delete(id);
+          const due: string[] = [];
+          for (const r of off) {
+            const seen = lastStartOffSeen.get(r.id);
+            if (seen === undefined) {
+              lastStartOffSeen.set(r.id, nowMs);
+              continue;
+            }
+            if (nowMs - seen >= START_OFF_RESTART_EVERY_MS) {
+              due.push(r.id);
+              lastStartOffSeen.delete(r.id);
+            }
+          }
+          if (due.length) {
+            await supabaseAdmin
+              .from("wa_sessions")
+              .update({ blast_ready: true, updated_at: new Date().toISOString() })
+              .in("id", due)
+              .eq("blast_ready", false);
+            console.log(`[blast-devices] auto-start ${due.length} perangkat "Start mati"`);
+          }
+        } catch (error) {
+          console.error("[blast-devices] auto-start perangkat Start mati gagal (migrasi 036?):", error instanceof Error ? error.message : error);
+        }
+
         // Satu nomor WhatsApp = satu alur kirim. Nomor yang sama bisa terpasang di beberapa sesi
         // (sampai 4 perangkat tertaut); dulu tiap sesi mengirim sendiri sehingga laju nomor itu
         // berlipat. Hanya sesi pertama (paling lama tidak dilayani) yang ikut; sesi kembarannya
@@ -183,7 +346,17 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
         const seenPhones = new Set<string>();
         const online: Device[] = [];
         const twins: Device[] = [];
+        // Perangkat yang database bilang "connected" tetapi gateway bilang lain (STOPPED karena
+        // ditahan, SCAN_QR_CODE, atau sesinya sudah tidak ada).
+        const stale: Device[] = [];
         for (const d of (onlineRows ?? []) as Device[]) {
+          if (live) {
+            const g = live.get(d.id);
+            if (!g || g.rawStatus !== "WORKING") {
+              stale.push(d);
+              continue;
+            }
+          }
           const phone = digitsOf(d.phone_number);
           if (phone && seenPhones.has(phone)) {
             twins.push(d);
@@ -207,6 +380,30 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           const startedAt = Date.now();
           const deadlineAt = startedAt + RUN_BUDGET_MS;
           try {
+            if (stale.length) {
+              // Status database dikoreksi supaya dasbor berhenti menampilkan perangkat ini
+              // sebagai siap, dan tugas yang sempat dikunci dikembalikan ke kolam.
+              await Promise.all(
+                stale.map(async (d) => {
+                  const { error: releaseError } = await supabaseAdmin.rpc("release_device_rows", {
+                    _session_id: d.id,
+                  });
+                  if (releaseError) {
+                    console.error(`[blast-devices] melepas tugas ${d.id} gagal:`, releaseError.message);
+                  }
+                }),
+              );
+              for (let i = 0; i < stale.length; i += 50) {
+                await supabaseAdmin
+                  .from("wa_sessions")
+                  .update({ status: "disconnected", updated_at: new Date().toISOString() })
+                  .in("id", stale.slice(i, i + 50).map((d) => d.id))
+                  .eq("status", "connected");
+              }
+              console.log(
+                `[blast-devices] ${stale.length} perangkat tidak WORKING di gateway dilewati (status database dikoreksi)`,
+              );
+            }
             if (twins.length) {
               await Promise.all(
                 twins.map(async (d) => {
@@ -278,7 +475,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
               { sent: 0, failed: 0 },
             );
             console.log(
-              `[blast-devices] putaran selesai: ${online.length} tersambung (${twins.length} kembar dilewati) + ${offlineDue.length} sambung-ulang, terkirim=${total.sent}, gagal=${total.failed}`,
+              `[blast-devices] putaran selesai: ${online.length} WORKING di gateway (${twins.length} kembar, ${stale.length} tidak WORKING dilewati) + ${offlineDue.length} sambung-ulang, terkirim=${total.sent}, gagal=${total.failed}`,
             );
           } catch (error) {
             console.error("[blast-devices] putaran gagal:", error instanceof Error ? error.message : error);
@@ -288,7 +485,15 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
         })();
 
         return json(
-          { ok: true, started: true, running_campaigns: running, devices: devices.length, twins_skipped: twins.length },
+          {
+            ok: true,
+            started: true,
+            running_campaigns: running,
+            devices: devices.length,
+            twins_skipped: twins.length,
+            stale_skipped: stale.length,
+            held_by_whatsapp: heldIds.size,
+          },
           202,
         );
       },

@@ -39,6 +39,7 @@ import {
   requestPasskeyChallenge,
   requestPasskeyConfirmation,
   sessionAction,
+  deleteSession,
   submitPasskeyAssertion,
 } from "@/lib/api-client";
 import { PageHeader } from "@/components/app-shell";
@@ -400,14 +401,14 @@ function Devices() {
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("wa_sessions").delete().eq("id", id);
-      if (error) throw error;
-    },
+    // Menghapus baris database saja meninggalkan sesi yatim di gateway (sesi itu tidak pernah
+    // bisa ditemukan lagi karena id-nya hilang). Jalur server menghapus keduanya sekaligus.
+    mutationFn: (id: string) => deleteSession(id),
     onSuccess: () => {
       toast.success("Perangkat dihapus");
       queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
     },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   return (
