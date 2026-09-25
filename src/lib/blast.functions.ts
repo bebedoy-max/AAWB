@@ -57,11 +57,7 @@ export const getBlastState = createServerFn({ method: "GET" })
         .select("id", { count: "exact", head: true })
         .eq("user_id", uid)
         .eq("status", "failed"),
-      admin
-        .from("message_queue")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending")
-        .is("claimed_by", null),
+      admin.rpc("pool_remaining_running"),
       admin.from("reward_ledger").select("amount").eq("user_id", uid).limit(100000),
       admin.from("withdrawals").select("amount,status").eq("user_id", uid),
     ]);
@@ -95,7 +91,7 @@ export const getBlastState = createServerFn({ method: "GET" })
       failed: failedRes.count ?? 0,
       balance: earned - spent,
       max_devices: MAX_DEVICES,
-      pool_available: poolRes.count ?? 0,
+      pool_available: Number(poolRes.data ?? 0),
     };
   });
 
