@@ -335,6 +335,79 @@ export async function gatewaySessionCounts(): Promise<Record<string, number>> {
   return counts;
 }
 
+
+/* ---------------- kondisi sebenarnya di gateway + penghapusan sesi ---------------- */
+
+/**
+ * Status mentah satu sesi di gateway, beserta penahanan nomor bila ada.
+ *
+ * Gateway melaporkan nomor yang sedang ditahan WhatsApp (kode 463 atau 403) sebagai `STOPPED`
+ * dan menyertakan objek `restriction`. Kolom `wa_sessions.status` di database bisa tertinggal
+ * berjam-jam dari kenyataan ini.
+ */
+export interface GatewayLiveSession {
+  rawStatus: string;
+  restrictedUntil: string | null;
+  restrictReason: string | null;
+}
+
+let liveSessionCache: { at: number; value: Map<string, GatewayLiveSession> } | null = null;
+
+/**
+ * Daftar sesi gateway (nama sesi -> kondisi sebenarnya), disimpan singkat karena daftarnya
+ * bisa ribuan baris. Dipakai pekerja blast agar tidak menyodorkan pesan — dan tidak menyambung
+ * ulang — ke nomor yang sedang ditahan WhatsApp.
+ */
+export async function gatewayLiveSessions(
+  maxAgeMs = 30_000,
+): Promise<Map<string, GatewayLiveSession>> {
+  if (liveSessionCache && Date.now() - liveSessionCache.at < maxAgeMs) return liveSessionCache.value;
+  const res = await request("/api/sessions/?all=true");
+  if (res.status < 200 || res.status >= 300 || !Array.isArray(res.body)) {
+    throw new GatewayError(`Gateway menjawab HTTP ${res.status}.`, 502);
+  }
+  const map = new Map<string, GatewayLiveSession>();
+  for (const item of res.body as unknown[]) {
+    const row = (item ?? {}) as Record<string, unknown>;
+    const name = typeof row["name"] === "string" ? row["name"] : null;
+    if (!name) continue;
+    const restriction = (row["restriction"] ?? null) as Record<string, unknown> | null;
+    map.set(name, {
+      rawStatus: String(row["status"] ?? "UNKNOWN").toUpperCase(),
+      restrictedUntil:
+        typeof restriction?.["until"] === "string" ? (restriction["until"] as string) : null,
+      restrictReason:
+        typeof restriction?.["reason"] === "string" ? (restriction["reason"] as string) : null,
+    });
+  }
+  liveSessionCache = { at: Date.now(), value: map };
+  return map;
+}
+
+/**
+ * Hapus sesi di gateway: hentikan, lalu buang beserta berkas kredensialnya.
+ *
+ * Tanpa ini, menghapus perangkat hanya membuang baris database sementara sesi gateway tertinggal
+ * selamanya. Tiap "hapus perangkat lalu pair lagi" menyisakan satu sesi yatim, dan sesi yatim itu
+ * menumpuk sampai ribuan.
+ */
+export async function deleteGatewaySession(id: string): Promise<void> {
+  try {
+    await request(`/api/sessions/${encodeURIComponent(id)}/stop`, { method: "POST" });
+  } catch {
+    // Sesi mungkin sudah mati atau tidak ada; penghapusan di bawah tetap dicoba.
+  }
+  const res = await request(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+  liveSessionCache = null;
+  if (res.status === 404) return; // sudah tidak ada di gateway
+  if (res.status < 200 || res.status >= 300) {
+    throw new GatewayError(
+      `Sesi gateway gagal dihapus: ${messageOf(res.body) || `HTTP ${res.status}`}`,
+      502,
+    );
+  }
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const pairingCooldowns = new Map<string, number>();
 const PAIRING_COOLDOWN_MS = 60 * 60 * 1000;

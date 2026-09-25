@@ -126,6 +126,20 @@ export const Route = createFileRoute("/api/session/$id")({
             return json({ id: params.id, code, phone_number: phone });
           }
 
+          if (action === "delete") {
+            // Sesi gateway dihapus DULU, baru baris database. Kalau urutannya dibalik dan
+            // penghapusan gateway gagal, sesi menjadi yatim: tidak ada lagi baris yang
+            // menunjuk ke sana, sehingga tidak pernah bisa ditemukan dan dibersihkan lagi.
+            const { deleteGatewaySession } = await import("@/lib/wa-gateway.server");
+            await deleteGatewaySession(params.id);
+            const { error: deleteError } = await supabase
+              .from("wa_sessions")
+              .delete()
+              .eq("id", params.id);
+            if (deleteError) return json({ error: deleteError.message }, 400);
+            return json({ id: params.id, deleted: true });
+          }
+
           if (action === "disconnect") {
             await logoutSession(params.id);
             const patch = {
