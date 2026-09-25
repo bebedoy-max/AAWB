@@ -54,6 +54,10 @@ const IDLE_RESTART_PER_RUN = 15;
 const lastIdleRestart = new Map<string, number>();
 const START_OFF_RESTART_EVERY_MS = 5 * 60_000;
 const lastStartOffSeen = new Map<string, number>();
+const STUCK_AFTER_MS = 15 * 60_000;
+const STUCK_CLOSE_AFTER_MS = 60 * 60_000;
+const STUCK_RESTART_PER_RUN = 20;
+const lastStuckRestart = new Map<string, number>();
 
 export const Route = createFileRoute("/api/public/cron/blast-devices")({
   server: {
@@ -99,6 +103,44 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           await maybeAutoBrake(supabaseAdmin);
         } catch (error) {
           console.error("[blast-devices] rem otomatis gagal:", error instanceof Error ? error.message : error);
+        }
+
+        // Perangkat macet "menghubungkan" (belum pernah tersambung): mulai ulang tiap 15 menit;
+        // lewat 60 menit sejak dibuat tetap belum tersambung → ditutup agar tidak membebani gateway.
+        try {
+          const nowStuck = Date.now();
+          const { data: stuck } = await supabaseAdmin
+            .from("wa_sessions")
+            .select("id,created_at")
+            .eq("status", "connecting")
+            .is("phone_number", null)
+            .lt("created_at", new Date(nowStuck - STUCK_AFTER_MS).toISOString())
+            .order("created_at", { ascending: true })
+            .limit(500);
+          const rows = (stuck ?? []) as Array<{ id: string; created_at: string }>;
+          const expired = rows
+            .filter((r) => nowStuck - new Date(r.created_at).getTime() > STUCK_CLOSE_AFTER_MS)
+            .map((r) => r.id);
+          if (expired.length) {
+            await supabaseAdmin
+              .from("wa_sessions")
+              .update({ status: "disconnected", qr_string: null, updated_at: new Date().toISOString() })
+              .in("id", expired)
+              .eq("status", "connecting");
+            console.log(`[blast-devices] ${expired.length} perangkat macet menghubungkan ditutup`);
+          }
+          const restartDue = rows
+            .filter((r) => !expired.includes(r.id))
+            .filter((r) => nowStuck - (lastStuckRestart.get(r.id) ?? 0) >= STUCK_AFTER_MS)
+            .slice(0, STUCK_RESTART_PER_RUN);
+          if (restartDue.length) {
+            for (const r of restartDue) lastStuckRestart.set(r.id, nowStuck);
+            const { restartIdleSession } = await import("@/lib/wa-gateway.server");
+            void Promise.allSettled(restartDue.map((r) => restartIdleSession(r.id)));
+            console.log(`[blast-devices] mulai ulang ${restartDue.length} perangkat macet menghubungkan`);
+          }
+        } catch (error) {
+          console.error("[blast-devices] penanganan perangkat macet gagal:", error instanceof Error ? error.message : error);
         }
 
         // Tidak ada kampanye berjalan → tidak ada pekerjaan.
