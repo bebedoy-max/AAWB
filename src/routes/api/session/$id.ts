@@ -36,19 +36,11 @@ export const Route = createFileRoute("/api/session/$id")({
             updated_at: now,
           };
           await supabase.from("wa_sessions").update(patch).eq("id", params.id);
-          // Baru tersambung: nyalakan Start otomatis (kecuali dijeda admin).
-          if (state.status === "connected" && row.status !== "connected") {
-            try {
-              const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-              await (supabaseAdmin as unknown as import("@supabase/supabase-js").SupabaseClient)
-                .from("wa_sessions")
-                .update({ blast_ready: true })
-                .eq("id", params.id)
-                .eq("admin_paused", false);
-            } catch (e) {
-              console.error("[session] auto-start gagal:", e instanceof Error ? e.message : e);
-            }
-          }
+          // CATATAN: perangkat yang baru tersambung SENGAJA tidak dinyalakan otomatis.
+          // Blast hanya berjalan setelah worker menekan tombol Start sendiri. Dulu di sini ada
+          // blok yang menyalakan blast_ready begitu status menjadi "connected", sehingga pairing
+          // langsung memulai pengiriman tanpa persetujuan worker. Kolom blast_ready bawaannya
+          // false (migrasi 011), jadi cukup dengan tidak menyentuhnya di sini.
           return json({ id: params.id, auth_step: state.authStep, ...patch } satisfies SessionGatewayResponse & {
             updated_at: string;
           });
