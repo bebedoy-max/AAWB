@@ -122,11 +122,15 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
             .filter((r) => nowStuck - new Date(r.created_at).getTime() > STUCK_CLOSE_AFTER_MS)
             .map((r) => r.id);
           if (expired.length) {
-            await supabaseAdmin
-              .from("wa_sessions")
-              .update({ status: "disconnected", qr_string: null, updated_at: new Date().toISOString() })
-              .in("id", expired)
-              .eq("status", "connecting");
+            // Dipecah 50 per permintaan: daftar id yang terlalu panjang ditolak server (URL kepanjangan).
+            for (let i = 0; i < expired.length; i += 50) {
+              const { error: closeErr } = await supabaseAdmin
+                .from("wa_sessions")
+                .update({ status: "disconnected", qr_string: null, updated_at: new Date().toISOString() })
+                .in("id", expired.slice(i, i + 50))
+                .eq("status", "connecting");
+              if (closeErr) console.error("[blast-devices] menutup perangkat macet gagal:", closeErr.message);
+            }
             console.log(`[blast-devices] ${expired.length} perangkat macet menghubungkan ditutup`);
           }
           const restartDue = rows
