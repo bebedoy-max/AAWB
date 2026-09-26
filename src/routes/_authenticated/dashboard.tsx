@@ -488,12 +488,12 @@ function Dashboard() {
               <p className="text-sm text-muted-foreground">Buka WhatsApp di ponsel, pilih <strong className="text-foreground">Perangkat Tertaut</strong> lalu arahkan kamera ke QR berikut:</p>
               {pairingSession?.qr_string ? (
                 pairingSession.qr_string.startsWith("data:image") ? (
-                  <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-background p-3 shadow-sm">
-                    <img src={pairingSession.qr_string} alt="QR pemasangan WhatsApp" className="size-56 max-w-full" />
+                  <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-card p-3 shadow-sm">
+                    <img src={pairingSession.qr_string} alt="QR pemasangan WhatsApp" className="size-56 max-w-full invert" />
                   </div>
                 ) : (
-                  <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-background p-3 shadow-sm">
-                    <QRCodeSVG value={pairingSession.qr_string} size={224} level="M" />
+                  <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-card p-3 shadow-sm">
+                    <QRCodeSVG value={pairingSession.qr_string} size={224} level="M" bgColor="#ffffff" fgColor="#000000" marginSize={2} />
                   </div>
                 )
               ) : (

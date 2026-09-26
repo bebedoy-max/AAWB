@@ -93,14 +93,14 @@ function QrView({ value }: { value: string }) {
   // Gateways may return either the raw QR payload or a ready data:image PNG.
   if (value.startsWith("data:image")) {
     return (
-      <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-background p-4 shadow-sm">
-        <img src={value} alt="QR code untuk memasangkan WhatsApp" className="size-56 max-w-full" />
+      <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-card p-4 shadow-sm">
+        <img src={value} alt="QR code untuk memasangkan WhatsApp" className="size-56 max-w-full invert" />
       </div>
     );
   }
   return (
-    <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-background p-4 shadow-sm">
-      <QRCodeSVG value={value} size={224} level="M" />
+    <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-card p-4 shadow-sm">
+      <QRCodeSVG value={value} size={224} level="M" bgColor="#ffffff" fgColor="#000000" marginSize={2} />
     </div>
   );
 }
