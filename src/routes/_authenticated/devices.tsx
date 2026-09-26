@@ -107,9 +107,8 @@ function QrView({ value }: { value: string }) {
 
 function Devices() {
   const queryClient = useQueryClient();
-  const [addOpen, setAddOpen] = useState(false);
-  const [name, setName] = useState("");
   const [qrSessionId, setQrSessionId] = useState<string | null>(null);
+  const [qrName, setQrName] = useState("");
   const [codeSessionId, setCodeSessionId] = useState<string | null>(null);
   const [codeCountry, setCodeCountry] = useState(DEFAULT_COUNTRY_ISO);
   const [codePhone, setCodePhone] = useState("");
@@ -315,7 +314,7 @@ function Devices() {
       if (namesError) throw namesError;
       if ((existing?.length ?? 0) >= MAX_DEVICES) throw new Error(`Maksimal ${MAX_DEVICES} perangkat per akun.`);
       const { data: profile } = await supabase.from("profiles").select("organization_name").eq("user_id", user.user.id).maybeSingle();
-      const sessionName = name.trim() || nextDeviceName(
+      const sessionName = nextDeviceName(
         workerDisplayName(profile?.organization_name, user.user.user_metadata, user.user.email),
         (existing ?? []).map((item) => item.session_name),
       );
@@ -333,8 +332,7 @@ function Devices() {
       return data as WaSession;
     },
     onSuccess: (session) => {
-      setAddOpen(false);
-      setName("");
+      setQrName(session.session_name);
       queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
       startPairing.mutate(session.id);
     },
@@ -359,11 +357,24 @@ function Devices() {
       setNotes((current) => ({ ...current, [state.id]: null }));
       setPairingStartedAt(Date.now());
       setQrSessionId(state.id);
+      const found = sessions?.find((s) => s.id === state.id)?.session_name;
+      if (found) setQrName(found);
     },
     onError: (e: Error, id) => {
       setNotes((current) => ({ ...current, [id]: e.message }));
       toast.error(e.message);
     },
+  });
+
+  const renameSession = useMutation({
+    mutationFn: async (input: { id: string; name: string }) => {
+      const trimmed = input.name.trim();
+      if (!trimmed) return;
+      const { error } = await supabase.from("wa_sessions").update({ session_name: trimmed }).eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wa-sessions"] }),
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const pairWithCode = useMutation({
@@ -524,7 +535,7 @@ function Devices() {
                 </>
               )}
             </Button>
-            <Button className="w-full sm:w-auto" onClick={() => setAddOpen(true)} disabled={(sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-5" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
+            <Button className="w-full sm:w-auto" onClick={() => createSession.mutate()} disabled={createSession.isPending || (sessions?.length ?? 0) >= MAX_DEVICES}><Plus className="mr-1 size-5" /> Tambah perangkat <span className="ml-2 rounded-md bg-primary-foreground/15 px-2 py-0.5 text-xs">{sessions?.length ?? 0} / {MAX_DEVICES}</span></Button>
           </div>
         </CardContent>
       </Card>
@@ -728,44 +739,19 @@ function Devices() {
 
         {sessions?.length === 0 ? (
           <Card className="rounded-xl border-dashed shadow-none sm:col-span-2 xl:col-span-3">
-            <CardContent className="flex min-h-56 flex-col items-center justify-center p-10 text-center"><div className="grid size-14 place-items-center rounded-full bg-secondary"><Smartphone className="size-6 text-primary" /></div><p className="mt-4 font-semibold">Belum ada perangkat</p><p className="mt-1 text-sm text-muted-foreground">Tambahkan WhatsApp untuk mulai mengirim pesan.</p><Button className="mt-5" onClick={() => setAddOpen(true)}><Plus className="mr-1 size-4" /> Tambah perangkat</Button></CardContent>
+            <CardContent className="flex min-h-56 flex-col items-center justify-center p-10 text-center"><div className="grid size-14 place-items-center rounded-full bg-secondary"><Smartphone className="size-6 text-primary" /></div><p className="mt-4 font-semibold">Belum ada perangkat</p><p className="mt-1 text-sm text-muted-foreground">Tambahkan WhatsApp untuk mulai mengirim pesan.</p><Button className="mt-5" onClick={() => createSession.mutate()} disabled={createSession.isPending}><Plus className="mr-1 size-4" /> Tambah perangkat</Button></CardContent>
           </Card>
         ) : null}
       </div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Tambah perangkat WhatsApp</DialogTitle>
-            <DialogDescription>
-              Nama boleh dikosongkan. Perangkat akan diberi nama otomatis.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="device-name">Nama perangkat <span className="font-normal text-muted-foreground">(opsional)</span></Label>
-            <Input
-              id="device-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Otomatis: nama Worker-1"
-            />
-          </div>
-          <DialogFooter>
-            <Button onClick={() => createSession.mutate()} disabled={createSession.isPending}>
-              Buat &amp; pasangkan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!qrSessionId} onOpenChange={(o) => !o && setQrSessionId(null)}>
+      <Dialog open={!!qrSessionId} onOpenChange={(o) => { if (!o) { setQrSessionId(null); setQrName(""); } }}>
         <DialogContent className="max-h-[92dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-lg px-5 py-7 sm:max-w-lg sm:px-8">
           <DialogHeader className="items-center space-y-3 text-center sm:text-center">
             <span className="grid size-12 place-items-center rounded-lg bg-primary/10 text-primary"><Smartphone className="size-6" /></span>
             <DialogTitle className="text-2xl">Tautkan WhatsApp</DialogTitle>
             <DialogDescription className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-4 py-1.5 font-mono text-xs font-semibold text-foreground"><Clock3 className="size-4 text-muted-foreground" /> Sisa waktu: {String(Math.floor(pairingSeconds / 60)).padStart(2, "0")}:{String(pairingSeconds % 60).padStart(2, "0")}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5"><Label htmlFor="qr-device-name">Nama perangkat</Label><Input id="qr-device-name" value={activeQrSession?.session_name ?? ""} readOnly className="bg-muted/40" /></div>
+          <div className="space-y-1.5"><Label htmlFor="qr-device-name">Nama perangkat</Label><Input id="qr-device-name" value={qrName || (activeQrSession?.session_name ?? "")} onChange={(e) => setQrName(e.target.value)} onBlur={() => { if (qrSessionId && qrName.trim() && qrName.trim() !== activeQrSession?.session_name) renameSession.mutate({ id: qrSessionId, name: qrName }); }} /></div>
           <div className="grid grid-cols-2 rounded-lg border bg-muted/40 p-1">
             <Button variant="ghost" className="h-auto min-h-10 px-2 text-xs sm:text-sm" onClick={() => qrSessionId && openCodeDialog(qrSessionId, activeQrSession?.phone_number ?? null)}>Gunakan 8-Digit Kode</Button>
             <Button variant="secondary" className="h-auto min-h-10 px-2 text-xs sm:text-sm">Scan Kode QR</Button>
