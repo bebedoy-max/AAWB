@@ -28,6 +28,7 @@ import {
   WifiOff,
   CheckCircle2,
   XCircle,
+  Clock3,
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
@@ -69,6 +70,8 @@ import { BLAST_SPEEDS } from "@/lib/blast-speed";
 import { getBlastState, setDeviceBlast } from "@/lib/blast.functions";
 import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
+import { nextDeviceName, workerDisplayName } from "@/lib/device-name";
+import { deviceConnectionInfo } from "@/lib/device-connection-info";
 import type { SessionGatewayResponse, WaSession } from "@/types/wa";
 import { cn } from "@/lib/utils";
 
@@ -90,13 +93,13 @@ function QrView({ value }: { value: string }) {
   // Gateways may return either the raw QR payload or a ready data:image PNG.
   if (value.startsWith("data:image")) {
     return (
-      <div className="flex justify-center rounded-lg bg-white p-4">
-        <img src={value} alt="QR code untuk memasangkan WhatsApp" className="size-56" />
+      <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-background p-4 shadow-sm">
+        <img src={value} alt="QR code untuk memasangkan WhatsApp" className="size-56 max-w-full" />
       </div>
     );
   }
   return (
-    <div className="flex justify-center rounded-lg bg-white p-4">
+    <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-background p-4 shadow-sm">
       <QRCodeSVG value={value} size={224} level="M" />
     </div>
   );
@@ -115,6 +118,8 @@ function Devices() {
   const [pairingBlockedUntil, setPairingBlockedUntil] = useState<number | null>(null);
   const [authStep, setAuthStep] = useState<SessionGatewayResponse["auth_step"]>(null);
   const [confirmationCode, setConfirmationCode] = useState<string | null>(null);
+  const [pairingStartedAt, setPairingStartedAt] = useState<number | null>(null);
+  const [pairingSeconds, setPairingSeconds] = useState(180);
 
   const { data: sessions } = useQuery({
     queryKey: ["wa-sessions"],
@@ -126,6 +131,22 @@ function Devices() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as WaSession[];
+    },
+  });
+
+  const { data: connectionStates } = useQuery({
+    queryKey: ["wa-connection-info", (sessions ?? []).filter((session) => session.status !== "connected").map((session) => session.id).join(",")],
+    enabled: Boolean(sessions?.some((session) => session.status !== "connected")),
+    refetchInterval: 15_000,
+    queryFn: async () => {
+      const results = await Promise.allSettled(
+        (sessions ?? []).filter((session) => session.status !== "connected").map((session) => getSessionState(session.id)),
+      );
+      const states: Record<string, SessionGatewayResponse> = {};
+      for (const result of results) {
+        if (result.status === "fulfilled") states[result.value.id] = result.value;
+      }
+      return states;
     },
   });
 
@@ -219,6 +240,14 @@ function Devices() {
 
   const activeQrSession = sessions?.find((s) => s.id === qrSessionId) ?? null;
 
+  useEffect(() => {
+    if (!pairingStartedAt || (!qrSessionId && !codeSessionId)) return;
+    const update = () => setPairingSeconds(Math.max(0, 180 - Math.floor((Date.now() - pairingStartedAt) / 1000)));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [pairingStartedAt, qrSessionId, codeSessionId]);
+
   // Poll the gateway while the QR modal is open.
   useEffect(() => {
     const watchedId = qrSessionId ?? codeSessionId;
@@ -282,12 +311,20 @@ function Devices() {
       }
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Sesi pengguna tidak ditemukan.");
+      const { data: existing, error: namesError } = await supabase.from("wa_sessions").select("session_name");
+      if (namesError) throw namesError;
+      if ((existing?.length ?? 0) >= MAX_DEVICES) throw new Error(`Maksimal ${MAX_DEVICES} perangkat per akun.`);
+      const { data: profile } = await supabase.from("profiles").select("organization_name").eq("user_id", user.user.id).maybeSingle();
+      const sessionName = name.trim() || nextDeviceName(
+        workerDisplayName(profile?.organization_name, user.user.user_metadata, user.user.email),
+        (existing ?? []).map((item) => item.session_name),
+      );
       const { data, error } = await supabase
         .from("wa_sessions")
 
         .insert({
           user_id: user.user.id,
-          session_name: name.trim() || "Perangkat baru",
+          session_name: sessionName,
           status: "disconnected",
         })
         .select()
@@ -319,9 +356,14 @@ function Devices() {
     mutationFn: (id: string) => sessionAction(id, "start"),
     onSuccess: (state) => {
       queryClient.invalidateQueries({ queryKey: ["wa-sessions"] });
+      setNotes((current) => ({ ...current, [state.id]: null }));
+      setPairingStartedAt(Date.now());
       setQrSessionId(state.id);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, id) => {
+      setNotes((current) => ({ ...current, [id]: e.message }));
+      toast.error(e.message);
+    },
   });
 
   const pairWithCode = useMutation({
@@ -345,6 +387,8 @@ function Devices() {
   });
 
   const openCodeDialog = (sessionId: string, phone: string | null) => {
+    if (!qrSessionId) setPairingStartedAt(Date.now());
+    setQrSessionId(null);
     setCodeSessionId(sessionId);
     setPairingCode(null);
     setPairingRequestedAt(null);
@@ -498,7 +542,11 @@ function Devices() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {(sessions ?? []).map((session) => (
+        {(sessions ?? []).map((session) => {
+          const live = connectionStates?.[session.id];
+          const connection = live ?? session;
+          const displayStatus = connection.status;
+          return (
           <Card key={session.id}>
             <CardContent className="p-5">
               <div className="flex items-start justify-between gap-3">
@@ -513,36 +561,38 @@ function Devices() {
                     </p>
                   </div>
                 </div>
-                <StatusBadge status={session.status} />
+                <StatusBadge status={displayStatus} />
               </div>
 
               <div
                 className={cn(
                   "mt-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium",
-                  session.status === "connected"
+                  displayStatus === "connected"
                     ? "border-primary/30 bg-primary/10 text-primary"
-                    : session.status === "connecting"
+                    : displayStatus === "connecting"
                       ? "border-warning/40 bg-warning/15 text-warning"
                       : "border-destructive/30 bg-destructive/10 text-destructive",
                 )}
               >
-                {session.status === "connected" ? (
+                {displayStatus === "connected" ? (
                   <Wifi className="size-3.5 shrink-0" />
                 ) : (
                   <WifiOff className="size-3.5 shrink-0" />
                 )}
-                {session.status === "connected"
+                {displayStatus === "connected"
                   ? "Perangkat terhubung"
-                  : session.status === "connecting"
+                  : displayStatus === "connecting"
                     ? "Perangkat sedang menghubungkan…"
                     : "Perangkat terputus"}
               </div>
-              {session.status === "disconnected" && session.phone_number ? (
-                <p className="mt-2 flex items-start gap-1.5 rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+              {displayStatus !== "connected" ? (
+                <p role="status" className="mt-2 flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  Perangkat terputus dari WhatsApp. Coba hubungkan ulang — jika tidak bisa
-                  tersambung kembali, kemungkinan nomor ini diblokir (banned) oleh WhatsApp.
+                  <span>{deviceConnectionInfo(connection)}</span>
                 </p>
+              ) : null}
+              {notes[session.id] && displayStatus !== "connected" ? (
+                <p role="alert" className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">Percobaan menghubungkan gagal: {notes[session.id]}</p>
               ) : null}
 
               <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
@@ -631,11 +681,6 @@ function Devices() {
                     ? "Siap menerima perintah blast dari admin."
                     : "Status idle — tekan Start blast agar perangkat siap."}
                 </p>
-                {notes[session.id] ? (
-                  <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
-                    {notes[session.id]}
-                  </p>
-                ) : null}
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -679,7 +724,7 @@ function Devices() {
               </div>
             </CardContent>
           </Card>
-        ))}
+        ); })}
 
         {sessions?.length === 0 ? (
           <Card className="rounded-xl border-dashed shadow-none sm:col-span-2 xl:col-span-3">
@@ -693,16 +738,16 @@ function Devices() {
           <DialogHeader>
             <DialogTitle>Tambah perangkat WhatsApp</DialogTitle>
             <DialogDescription>
-              Beri nama perangkat, lalu pindai kode QR dengan WhatsApp.
+              Nama boleh dikosongkan. Perangkat akan diberi nama otomatis.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
-            <Label htmlFor="device-name">Nama perangkat</Label>
+            <Label htmlFor="device-name">Nama perangkat <span className="font-normal text-muted-foreground">(opsional)</span></Label>
             <Input
               id="device-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Nomor penjualan 1"
+              placeholder="Otomatis: nama Worker-1"
             />
           </div>
           <DialogFooter>
@@ -714,13 +759,18 @@ function Devices() {
       </Dialog>
 
       <Dialog open={!!qrSessionId} onOpenChange={(o) => !o && setQrSessionId(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Pindai untuk memasangkan</DialogTitle>
-            <DialogDescription>
-              WhatsApp → Perangkat tertaut → Tautkan perangkat. Status diperbarui otomatis.
-            </DialogDescription>
+        <DialogContent className="max-h-[92dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-lg px-5 py-7 sm:max-w-lg sm:px-8">
+          <DialogHeader className="items-center space-y-3 text-center sm:text-center">
+            <span className="grid size-12 place-items-center rounded-lg bg-primary/10 text-primary"><Smartphone className="size-6" /></span>
+            <DialogTitle className="text-2xl">Tautkan WhatsApp</DialogTitle>
+            <DialogDescription className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-4 py-1.5 font-mono text-xs font-semibold text-foreground"><Clock3 className="size-4 text-muted-foreground" /> Sisa waktu: {String(Math.floor(pairingSeconds / 60)).padStart(2, "0")}:{String(pairingSeconds % 60).padStart(2, "0")}</DialogDescription>
           </DialogHeader>
+          <div className="space-y-1.5"><Label htmlFor="qr-device-name">Nama perangkat</Label><Input id="qr-device-name" value={activeQrSession?.session_name ?? ""} readOnly className="bg-muted/40" /></div>
+          <div className="grid grid-cols-2 rounded-lg border bg-muted/40 p-1">
+            <Button variant="ghost" className="h-auto min-h-10 px-2 text-xs sm:text-sm" onClick={() => qrSessionId && openCodeDialog(qrSessionId, activeQrSession?.phone_number ?? null)}>Gunakan 8-Digit Kode</Button>
+            <Button variant="secondary" className="h-auto min-h-10 px-2 text-xs sm:text-sm">Scan Kode QR</Button>
+          </div>
+          <p className="text-center text-sm text-muted-foreground">Buka WhatsApp di ponsel, pilih <strong className="text-foreground">Perangkat Tertaut</strong> lalu arahkan kamera ke QR berikut:</p>
           {activeQrSession?.qr_string ? (
             <QrView value={activeQrSession.qr_string} />
           ) : (
@@ -728,10 +778,6 @@ function Devices() {
               Menunggu kode QR dari gateway…
             </div>
           )}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Status</span>
-            <StatusBadge status={activeQrSession?.status ?? "connecting"} />
-          </div>
           <DialogFooter>
             <Button
               variant="outline"
@@ -740,6 +786,7 @@ function Devices() {
               <RefreshCw className="mr-1 size-3.5" /> Perbarui QR
             </Button>
           </DialogFooter>
+          <div role="status" className="rounded-full border border-warning/40 bg-warning/10 px-4 py-2 text-center text-xs font-medium text-warning sm:text-sm">Menunggu konfirmasi tautan dari ponsel…</div>
         </DialogContent>
       </Dialog>
 
@@ -755,14 +802,18 @@ function Devices() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Pasangkan dengan kode</DialogTitle>
-            <DialogDescription>
-              Masukkan nomor WhatsApp perangkat ini, lalu buka WhatsApp → Perangkat tertaut →
-              Tautkan dengan nomor telepon dan ketik kode yang muncul.
-            </DialogDescription>
+        <DialogContent className="max-h-[92dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-lg px-5 py-7 sm:max-w-lg sm:px-8">
+          <DialogHeader className="items-center space-y-3 text-center sm:text-center">
+            <span className="grid size-12 place-items-center rounded-lg bg-primary/10 text-primary"><Smartphone className="size-6" /></span>
+            <DialogTitle className="text-2xl">Tautkan WhatsApp</DialogTitle>
+            <DialogDescription className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-4 py-1.5 font-mono text-xs font-semibold text-foreground"><Clock3 className="size-4 text-muted-foreground" /> Sisa waktu: {String(Math.floor(pairingSeconds / 60)).padStart(2, "0")}:{String(pairingSeconds % 60).padStart(2, "0")}</DialogDescription>
           </DialogHeader>
+          <div className="space-y-1.5"><Label htmlFor="code-device-name">Nama perangkat</Label><Input id="code-device-name" value={sessions?.find((session) => session.id === codeSessionId)?.session_name ?? ""} readOnly className="bg-muted/40" /></div>
+          <div className="grid grid-cols-2 rounded-lg border bg-muted/40 p-1">
+            <Button variant="secondary" className="h-auto min-h-10 px-2 text-xs sm:text-sm">Gunakan 8-Digit Kode</Button>
+            <Button variant="ghost" className="h-auto min-h-10 px-2 text-xs sm:text-sm" onClick={() => { const id = codeSessionId; setCodeSessionId(null); setPairingCode(null); if (id) startPairing.mutate(id); }}>Scan Kode QR</Button>
+          </div>
+          <p className="text-center text-sm text-muted-foreground">Masukkan nomor WhatsApp aktif Anda dengan format internasional (contoh: <strong className="text-foreground">628123456789</strong>):</p>
 
           <div className="space-y-1.5">
             <Label>Nomor WhatsApp</Label>
@@ -777,7 +828,7 @@ function Devices() {
           {pairingCode ? (
             <div className="space-y-2 rounded-lg border bg-muted/40 p-4 text-center">
               <p className="text-xs text-muted-foreground">Kode pemasangan</p>
-              <p className="font-mono text-2xl font-semibold tracking-[0.3em]">{pairingCode}</p>
+              <p className="break-all font-mono text-2xl font-semibold">{pairingCode}</p>
               <Button
                 size="sm"
                 variant="outline"
@@ -847,6 +898,7 @@ function Devices() {
               {pairingCode ? "Menunggu pemasangan" : "Minta kode"}
             </Button>
           </DialogFooter>
+          <div role="status" className="rounded-full border border-warning/40 bg-warning/10 px-4 py-2 text-center text-xs font-medium text-warning sm:text-sm">Menunggu konfirmasi tautan dari ponsel…</div>
         </DialogContent>
       </Dialog>
     </>

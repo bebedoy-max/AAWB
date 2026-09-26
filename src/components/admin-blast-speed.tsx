@@ -32,7 +32,7 @@ const FIELDS: {
   unit: string;
   group: "mapan" | "baru" | "batas" | "perangkat";
 }[] = [
-  { key: "minDelaySec", label: "Jeda minimal", hint: "Antar pesan, per nomor mapan", unit: "detik", group: "mapan" },
+  { key: "minDelaySec", label: "Jeda minimal", hint: "Antar pesan per perangkat, untuk nomor mapan", unit: "detik", group: "mapan" },
   { key: "maxDelaySec", label: "Jeda maksimal", hint: "Jeda diacak di antara min–maks", unit: "detik", group: "mapan" },
   { key: "hourlyCap", label: "Batas per jam", hint: "Per nomor pengirim. 0 = tanpa batas", unit: "pesan", group: "batas" },
   { key: "dailyCap", label: "Batas per hari", hint: "Per nomor, 24 jam terakhir. 0 = tanpa batas", unit: "pesan", group: "batas" },
@@ -105,7 +105,7 @@ export function AdminBlastSpeedSettings() {
     <>
       <Panel
         title="Kecepatan Blast"
-        description="Batas kecepatan per nomor pengirim. Berlaku di semua kampanye dalam ±1 menit, tanpa deploy."
+        description="Jeda per perangkat dan batas total per nomor pengirim. Berlaku di semua kampanye dalam ±1 menit, tanpa deploy."
         action={
           <Button asChild variant="outline" size="sm">
             <Link to="/admin/monitor">
@@ -205,7 +205,7 @@ export function AdminBlastSpeedSettings() {
         <div className="mt-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
           Mode kecepatan pilihan worker (Kilat, Brutal, Santai, Slow, Siput) tetap bisa <b>memperlambat</b>,
           tidak bisa lebih cepat dari batas di sini. Untuk kecepatan penuh, worker perlu memilih Kilat atau Brutal.
-          Satu nomor hanya punya satu alur kirim, berapa pun sesi yang tertaut.
+           Bila admin mengizinkan sampai 4 perangkat per nomor, masing-masing perangkat yang tersambung dan aktif mengambil tugas sendiri. Batas per jam dan hari tetap dihitung untuk total nomor yang sama.
         </div>
       </Panel>
 

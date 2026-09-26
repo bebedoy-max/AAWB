@@ -59,6 +59,14 @@ import {
 } from "@/components/admin-ui";
 
 export const Route = createFileRoute("/_authenticated/admin/pengguna")({
+  head: () => ({ meta: [
+    { title: "Pengguna — NAROWA" },
+    { name: "description", content: "Kelola akun Worker dan perangkat di NAROWA." },
+    { property: "og:title", content: "Pengguna — NAROWA" },
+    { property: "og:description", content: "Kelola akun Worker dan perangkat di NAROWA." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: PenggunaPage,
 });
 

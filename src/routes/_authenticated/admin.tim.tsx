@@ -44,6 +44,14 @@ import {
 } from "@/components/admin-ui";
 
 export const Route = createFileRoute("/_authenticated/admin/tim")({
+  head: () => ({ meta: [
+    { title: "Tim Admin — NAROWA" },
+    { name: "description", content: "Kelola anggota tim admin NAROWA." },
+    { property: "og:title", content: "Tim Admin — NAROWA" },
+    { property: "og:description", content: "Kelola anggota tim admin NAROWA." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: TimPage,
 });
 

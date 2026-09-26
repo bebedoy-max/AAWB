@@ -21,12 +21,16 @@ export const Route = createFileRoute("/api/session/$id")({
         if (error) return json({ error: error.message }, 400);
         if (!row) return json({ error: "Session not found" }, 404);
 
-        const { sessionStatus, GatewayError } = await import("@/lib/wa-gateway.server");
+        const { sessionStatus, gatewayLiveSessions, GatewayError } = await import("@/lib/wa-gateway.server");
         try {
           const state = await sessionStatus(params.id);
+          // Restriction metadata is provided by the gateway's session list, not
+          // inferred from a disconnected status or a failed message send.
+          const live = await gatewayLiveSessions(10_000).then((items) => items.get(params.id)).catch(() => undefined);
+          const liveStatus = live?.rawStatus === "STOPPED" && (live.restrictReason || live.restrictedUntil) ? "disconnected" : state.status;
           const now = new Date().toISOString();
           const patch = {
-            status: state.status,
+            status: liveStatus,
             // The gateway only emits the QR once (on start), so keep the stored
             // one while pairing is still pending.
             qr_string: state.status === "connected" ? null : (state.qr ?? row.qr_string),
@@ -41,7 +45,11 @@ export const Route = createFileRoute("/api/session/$id")({
           // blok yang menyalakan blast_ready begitu status menjadi "connected", sehingga pairing
           // langsung memulai pengiriman tanpa persetujuan worker. Kolom blast_ready bawaannya
           // false (migrasi 011), jadi cukup dengan tidak menyentuhnya di sini.
-          return json({ id: params.id, auth_step: state.authStep, ...patch } satisfies SessionGatewayResponse & {
+          return json({ id: params.id, auth_step: state.authStep, ...patch,
+            raw_status: live?.rawStatus ?? null,
+            restricted_until: live?.restrictedUntil ?? null,
+            restrict_reason: live?.restrictReason ?? null,
+          } satisfies SessionGatewayResponse & {
             updated_at: string;
           });
         } catch (err) {

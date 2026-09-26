@@ -252,15 +252,13 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
         try {
           const { data: recent } = await supabaseAdmin
             .from("message_queue")
-            .select("sender_phone")
+            .select("session_id")
             .eq("status", "sent")
             .gt("sent_at", new Date(nowMs - IDLE_AFTER_MS).toISOString())
-            .not("sender_phone", "is", null)
+            .not("session_id", "is", null)
             .limit(5000);
-          const activePhones = new Set(
-            ((recent ?? []) as Array<{ sender_phone: string | null }>).map((r) =>
-              String(r.sender_phone ?? "").replace(/\D/g, ""),
-            ),
+          const activeSessions = new Set(
+            ((recent ?? []) as Array<{ session_id: string | null }>).map((r) => r.session_id),
           );
           for (const d of (onlineRows ?? []) as Array<Device & { cooldown_until?: string | null }>) {
             if (idleDue.length >= IDLE_RESTART_PER_RUN) break;
@@ -272,8 +270,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
               // ulang hanya menambah percobaan koneksi dari akun bermasalah. Dilewati.
               if (!g || g.rawStatus !== "WORKING") continue;
             }
-            const phone = String(d.phone_number ?? "").replace(/\D/g, "");
-            if (phone && activePhones.has(phone)) continue;
+            if (activeSessions.has(d.id)) continue;
             if (nowMs - (lastIdleRestart.get(d.id) ?? 0) < IDLE_RESTART_EVERY_MS) continue;
             if (!lastIdleRestart.has(d.id)) {
               // Baru terlihat diam: tunggu satu siklus 5 menit sebelum dimulai ulang.
@@ -284,8 +281,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
             idleDue.push(d);
           }
           for (const d of (onlineRows ?? []) as Device[]) {
-            const phone = String(d.phone_number ?? "").replace(/\D/g, "");
-            if (phone && activePhones.has(phone)) lastIdleRestart.delete(d.id);
+            if (activeSessions.has(d.id)) lastIdleRestart.delete(d.id);
           }
           if (idleDue.length) {
             const { restartIdleSession } = await import("@/lib/wa-gateway.server");
@@ -338,14 +334,9 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
           console.error("[blast-devices] auto-start perangkat Start mati gagal (migrasi 036?):", error instanceof Error ? error.message : error);
         }
 
-        // Satu nomor WhatsApp = satu alur kirim. Nomor yang sama bisa terpasang di beberapa sesi
-        // (sampai 4 perangkat tertaut); dulu tiap sesi mengirim sendiri sehingga laju nomor itu
-        // berlipat. Hanya sesi pertama (paling lama tidak dilayani) yang ikut; sesi kembarannya
-        // melepas tugasnya ke kolam.
-        const digitsOf = (v: string | null | undefined) => String(v ?? "").replace(/\D/g, "");
-        const seenPhones = new Set<string>();
+        // Setiap sesi WORKING yang siap blast mendapat alur sendiri. Batas jumlah sesi
+        // per nomor ditentukan pengaturan admin di pekerja perangkat, bukan di penjadwal.
         const online: Device[] = [];
-        const twins: Device[] = [];
         // Perangkat yang database bilang "connected" tetapi gateway bilang lain (STOPPED karena
         // ditahan, SCAN_QR_CODE, atau sesinya sudah tidak ada).
         const stale: Device[] = [];
@@ -357,12 +348,6 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
               continue;
             }
           }
-          const phone = digitsOf(d.phone_number);
-          if (phone && seenPhones.has(phone)) {
-            twins.push(d);
-            continue;
-          }
-          if (phone) seenPhones.add(phone);
           online.push(d);
         }
         const oneShotIds = new Set(offlineDue.map((d) => d.id));
@@ -403,19 +388,6 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
               console.log(
                 `[blast-devices] ${stale.length} perangkat tidak WORKING di gateway dilewati (status database dikoreksi)`,
               );
-            }
-            if (twins.length) {
-              await Promise.all(
-                twins.map(async (d) => {
-                  const { error: releaseError } = await supabaseAdmin.rpc("release_device_rows", {
-                    _session_id: d.id,
-                  });
-                  if (releaseError) {
-                    console.error(`[blast-devices] melepas tugas sesi kembar ${d.id} gagal:`, releaseError.message);
-                  }
-                }),
-              );
-              console.log(`[blast-devices] ${twins.length} sesi kembar (nomor sama) dilewati, tugasnya dilepas`);
             }
             const results = await Promise.all(
               devices.map(async (device) => {
@@ -475,7 +447,7 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
               { sent: 0, failed: 0 },
             );
             console.log(
-              `[blast-devices] putaran selesai: ${online.length} WORKING di gateway (${twins.length} kembar, ${stale.length} tidak WORKING dilewati) + ${offlineDue.length} sambung-ulang, terkirim=${total.sent}, gagal=${total.failed}`,
+              `[blast-devices] putaran selesai: ${online.length} WORKING di gateway (${stale.length} tidak WORKING dilewati) + ${offlineDue.length} sambung-ulang, terkirim=${total.sent}, gagal=${total.failed}`,
             );
           } catch (error) {
             console.error("[blast-devices] putaran gagal:", error instanceof Error ? error.message : error);
@@ -490,7 +462,6 @@ export const Route = createFileRoute("/api/public/cron/blast-devices")({
             started: true,
             running_campaigns: running,
             devices: devices.length,
-            twins_skipped: twins.length,
             stale_skipped: stale.length,
             held_by_whatsapp: heldIds.size,
           },

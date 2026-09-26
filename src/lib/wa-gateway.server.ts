@@ -1019,7 +1019,7 @@ export async function requestPairingCode(id: string, phone: string): Promise<str
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     // WhatsApp membatasi jumlah permintaan kode per nomor dalam waktu singkat.
-    if (/rate-overlimit|429/i.test(message)) {
+    if ((err instanceof GatewayError && err.status === 429) || /rate-overlimit|429/i.test(message)) {
       pairingCooldowns.set(cooldownKey, Date.now() + PAIRING_COOLDOWN_MS);
       throw new GatewayError(
         "WhatsApp sementara memblokir permintaan kode karena terlalu sering dicoba. Jangan minta kode berulang; tunggu setidaknya 60 menit sejak percobaan terakhir, lalu coba sekali lagi atau gunakan QR.",

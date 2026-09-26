@@ -135,6 +135,9 @@ export interface PairingCodeResponse {
 export interface SessionGatewayResponse {
   id: string;
   status: WaSessionStatus;
+  raw_status?: string | null;
+  restricted_until?: string | null;
+  restrict_reason?: string | null;
   auth_step?: "pairing" | "passkey" | "confirmation" | null;
   qr_string: string | null;
   phone_number: string | null;

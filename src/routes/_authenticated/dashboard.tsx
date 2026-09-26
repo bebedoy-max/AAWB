@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { Send, Smartphone, TrendingUp, Download, Pin, UserRound, QrCode, Wallet, Users, Copy, Plus, KeyRound, RefreshCw, Database } from "lucide-react";
+import { Send, Smartphone, TrendingUp, Download, Pin, UserRound, Wallet, Users, Copy, Plus, RefreshCw, Database, Clock3 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/my-client";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,8 @@ import { PhoneInput } from "@/components/phone-input";
 import { countryByIso, DEFAULT_COUNTRY_ISO } from "@/lib/countries";
 import { getSessionState, requestPairingCode, sessionAction } from "@/lib/api-client";
 import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
+import { nextDeviceName, workerDisplayName } from "@/lib/device-name";
+import { deviceConnectionInfo } from "@/lib/device-connection-info";
 import { rupiah } from "@/lib/currency";
 import { getMyReferral, getMyRewards } from "@/lib/rewards.functions";
 import { getSupportTelegram } from "@/lib/admin.functions";
@@ -79,11 +81,15 @@ function Dashboard() {
   const navigate = useNavigate({ from: "/dashboard" });
   const [addDeviceOpen, setAddDeviceOpen] = useState(false);
   const [deviceName, setDeviceName] = useState("");
+  const [createdDeviceName, setCreatedDeviceName] = useState("");
   const [pairingSession, setPairingSession] = useState<SessionGatewayResponse | null>(null);
   const [pairingMode, setPairingMode] = useState<"qr" | "code">("qr");
   const [codeCountry, setCodeCountry] = useState(DEFAULT_COUNTRY_ISO);
   const [codePhone, setCodePhone] = useState("");
   const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [pairingStartedAt, setPairingStartedAt] = useState<number | null>(null);
+  const [pairingSeconds, setPairingSeconds] = useState(180);
+  const [pairingIssue, setPairingIssue] = useState<string | null>(null);
   const fetchRewards = useServerFn(getMyRewards);
   const fetchReferral = useServerFn(getMyReferral);
   const fetchBlastState = useServerFn(getBlastState);
@@ -188,24 +194,33 @@ function Dashboard() {
       }
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error("Sesi pengguna tidak ditemukan.");
+      const { data: existing, error: namesError } = await supabase.from("wa_sessions").select("session_name");
+      if (namesError) throw namesError;
+      if ((existing?.length ?? 0) >= 4) throw new Error("Maksimal 4 perangkat per akun.");
+      const { data: profile } = await supabase.from("profiles").select("organization_name").eq("user_id", userData.user.id).maybeSingle();
+      const sessionName = deviceName.trim() || nextDeviceName(
+        workerDisplayName(profile?.organization_name, userData.user.user_metadata, userData.user.email),
+        (existing ?? []).map((item) => item.session_name),
+      );
       const { data, error } = await supabase
         .from("wa_sessions")
         .insert({
           user_id: userData.user.id,
-          session_name: deviceName.trim() || "Perangkat baru",
+          session_name: sessionName,
           status: "disconnected",
         })
         .select()
         .single();
       if (error) throw error;
       const session = data as WaSession;
+      setCreatedDeviceName(sessionName);
       return sessionAction(session.id, "start");
     },
     onSuccess: async (session) => {
-      setAddDeviceOpen(false);
       setDeviceName("");
       setPairingMode("qr");
       setPairingCode(null);
+      setPairingStartedAt(Date.now());
       setPairingSession(session);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
@@ -220,8 +235,8 @@ function Dashboard() {
       if (!pairingSession) throw new Error("Perangkat belum dipilih.");
       return sessionAction(pairingSession.id, "start");
     },
-    onSuccess: (session) => setPairingSession(session),
-    onError: (error: Error) => toast.error(error.message),
+    onSuccess: (session) => { setPairingSession(session); setPairingStartedAt(Date.now()); setPairingIssue(null); },
+    onError: (error: Error) => { setPairingIssue(error.message); toast.error(error.message); },
   });
 
   const pairWithCode = useMutation({
@@ -231,9 +246,17 @@ function Dashboard() {
       if (phone.length < 8) throw new Error("Masukkan nomor WhatsApp yang valid.");
       return requestPairingCode(pairingSession.id, phone);
     },
-    onSuccess: (result) => setPairingCode(result.code),
-    onError: (error: Error) => toast.error(error.message),
+    onSuccess: (result) => { setPairingCode(result.code); setPairingIssue(null); },
+    onError: (error: Error) => { setPairingIssue(error.message); toast.error(error.message); },
   });
+
+  useEffect(() => {
+    if (!pairingStartedAt || !pairingSession) return;
+    const update = () => setPairingSeconds(Math.max(0, 180 - Math.floor((Date.now() - pairingStartedAt) / 1000)));
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [pairingStartedAt, pairingSession?.id]);
 
   useEffect(() => {
     if (!pairingSession) return;
@@ -242,11 +265,14 @@ function Dashboard() {
       try {
         const state = await getSessionState(sessionId);
         setPairingSession(state);
+        setPairingIssue((current) => state.status === "disconnected" ? deviceConnectionInfo(state) : current);
         if (state.status === "connected") {
           window.clearInterval(timer);
           toast.success("Perangkat berhasil terhubung");
           setPairingSession(null);
-          setPairingCode(null);
+          setAddDeviceOpen(false);
+            setPairingCode(null);
+            setPairingIssue(null);
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
             queryClient.invalidateQueries({ queryKey: ["wa-sessions"] }),
@@ -415,66 +441,58 @@ function Dashboard() {
         </CardContent>
       </Card>
 
-      <Dialog open={addDeviceOpen} onOpenChange={setAddDeviceOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Tambah perangkat WhatsApp</DialogTitle>
-            <DialogDescription>
-              Beri nama perangkat, lalu lanjutkan proses pemasangan WhatsApp.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="dashboard-device-name">Nama perangkat</Label>
-            <Input
-              id="dashboard-device-name"
-              value={deviceName}
-              onChange={(event) => setDeviceName(event.target.value)}
-              placeholder="Nomor penjualan 1"
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !createDevice.isPending) createDevice.mutate();
-              }}
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button onClick={() => createDevice.mutate()} disabled={createDevice.isPending}>
-              {createDevice.isPending ? "Membuat…" : "OK"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog
-        open={Boolean(pairingSession)}
+        open={addDeviceOpen || Boolean(pairingSession)}
         onOpenChange={(open) => {
           if (!open) {
+            setAddDeviceOpen(false);
             setPairingSession(null);
             setPairingCode(null);
             setCodePhone("");
-            void Promise.all([
-              queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
-              queryClient.invalidateQueries({ queryKey: ["wa-sessions"] }),
-            ]).then(() => navigate({ to: "/devices" }));
+            setCreatedDeviceName("");
+            void queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
           }
         }}
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Pasangkan perangkat WhatsApp</DialogTitle>
-            <DialogDescription>
-              Pindai QR atau pilih pemasangan melalui kode. Halaman WhatsApp terbuka otomatis setelah terhubung.
-            </DialogDescription>
+        <DialogContent className="max-h-[92dvh] w-[calc(100%-2rem)] overflow-y-auto rounded-lg px-5 py-7 sm:max-w-lg sm:px-8">
+          <DialogHeader className="items-center space-y-3 text-center sm:text-center">
+            <span className="grid size-12 place-items-center rounded-lg bg-primary/10 text-primary"><Smartphone className="size-6" /></span>
+            <DialogTitle className="text-2xl">{pairingSession ? "Tautkan WhatsApp" : "Tambah perangkat WhatsApp"}</DialogTitle>
+            {pairingSession ? (
+              <DialogDescription className="inline-flex items-center gap-2 rounded-full border bg-muted/40 px-4 py-1.5 font-mono text-xs font-semibold text-foreground">
+                <Clock3 className="size-4 text-muted-foreground" /> Sisa waktu: {String(Math.floor(pairingSeconds / 60)).padStart(2, "0")}:{String(pairingSeconds % 60).padStart(2, "0")}
+              </DialogDescription>
+            ) : <DialogDescription>Nama boleh dikosongkan. Perangkat akan diberi nama otomatis.</DialogDescription>}
           </DialogHeader>
 
+          {!pairingSession ? (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="dashboard-device-name">Nama perangkat <span className="font-normal text-muted-foreground">(opsional)</span></Label>
+                <Input id="dashboard-device-name" value={deviceName} onChange={(event) => setDeviceName(event.target.value)} placeholder="Otomatis: nama Worker-1" onKeyDown={(event) => { if (event.key === "Enter" && !createDevice.isPending) createDevice.mutate(); }} autoFocus />
+              </div>
+              <DialogFooter><Button className="w-full sm:w-auto" onClick={() => createDevice.mutate()} disabled={createDevice.isPending}>{createDevice.isPending ? "Membuat…" : "Buat & pasangkan"}</Button></DialogFooter>
+            </>
+          ) : <>
+          <div className="space-y-1.5">
+            <Label htmlFor="dashboard-pairing-device-name">Nama perangkat</Label>
+            <Input id="dashboard-pairing-device-name" value={createdDeviceName} readOnly className="bg-muted/40" />
+          </div>
+          <div className="grid grid-cols-2 rounded-lg border bg-muted/40 p-1">
+            <Button type="button" variant={pairingMode === "code" ? "secondary" : "ghost"} className="h-auto min-h-10 px-2 text-xs sm:text-sm" onClick={() => setPairingMode("code")}>Gunakan 8-Digit Kode</Button>
+            <Button type="button" variant={pairingMode === "qr" ? "secondary" : "ghost"} className="h-auto min-h-10 px-2 text-xs sm:text-sm" onClick={() => setPairingMode("qr")}>Scan Kode QR</Button>
+          </div>
+
           {pairingMode === "qr" ? (
-            <div className="space-y-4">
+            <div className="space-y-4 text-center">
+              <p className="text-sm text-muted-foreground">Buka WhatsApp di ponsel, pilih <strong className="text-foreground">Perangkat Tertaut</strong> lalu arahkan kamera ke QR berikut:</p>
               {pairingSession?.qr_string ? (
                 pairingSession.qr_string.startsWith("data:image") ? (
-                  <div className="flex justify-center rounded-lg bg-background p-3">
-                    <img src={pairingSession.qr_string} alt="QR pemasangan WhatsApp" className="size-56" />
+                  <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-background p-3 shadow-sm">
+                    <img src={pairingSession.qr_string} alt="QR pemasangan WhatsApp" className="size-56 max-w-full" />
                   </div>
                 ) : (
-                  <div className="flex justify-center rounded-lg bg-background p-3">
+                  <div className="mx-auto flex size-64 max-w-full items-center justify-center rounded-lg border bg-background p-3 shadow-sm">
                     <QRCodeSVG value={pairingSession.qr_string} size={224} level="M" />
                   </div>
                 )
@@ -483,28 +501,18 @@ function Dashboard() {
                   Menunggu kode QR dari gateway…
                 </div>
               )}
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Status pemasangan</span>
-                <StatusBadge status={pairingSession?.status ?? "connecting"} />
-              </div>
               <Button
                 variant="outline"
-                className="w-full"
+                size="sm"
                 onClick={() => refreshPairing.mutate()}
                 disabled={refreshPairing.isPending}
               >
                 <RefreshCw className="size-4" /> Perbarui QR
               </Button>
-              <Button
-                variant="ghost"
-                className="w-full"
-                onClick={() => setPairingMode("code")}
-              >
-                <KeyRound className="size-4" /> Pasangkan via kode
-              </Button>
             </div>
           ) : (
             <div className="space-y-4">
+              <p className="text-center text-sm text-muted-foreground">Masukkan nomor WhatsApp aktif Anda dengan format internasional (contoh: <strong className="text-foreground">628123456789</strong>):</p>
               <div className="space-y-1.5">
                 <Label>Nomor WhatsApp</Label>
                 <PhoneInput
@@ -517,7 +525,7 @@ function Dashboard() {
               {pairingCode ? (
                 <div className="space-y-2 rounded-lg border bg-muted/40 p-4 text-center">
                   <p className="text-xs text-muted-foreground">Kode pemasangan</p>
-                  <p className="font-mono text-2xl font-semibold tracking-[0.3em]">{pairingCode}</p>
+                  <p className="break-all font-mono text-2xl font-semibold">{pairingCode}</p>
                   <Button
                     size="sm"
                     variant="outline"
@@ -537,18 +545,12 @@ function Dashboard() {
               >
                 {pairingCode ? "Menunggu perangkat terhubung" : "Minta kode pemasangan"}
               </Button>
-              <Button
-                variant="ghost"
-                className="w-full"
-                onClick={() => {
-                  setPairingMode("qr");
-                  setPairingCode(null);
-                }}
-              >
-                <QrCode className="size-4" /> Kembali ke QR
-              </Button>
             </div>
           )}
+          <div role="status" className="mx-auto rounded-full border border-warning/40 bg-warning/10 px-4 py-2 text-center text-xs font-medium text-warning sm:text-sm">
+            {pairingIssue ?? "Menunggu konfirmasi tautan dari ponsel…"}
+          </div>
+          </>}
         </DialogContent>
       </Dialog>
     </>

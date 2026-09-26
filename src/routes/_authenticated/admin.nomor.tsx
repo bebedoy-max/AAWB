@@ -50,6 +50,14 @@ import {
 } from "@/components/admin-ui";
 
 export const Route = createFileRoute("/_authenticated/admin/nomor")({
+  head: () => ({ meta: [
+    { title: "Nomor Kampanye — NAROWA" },
+    { name: "description", content: "Kelola nomor tujuan kampanye NAROWA." },
+    { property: "og:title", content: "Nomor Kampanye — NAROWA" },
+    { property: "og:description", content: "Kelola nomor tujuan kampanye NAROWA." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: NomorPage,
 });
 

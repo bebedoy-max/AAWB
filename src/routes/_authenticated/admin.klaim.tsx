@@ -22,6 +22,14 @@ import {
 } from "@/components/admin-ui";
 
 export const Route = createFileRoute("/_authenticated/admin/klaim")({
+  head: () => ({ meta: [
+    { title: "Klaim Dana — NAROWA" },
+    { name: "description", content: "Kelola pengajuan klaim dana Worker di NAROWA." },
+    { property: "og:title", content: "Klaim Dana — NAROWA" },
+    { property: "og:description", content: "Kelola pengajuan klaim dana Worker di NAROWA." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: KlaimPage,
 });
 

@@ -165,14 +165,13 @@ export interface BlastTickResult {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /* ---------------------------------------------------------------------------------------------
- * LAJU AMAN PER NOMOR (perbaikan "ghost chat")
+ * LAJU PENGIRIMAN PER PERANGKAT
  *
- * Temuan 21 Sep 2026: satu nomor WhatsApp dipasang sebagai beberapa sesi (sampai 4 perangkat
- * tertaut), dan tiap sesi mengirim sendiri dengan jeda mode Kilat/Brutal. Hasilnya satu nomor
- * mengirim ~1 pesan/detik ke orang asing. Aturan baru, dipaksa di server:
- *  1. Satu nomor = satu alur kirim, berapa pun sesinya (kunci di memori proses).
- *  2. Jeda acak antar pesan per NOMOR, dihitung dari sent_at terakhir nomor itu di database,
- *     sehingga berlaku lintas tick, lintas putaran cron, dan lintas sesi.
+ * Nomor yang sama dapat dipasang pada beberapa sesi (hingga 4 perangkat tertaut).
+ * Setiap sesi aktif mengambil pekerjaan sendiri, dengan pengamanan berikut:
+ *  1. Setiap perangkat mendapat alur sendiri; sesi yang sama tidak dijalankan ganda.
+ *  2. Jeda acak antar pesan per perangkat dihitung dari sent_at terakhir sesi itu;
+ *     batas jam/hari dan pemanasan tetap dihitung dari seluruh nomor pengirim.
  *  3. Batas pesan per jam per nomor.
  *  4. Pemanasan: nomor yang baru mengirim sedikit pesan memakai jeda lebih panjang.
  * Mode kecepatan worker hanya bisa MEMPERLAMBAT, tidak bisa lebih cepat dari batas ini.
@@ -265,32 +264,32 @@ interface PhoneStats {
   lastSentAt: number; // epoch ms; 0 = belum pernah
 }
 
-/** Riwayat kirim satu nomor dari database (berlaku lintas sesi dan lintas putaran). */
-async function phoneStats(supabase: SupabaseClient, phone: string): Promise<PhoneStats> {
+/** Riwayat satu pengirim untuk batas per nomor, dan jeda per perangkat. */
+async function phoneStats(supabase: SupabaseClient, phone: string, sessionId: string): Promise<PhoneStats> {
   const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
   const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
   const [hour, day, total, last] = await Promise.all([
     supabase
       .from("message_queue")
       .select("id", { count: "exact", head: true })
-      .eq("sender_phone", phone)
+       .eq("sender_phone", phone)
       .eq("status", "sent")
       .gte("sent_at", hourAgo),
     supabase
       .from("message_queue")
       .select("id", { count: "exact", head: true })
-      .eq("sender_phone", phone)
+       .eq("sender_phone", phone)
       .eq("status", "sent")
       .gte("sent_at", dayAgo),
     supabase
       .from("message_queue")
       .select("id", { count: "exact", head: true })
-      .eq("sender_phone", phone)
+       .eq("sender_phone", phone)
       .eq("status", "sent"),
     supabase
       .from("message_queue")
       .select("sent_at")
-      .eq("sender_phone", phone)
+       .eq("session_id", sessionId)
       .eq("status", "sent")
       .order("sent_at", { ascending: false })
       .limit(1)
@@ -308,8 +307,8 @@ async function phoneStats(supabase: SupabaseClient, phone: string): Promise<Phon
   };
 }
 
-/** Nomor yang sedang punya alur kirim aktif di proses ini. Satu nomor = satu alur. */
-const activePhones = new Set<string>();
+/** Cegah dua pemanggil lokal mengirim melalui sesi yang sama sekaligus. */
+const activeSessions = new Set<string>();
 
 async function releaseRows(supabase: SupabaseClient, sessionId: string): Promise<void> {
   const { error } = await supabase.rpc("release_device_rows", { _session_id: sessionId });
@@ -380,6 +379,8 @@ async function allowedDeviceIdsForPhone(
     .from("wa_sessions")
     .select("id,created_at")
     .eq("phone_number", phone)
+    .eq("status", "connected")
+    .eq("blast_ready", true)
     .order("created_at", { ascending: true })
     .limit(20);
   if (error || !data) return null;
@@ -441,8 +442,7 @@ export async function processBlastTick(
     }
   }
 
-  // Kebijakan tersembunyi admin: hanya N perangkat pertama (paling lama tertaut) dari satu nomor
-  // yang boleh dipakai blast. Perangkat lain tetap tertaut di halaman worker, tapi tidak mengirim.
+  // Hanya N perangkat aktif pertama dari nomor ini yang boleh dipakai blast.
   if (senderPhone) {
     const allowed = await allowedDeviceIdsForPhone(supabase, senderPhone);
     if (allowed && !allowed.includes(sessionId)) {
@@ -452,28 +452,26 @@ export async function processBlastTick(
         sent: 0,
         failed: 0,
         remaining: 0,
-        error: "Perangkat ini belum dijadwalkan mengirim untuk nomor tersebut — perangkat lain dengan nomor yang sama sedang bertugas",
+        error: "Batas perangkat aktif untuk nomor ini tercapai sesuai pengaturan admin",
       };
     }
   }
 
-  // Satu nomor = satu alur kirim. Sesi lain dengan nomor yang sama melepas tugasnya dan menunggu.
-  const pacingKey = senderPhone ? `phone:${senderPhone}` : `session:${sessionId}`;
-  if (activePhones.has(pacingKey)) {
-    await releaseRows(supabase, sessionId);
+  // Perangkat lain pada nomor yang sama tidak saling mengunci atau melepas tugas.
+  if (activeSessions.has(sessionId)) {
     return {
       claimed: 0,
       sent: 0,
       failed: 0,
       remaining: 0,
-      error: "Nomor ini sedang mengirim lewat perangkat lain (satu nomor hanya boleh satu alur kirim)",
+      error: "Perangkat ini sedang mengirim dalam alur lain",
     };
   }
-  activePhones.add(pacingKey);
+  activeSessions.add(sessionId);
   try {
     return await runTick(supabase, sessionId, speed, ownerId, senderPhone, failStreak, deadlineAt);
   } finally {
-    activePhones.delete(pacingKey);
+    activeSessions.delete(sessionId);
   }
 }
 
@@ -490,7 +488,7 @@ async function runTick(
   const pacing = await loadPacing(supabase);
   // Tanpa nomor (jarang terjadi saat tersambung) riwayat tidak bisa dihitung: pakai jeda pemanasan.
   const stats: PhoneStats = senderPhone
-    ? await phoneStats(supabase, senderPhone)
+    ? await phoneStats(supabase, senderPhone, sessionId)
     : { lastHour: 0, lastDay: 0, total: 0, lastSentAt: 0 };
   let sentLastHour = stats.lastHour;
   let sentLastDay = stats.lastDay;
@@ -657,8 +655,7 @@ async function runTick(
         stop = true;
         break;
       }
-      // Jeda aman per nomor. Bila jedanya melewati sisa anggaran tick, berhenti; putaran berikutnya
-      // menghitung ulang dari sent_at terakhir di database, jadi jeda tetap terjaga.
+      // Jeda per perangkat. Putaran berikutnya menghitung ulang dari kiriman terakhir sesi ini.
       const wait = nextAllowedAt - Date.now();
       if (wait > 0) {
         if (wait >= timeLeft()) {

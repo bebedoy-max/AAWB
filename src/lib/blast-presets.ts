@@ -10,9 +10,9 @@ export type BlastPresetId = "slow" | "normal" | "cepat" | "brutal";
 export type BlastPresetOrCustom = BlastPresetId | "kustom";
 
 export interface BlastSpeedValues {
-  /** Jeda minimal antar pesan per nomor mapan (detik). */
+  /** Jeda minimal antar pesan tiap perangkat bernomor mapan (detik). */
   minDelaySec: number;
-  /** Jeda maksimal antar pesan per nomor mapan (detik). */
+  /** Jeda maksimal antar pesan tiap perangkat bernomor mapan (detik). */
   maxDelaySec: number;
   /** Maks pesan per jam per nomor. 0 = tidak dibatasi; maksimum 1000 bila aktif. */
   hourlyCap: number;
