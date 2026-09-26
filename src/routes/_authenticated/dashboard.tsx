@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
-import { Send, Smartphone, TrendingUp, Download, Pin, UserRound, QrCode, Wallet, Users, Copy, Plus, KeyRound, RefreshCw } from "lucide-react";
+import { Send, Smartphone, TrendingUp, Download, Pin, UserRound, QrCode, Wallet, Users, Copy, Plus, KeyRound, RefreshCw, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/my-client";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +26,7 @@ import { formatPhoneDisplay, sanitizePhone } from "@/lib/whatsapp";
 import { rupiah } from "@/lib/currency";
 import { getMyReferral, getMyRewards } from "@/lib/rewards.functions";
 import { getSupportTelegram } from "@/lib/admin.functions";
+import { getBlastState } from "@/lib/blast.functions";
 import { WaProfilePanel } from "@/components/wa-profile-panel";
 import type { QueuedMessage, SessionGatewayResponse, WaSession } from "@/types/wa";
 
@@ -85,6 +86,7 @@ function Dashboard() {
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const fetchRewards = useServerFn(getMyRewards);
   const fetchReferral = useServerFn(getMyReferral);
+  const fetchBlastState = useServerFn(getBlastState);
 
   const { data: rewards } = useQuery({
     queryKey: ["my-rewards"],
@@ -95,6 +97,11 @@ function Dashboard() {
     queryKey: ["my-referral"],
     queryFn: () => fetchReferral(),
     refetchInterval: 30_000,
+  });
+  const { data: blastState } = useQuery({
+    queryKey: ["member-blast-state"],
+    queryFn: () => fetchBlastState(),
+    refetchInterval: 10_000,
   });
 
   const fetchSupport = useServerFn(getSupportTelegram);
@@ -261,7 +268,10 @@ function Dashboard() {
           <p className="mt-4 max-w-xl text-base leading-8 text-background/70 sm:mt-2 sm:text-sm sm:leading-6 sm:text-member-hero-foreground/70">Kelola aktivitas WhatsApp dan pantau seluruh perkembangan pengiriman dari sini.</p>
           <div className="mt-6 flex flex-wrap items-center gap-2">
              <span className="rounded-full border border-background/20 bg-background/5 px-4 py-2.5 text-xs font-semibold sm:border-member-hero-foreground/20 sm:bg-background/40">Masuk sebagai WORKER'S</span>
-             <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold"><span className="size-2 rounded-full bg-primary" /> SISTEM AKTIF</span>
+             <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2.5 text-xs font-semibold">
+               <Database className="size-4 text-primary" />
+               Data tersisa: {(blastState?.pool_available ?? 0).toLocaleString("id-ID")}
+             </span>
           </div>
         </div>
       </section>

@@ -99,6 +99,11 @@ export const disconnectTelegram = createServerFn({ method: "POST" })
 export const notifyOwnPasswordChanged = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await (await import("@/lib/activity-log.server")).logActivity(
+      context.userId,
+      "password_change",
+      "Worker mengubah kata sandi melalui Pengaturan Akun",
+    );
     const { notifyUserTelegram } = await import("@/lib/telegram.server");
     const waktu = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
     const sent = await notifyUserTelegram(

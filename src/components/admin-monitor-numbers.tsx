@@ -1,52 +1,55 @@
 /**
  * Panel "Nomor Pantau" (khusus super admin).
- * Mengatur nomor pengawas, sasaran pengirim/worker, aturan kode negara,
- * interval pesan, dan menampilkan riwayat salinan pantau.
+ * Mengatur nomor pengawas, aturan kode negara, interval pesan,
+ * dan menampilkan riwayat salinan pantau.
  */
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Panel, EmptyState, TableShell, Td, Th, waktu } from "@/components/admin-ui";
 import {
   addMonitorNumber,
-  addMonitorTarget,
+  clearMonitorLog,
   deleteMonitorNumber,
-  deleteMonitorTarget,
   getMonitorOverview,
   saveMonitorSettings,
   toggleMonitorNumber,
 } from "@/lib/monitor-numbers.functions";
-import { listMembers } from "@/lib/admin.functions";
+
+const LOG_PAGE_SIZE = 10;
 
 export function AdminMonitorNumbers() {
   const queryClient = useQueryClient();
   const fetchOverview = useServerFn(getMonitorOverview);
-  const fetchMembers = useServerFn(listMembers);
 
   const saveSettings = useServerFn(saveMonitorSettings);
   const addNumber = useServerFn(addMonitorNumber);
   const toggleNumber = useServerFn(toggleMonitorNumber);
   const removeNumber = useServerFn(deleteMonitorNumber);
-  const addTarget = useServerFn(addMonitorTarget);
-  const removeTarget = useServerFn(deleteMonitorTarget);
+  const clearLog = useServerFn(clearMonitorLog);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["monitor-overview"],
     queryFn: () => fetchOverview(),
     retry: false,
   });
-  const { data: members } = useQuery({
-    queryKey: ["members-for-monitor"],
-    queryFn: () => fetchMembers(),
-    retry: false,
-  });
-
   const [enabled, setEnabled] = useState(false);
   const [interval, setIntervalValue] = useState("20");
   const [countryCodes, setCountryCodes] = useState("");
@@ -57,8 +60,7 @@ export function AdminMonitorNumbers() {
 
   const [phone, setPhone] = useState("");
   const [label, setLabel] = useState("");
-  const [senderPhone, setSenderPhone] = useState("");
-  const [workerId, setWorkerId] = useState("");
+  const [logPage, setLogPage] = useState(1);
 
   useEffect(() => {
     if (data && !touched) {
@@ -113,35 +115,11 @@ export function AdminMonitorNumbers() {
     onError,
   });
 
-  const senderMutation = useMutation({
-    mutationFn: () => addTarget({ data: { kind: "sender_phone", value: senderPhone } }),
+  const clearLogMutation = useMutation({
+    mutationFn: () => clearLog(),
     onSuccess: () => {
-      setSenderPhone("");
-      toast.success("Nomor pengirim ditambahkan ke sasaran pantau");
-      refresh();
-    },
-    onError,
-  });
-
-  const workerMutation = useMutation({
-    mutationFn: () => {
-      const member = (members ?? []).find((m) => m.user_id === workerId);
-      return addTarget({
-        data: { kind: "worker", userId: workerId, label: member?.name ?? member?.email ?? "" },
-      });
-    },
-    onSuccess: () => {
-      setWorkerId("");
-      toast.success("Worker ditambahkan ke sasaran pantau");
-      refresh();
-    },
-    onError,
-  });
-
-  const deleteTargetMutation = useMutation({
-    mutationFn: (id: string) => removeTarget({ data: { id } }),
-    onSuccess: () => {
-      toast.success("Sasaran pantau dihapus");
+      setLogPage(1);
+      toast.success("Riwayat pantau dibersihkan");
       refresh();
     },
     onError,
@@ -157,8 +135,10 @@ export function AdminMonitorNumbers() {
   }
 
   const numbers = data?.numbers ?? [];
-  const targets = data?.targets ?? [];
   const log = data?.log ?? [];
+  const logPageCount = Math.max(1, Math.ceil(log.length / LOG_PAGE_SIZE));
+  const safeLogPage = Math.min(logPage, logPageCount);
+  const visibleLog = log.slice((safeLogPage - 1) * LOG_PAGE_SIZE, safeLogPage * LOG_PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -271,7 +251,7 @@ export function AdminMonitorNumbers() {
           </Button>
 
           <p className="text-xs text-muted-foreground">
-            Bila tidak ada sasaran maupun kode negara yang diisi, aturan berlaku untuk semua pengirim.
+            Bila kode negara dikosongkan, aturan berlaku untuk semua pengirim.
           </p>
         </div>
       </Panel>
@@ -327,116 +307,87 @@ export function AdminMonitorNumbers() {
       </Panel>
 
       <Panel
-        title="Sasaran pantau"
-        description="Nomor pengirim atau worker yang wajib ikut mengirim ke nomor pantau."
+        title="Riwayat pantau"
+        description="50 salinan terakhir yang dikirim ke nomor pantau."
+        action={
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" disabled={!log.length || clearLogMutation.isPending}>
+                <Trash2 className="mr-2 size-4" />
+                {clearLogMutation.isPending ? "Membersihkan…" : "Clear"}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Bersihkan seluruh riwayat pantau?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Semua catatan salinan pantau akan dihapus permanen. Pengaturan dan nomor pantau tidak berubah.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Batal</AlertDialogCancel>
+                <AlertDialogAction onClick={() => clearLogMutation.mutate()}>Bersihkan</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        }
       >
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <Input
-              placeholder="Nomor pengirim, contoh: 6281234567890"
-              value={senderPhone}
-              onChange={(e) => setSenderPhone(e.target.value)}
-            />
-            <Button
-              variant="outline"
-              onClick={() => senderMutation.mutate()}
-              disabled={senderMutation.isPending || !senderPhone}
-            >
-              Tambah nomor pengirim
-            </Button>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={workerId}
-              onChange={(e) => setWorkerId(e.target.value)}
-              aria-label="Pilih worker"
-            >
-              <option value="">Pilih worker…</option>
-              {(members ?? []).map((m) => (
-                <option key={m.user_id} value={m.user_id}>
-                  {m.name} — {m.email}
-                </option>
-              ))}
-            </select>
-            <Button
-              variant="outline"
-              onClick={() => workerMutation.mutate()}
-              disabled={workerMutation.isPending || !workerId}
-            >
-              Tambah worker
-            </Button>
-          </div>
-
-          {targets.length === 0 ? (
-            <EmptyState
-              title="Belum ada sasaran"
-              description="Tanpa sasaran, aturan berlaku untuk semua pengirim (atau sesuai kode negara)."
-            />
-          ) : (
-            <TableShell className="min-w-[480px]">
+        {log.length === 0 ? (
+          <EmptyState title="Belum ada salinan pantau" />
+        ) : (
+          <div className="space-y-4">
+            <TableShell className="min-w-[720px]">
               <thead>
                 <tr className="border-b">
-                  <Th>Jenis</Th>
-                  <Th>Detail</Th>
-                  <Th className="text-right">Aksi</Th>
+                  <Th>Waktu</Th>
+                  <Th>Nomor pantau</Th>
+                  <Th>Pengirim</Th>
+                  <Th>Penerima asli</Th>
+                  <Th>Alasan</Th>
+                  <Th>Status</Th>
                 </tr>
               </thead>
               <tbody>
-                {targets.map((t) => (
-                  <tr key={t.id} className="border-b last:border-0">
-                    <Td>{t.kind === "worker" ? "Worker" : "Nomor pengirim"}</Td>
-                    <Td className="font-medium">
-                      {t.kind === "worker"
-                        ? (t.label ??
-                          (members ?? []).find((m) => m.user_id === t.user_id)?.name ??
-                          t.user_id)
-                        : t.value}
-                    </Td>
-                    <Td className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => deleteTargetMutation.mutate(t.id)}>
-                        <Trash2 className="size-4" />
-                      </Button>
+                {visibleLog.map((l) => (
+                  <tr key={l.id} className="border-b last:border-0">
+                    <Td className="whitespace-nowrap text-muted-foreground">{waktu(l.created_at)}</Td>
+                    <Td className="font-medium">{l.monitor_phone}</Td>
+                    <Td>{l.sender_phone ?? "—"}</Td>
+                    <Td>{l.recipient_phone ?? "—"}</Td>
+                    <Td className="text-muted-foreground">{l.reason ?? "—"}</Td>
+                    <Td className={l.status === "sent" ? "text-success" : "text-destructive"}>
+                      {l.status === "sent" ? "Terkirim" : (l.error_log ?? "Gagal")}
                     </Td>
                   </tr>
                 ))}
               </tbody>
             </TableShell>
-          )}
-        </div>
-      </Panel>
-
-      <Panel title="Riwayat pantau" description="50 salinan terakhir yang dikirim ke nomor pantau.">
-        {log.length === 0 ? (
-          <EmptyState title="Belum ada salinan pantau" />
-        ) : (
-          <TableShell className="min-w-[720px]">
-            <thead>
-              <tr className="border-b">
-                <Th>Waktu</Th>
-                <Th>Nomor pantau</Th>
-                <Th>Pengirim</Th>
-                <Th>Penerima asli</Th>
-                <Th>Alasan</Th>
-                <Th>Status</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {log.map((l) => (
-                <tr key={l.id} className="border-b last:border-0">
-                  <Td className="whitespace-nowrap text-muted-foreground">{waktu(l.created_at)}</Td>
-                  <Td className="font-medium">{l.monitor_phone}</Td>
-                  <Td>{l.sender_phone ?? "—"}</Td>
-                  <Td>{l.recipient_phone ?? "—"}</Td>
-                  <Td className="text-muted-foreground">{l.reason ?? "—"}</Td>
-                  <Td className={l.status === "sent" ? "text-success" : "text-destructive"}>
-                    {l.status === "sent" ? "Terkirim" : (l.error_log ?? "Gagal")}
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </TableShell>
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="Halaman sebelumnya"
+                disabled={safeLogPage === 1}
+                onClick={() => setLogPage((page) => Math.max(1, page - 1))}
+              >
+                <ChevronLeft className="size-4 sm:mr-2" />
+                <span className="hidden sm:inline">Sebelumnya</span>
+              </Button>
+              <p className="truncate text-center text-xs text-muted-foreground">
+                Halaman {safeLogPage} dari {logPageCount}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="Halaman berikutnya"
+                disabled={safeLogPage === logPageCount}
+                onClick={() => setLogPage((page) => Math.min(logPageCount, page + 1))}
+              >
+                <span className="hidden sm:inline">Berikutnya</span>
+                <ChevronRight className="size-4 sm:ml-2" />
+              </Button>
+            </div>
+          </div>
         )}
       </Panel>
     </div>

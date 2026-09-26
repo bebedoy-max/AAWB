@@ -234,7 +234,7 @@ async function loadPacing(supabase: SupabaseClient): Promise<PacingSettings> {
       value = {
         minSec,
         maxSec: clampNum(d["blast_max_delay_sec"], PACING_DEFAULTS.maxSec, minSec, 3600),
-        hourlyCap: clampNum(d["blast_hourly_cap"], PACING_DEFAULTS.hourlyCap, 1, 1000),
+        hourlyCap: clampNum(d["blast_hourly_cap"], PACING_DEFAULTS.hourlyCap, 0, 1000),
         warmupCount: clampNum(d["blast_warmup_count"], PACING_DEFAULTS.warmupCount, 0, 10_000),
         warmupMinSec,
         warmupMaxSec: clampNum(d["blast_warmup_max_sec"], PACING_DEFAULTS.warmupMaxSec, warmupMinSec, 3600),
@@ -510,7 +510,7 @@ async function runTick(
   }
 
   // Batas per jam tercapai: jangan mengambil pekerjaan, lepaskan yang sudah diambil.
-  if (sentLastHour >= pacing.hourlyCap) {
+  if (pacing.hourlyCap > 0 && sentLastHour >= pacing.hourlyCap) {
     await releaseRows(supabase, sessionId);
     return {
       claimed: 0,
@@ -651,7 +651,7 @@ async function runTick(
         break;
       }
       // Batas per jam per nomor.
-      if (sentLastHour >= pacing.hourlyCap) {
+      if (pacing.hourlyCap > 0 && sentLastHour >= pacing.hourlyCap) {
         await releaseRows(supabase, sessionId);
         note = `Batas ${pacing.hourlyCap} pesan per jam untuk nomor ini tercapai — dilanjutkan otomatis`;
         stop = true;

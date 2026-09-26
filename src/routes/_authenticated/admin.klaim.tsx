@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { CheckCircle2, Clock, RefreshCw, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, RefreshCw, Wallet, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,6 +31,8 @@ const TABS = [
   { value: "rejected", label: "Ditolak" },
 ] as const;
 
+const PAGE_SIZE = 20;
+
 const STATUS_LABEL: Record<string, string> = {
   pending: "Menunggu",
   approved: "Selesai",
@@ -50,6 +52,11 @@ function KlaimPage() {
   const fetchWithdrawals = useServerFn(adminListWithdrawals);
   const setStatus = useServerFn(setWithdrawalStatus);
   const [tab, setTab] = useState<string>("pending");
+  const [pages, setPages] = useState<Record<string, number>>({
+    pending: 1,
+    approved: 1,
+    rejected: 1,
+  });
 
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ["admin-withdrawals"],
@@ -71,6 +78,11 @@ function KlaimPage() {
   const rows = (data ?? []).filter((w) =>
     tab === "approved" ? w.status === "approved" : w.status === tab,
   );
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(pages[tab] ?? 1, pageCount);
+  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const setCurrentPage = (page: number) =>
+    setPages((current) => ({ ...current, [tab]: Math.min(pageCount, Math.max(1, page)) }));
 
   const act = useMutation({
     mutationFn: (vars: { id: string; status: "approved" | "rejected" }) =>
@@ -134,8 +146,9 @@ function KlaimPage() {
             description="Pengajuan pencairan dari Worker's akan tampil pada tab ini."
           />
         ) : (
-          <TableShell>
-            <thead className="border-b bg-muted/40">
+          <div>
+            <TableShell>
+              <thead className="border-b bg-muted/40">
               <tr>
                 <Th>Worker's</Th>
                 <Th>Jumlah</Th>
@@ -144,9 +157,9 @@ function KlaimPage() {
                 <Th>Status</Th>
                 <Th className="text-right">Tindakan</Th>
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((w) => (
+              </thead>
+              <tbody>
+                {pageRows.map((w) => (
                 <tr key={w.id} className="border-b last:border-0 hover:bg-muted/40">
                   <Td>
                     <p className="font-medium">{w.name}</p>
@@ -197,9 +210,28 @@ function KlaimPage() {
                     )}
                   </Td>
                 </tr>
-              ))}
-            </tbody>
-          </TableShell>
+                ))}
+              </tbody>
+            </TableShell>
+            {pageCount > 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Menampilkan {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, rows.length)} dari {rows.length} pengajuan
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)}>
+                    <ChevronLeft className="size-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Sebelumnya</span>
+                  </Button>
+                  <span className="min-w-20 text-center text-xs text-muted-foreground">Halaman {currentPage} dari {pageCount}</span>
+                  <Button variant="outline" size="sm" disabled={currentPage === pageCount} onClick={() => setCurrentPage(currentPage + 1)}>
+                    <span className="hidden sm:inline">Berikutnya</span>
+                    <ChevronRight className="size-4 sm:ml-1" />
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         )}
       </Panel>
     </>

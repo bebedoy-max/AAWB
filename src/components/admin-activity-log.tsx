@@ -17,6 +17,7 @@ const ACTION_LABEL: Record<string, string> = {
   logout: "Keluar",
   role_change: "Ubah peran",
   password_reset: "Reset kata sandi",
+  password_change: "Ubah kata sandi",
   user_delete: "Hapus pengguna",
   blast_start: "Mulai blast",
   blast_pause: "Jeda blast",
@@ -26,6 +27,21 @@ const ACTION_LABEL: Record<string, string> = {
   withdrawal_request: "Ajukan penarikan",
   withdrawal_approved: "Proses penarikan (sukses)",
   withdrawal_rejected: "Tolak penarikan",
+  email_change: "Ubah email",
+  profile_update: "Ubah profil",
+  blast_speed_update: "Ubah kecepatan blast",
+  blast_stop_all: "Hentikan semua blast",
+  worker_test_blast: "Test blast Worker",
+  worker_pause: "Jeda Worker",
+  worker_resume: "Lanjutkan Worker",
+  worker_campaign_kick: "Keluarkan Worker",
+  worker_campaign_unblock: "Buka blokir Worker",
+  target_add: "Tambah data nomor",
+  target_reset: "Hapus data nomor",
+  report_clear: "Bersihkan laporan",
+  project_create: "Buat kampanye",
+  project_update: "Ubah kampanye",
+  project_delete: "Hapus kampanye",
 };
 
 const ROLE_LABEL: Record<string, string> = {
@@ -84,7 +100,7 @@ export function AdminActivityLog() {
               User Log
             </CardTitle>
             <CardDescription>
-              Aktivitas pengguna dan admin, terbaru di atas. Aktivitas Super Admin tidak dicatat.
+              Aktivitas pengguna dan admin, terbaru di atas. Tindakan penting Super Admin tetap dicatat.
             </CardDescription>
           </div>
           <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">

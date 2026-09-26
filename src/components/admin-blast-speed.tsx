@@ -34,7 +34,7 @@ const FIELDS: {
 }[] = [
   { key: "minDelaySec", label: "Jeda minimal", hint: "Antar pesan, per nomor mapan", unit: "detik", group: "mapan" },
   { key: "maxDelaySec", label: "Jeda maksimal", hint: "Jeda diacak di antara min–maks", unit: "detik", group: "mapan" },
-  { key: "hourlyCap", label: "Batas per jam", hint: "Per nomor pengirim (maks. 1000)", unit: "pesan", group: "batas" },
+  { key: "hourlyCap", label: "Batas per jam", hint: "Per nomor pengirim. 0 = tanpa batas", unit: "pesan", group: "batas" },
   { key: "dailyCap", label: "Batas per hari", hint: "Per nomor, 24 jam terakhir. 0 = tanpa batas", unit: "pesan", group: "batas" },
   { key: "warmupCount", label: "Ambang nomor mapan", hint: "Di bawah ini dianggap nomor baru", unit: "pesan terkirim", group: "baru" },
   { key: "warmupMinSec", label: "Jeda minimal nomor baru", hint: "Masa pemanasan", unit: "detik", group: "baru" },

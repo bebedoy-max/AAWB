@@ -9,3 +9,12 @@
 - [x] Pastikan teks panel berwarna terbaca pada semua tema
 - [x] Perbaiki status verifikasi perubahan email Super Admin yang terus memuat
 - [x] Filter kode negara nomor pantau: pakai nomor PENGIRIM (bukan penerima) + perbaiki label
+- [x] Jadikan batas per jam 0 sebagai tanpa batas
+- [x] Hapus Sasaran Pantau dari menu Nomor Pantau
+- [x] Batasi Riwayat Pantau menjadi 10 baris per halaman dan tambahkan Clear
+- [x] Batasi setiap tab Klaim Dana menjadi 20 baris per halaman
+- [x] Ganti label SISTEM AKTIF di Beranda Worker dengan informasi data tersisa
+- [x] Buat sidebar Worker tetap diam saat konten halaman digulir
+- [x] Tampilkan akun Telegram tertaut pada Detail Pengguna
+- [x] Tampilkan pop-up kredensial setelah admin berhasil mereset kata sandi
+- [x] Perkaya User Log dengan aktivitas dan keterangan yang lebih informatif

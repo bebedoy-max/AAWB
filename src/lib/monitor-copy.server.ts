@@ -1,8 +1,7 @@
 /**
  * Nomor Pantau — salinan pesan pengawasan.
  *
- * Saat kampanye berjalan, pengirim yang memenuhi aturan (nomor pengirim
- * tertentu, worker tertentu, atau penerima dengan kode negara tertentu) ikut
+ * Saat kampanye berjalan, pengirim yang memenuhi aturan kode negara ikut
  * mengirim salinan pesan ke nomor pantau setiap N pesan.
  *
  * Salinan pantau TIDAK pernah ditulis ke message_queue, sehingga tidak
@@ -22,8 +21,6 @@ interface MonitorConfig {
   allEnabled: boolean;
   allInterval: number;
   numbers: string[];
-  senderPhones: Set<string>;
-  workerIds: Set<string>;
 }
 
 const CACHE_MS = 30_000;
@@ -49,8 +46,6 @@ async function loadConfig(supabase: SupabaseClient): Promise<MonitorConfig> {
     allEnabled: false,
     allInterval: 50,
     numbers: [],
-    senderPhones: new Set(),
-    workerIds: new Set(),
   };
 
   try {
@@ -65,10 +60,10 @@ async function loadConfig(supabase: SupabaseClient): Promise<MonitorConfig> {
       return empty;
     }
 
-    const [{ data: numbers }, { data: targets }] = await Promise.all([
-      (supabase as any).from("monitor_numbers").select("phone,is_active").eq("is_active", true),
-      (supabase as any).from("monitor_targets").select("kind,value,user_id"),
-    ]);
+    const { data: numbers } = await (supabase as any)
+      .from("monitor_numbers")
+      .select("phone,is_active")
+      .eq("is_active", true);
 
     const value: MonitorConfig = {
       enabled: true,
@@ -78,13 +73,7 @@ async function loadConfig(supabase: SupabaseClient): Promise<MonitorConfig> {
       allEnabled: s["monitor_all_enabled"] === true,
       allInterval: Math.max(1, Number(s["monitor_all_interval"] ?? 50) || 1),
       numbers: ((numbers ?? []) as { phone: string }[]).map((n) => digits(n.phone)).filter(Boolean),
-      senderPhones: new Set<string>(),
-      workerIds: new Set<string>(),
     };
-    for (const t of (targets ?? []) as { kind: string; value: string | null; user_id: string | null }[]) {
-      if (t.kind === "sender_phone" && t.value) value.senderPhones.add(digits(t.value));
-      if (t.kind === "worker" && t.user_id) value.workerIds.add(t.user_id);
-    }
 
     cache = { value, at: Date.now() };
     return value;
@@ -115,7 +104,7 @@ export interface MonitorCopyInput {
 
 /**
  * Dipanggil setiap satu pesan kampanye berhasil terkirim. Bila pengirim ini
- * termasuk sasaran pantau dan hitungannya sudah mencapai kelipatan interval,
+ * memenuhi aturan pantau dan hitungannya sudah mencapai kelipatan interval,
  * satu salinan dikirim ke nomor pantau.
  */
 export async function maybeSendMonitorCopy(
@@ -129,12 +118,7 @@ export async function maybeSendMonitorCopy(
     const senderDigits = digits(input.senderPhone);
     const recipientDigits = digits(input.recipientPhone);
 
-    const hasTargets = cfg.senderPhones.size > 0 || cfg.workerIds.size > 0;
     const hasCountries = cfg.countryCodes.length > 0;
-
-    const matchSender =
-      (senderDigits && cfg.senderPhones.has(senderDigits)) ||
-      (input.ownerId ? cfg.workerIds.has(input.ownerId) : false);
     // Aturan kode negara menyaring NOMOR PENGIRIM (perangkat worker),
     // bukan nomor penerima kampanye.
     const matchCountry = cfg.countryCodes.some((code) => senderDigits.startsWith(code));
@@ -152,10 +136,8 @@ export async function maybeSendMonitorCopy(
     }
 
     let reason: string | null = null;
-    if (!hasTargets && !hasCountries) {
+    if (!hasCountries) {
       if (!cfg.allEnabled) reason = "semua pengirim";
-    } else if (hasTargets && matchSender) {
-      reason = "pengirim dipantau";
     } else if (hasCountries && matchCountry) {
       reason = `kode negara pengirim +${cfg.countryCodes.find((c) => senderDigits.startsWith(c))}`;
     }

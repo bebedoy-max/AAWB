@@ -19,6 +19,12 @@ async function resolveActor(admin: any, userId: string) {
   return { role, email };
 }
 
+const AUDITED_SUPER_ADMIN_ACTIONS = new Set([
+  "password_reset",
+  "withdrawal_approved",
+  "withdrawal_rejected",
+]);
+
 /**
  * Simpan satu baris aktivitas. Aman dipanggil tanpa await-error handling:
  * kegagalan pencatatan tidak boleh menggagalkan aksi utama.
@@ -33,7 +39,7 @@ export async function logActivity(
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const admin = supabaseAdmin as any;
     const { role, email } = await resolveActor(admin, userId);
-    if (role === "super_admin") return; // aktivitas super admin tidak dicatat
+    if (role === "super_admin" && !AUDITED_SUPER_ADMIN_ACTIONS.has(action)) return;
     await admin.from("activity_log").insert({
       user_id: userId,
       actor_role: role,

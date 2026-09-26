@@ -387,7 +387,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className={cn("flex min-h-screen w-full max-w-full overflow-x-clip bg-background member-surface", adminLayout && "lg:font-sans")}>
       {adminLayout ? null : (
-        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 self-start border-r bg-sidebar lg:block">
+        <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen w-60 border-r bg-sidebar lg:block">
           <div className="flex h-full flex-col">
             <Brand />
             <p className="px-6 pb-2 pt-2 text-[10px] font-bold uppercase text-muted-foreground">Menu utama</p>
@@ -423,7 +423,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={cn("flex min-w-0 flex-1 flex-col", !adminLayout && "lg:ml-60")}>
 
         <header className={cn(
           "px-4 lg:px-6",

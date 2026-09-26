@@ -311,6 +311,12 @@ export const confirmPasswordResetViaTelegram = createServerFn({ method: "POST" }
     });
     if (updateError) throw new Error("Kata sandi belum dapat diubah. Minta kode baru lalu coba lagi.");
 
+    await (await import("@/lib/activity-log.server")).logActivity(
+      target.userId,
+      "password_change",
+      "Worker mengubah kata sandi melalui pemulihan Telegram",
+    );
+
     const { sendTelegramMessage } = await import("@/lib/telegram.server");
     try {
       await sendTelegramMessage(

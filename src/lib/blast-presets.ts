@@ -14,7 +14,7 @@ export interface BlastSpeedValues {
   minDelaySec: number;
   /** Jeda maksimal antar pesan per nomor mapan (detik). */
   maxDelaySec: number;
-  /** Maks pesan per jam per nomor (kode membatasi paling tinggi 1000). */
+  /** Maks pesan per jam per nomor. 0 = tidak dibatasi; maksimum 1000 bila aktif. */
   hourlyCap: number;
   /** Maks pesan per 24 jam per nomor. 0 = tidak dibatasi. */
   dailyCap: number;
@@ -137,7 +137,7 @@ export function matchPreset(values: BlastSpeedValues): BlastPresetOrCustom {
 export const SPEED_LIMITS = {
   minDelaySec: { min: 1, max: 3600 },
   maxDelaySec: { min: 1, max: 3600 },
-  hourlyCap: { min: 1, max: 1000 },
+  hourlyCap: { min: 0, max: 1000 },
   dailyCap: { min: 0, max: 100_000 },
   warmupCount: { min: 0, max: 10_000 },
   warmupMinSec: { min: 1, max: 3600 },

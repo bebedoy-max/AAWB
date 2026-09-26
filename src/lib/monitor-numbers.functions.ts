@@ -28,14 +28,6 @@ export interface MonitorNumberRow {
   created_at: string;
 }
 
-export interface MonitorTargetRow {
-  id: string;
-  kind: "sender_phone" | "worker";
-  value: string | null;
-  user_id: string | null;
-  label: string | null;
-}
-
 export interface MonitorLogRow {
   id: string;
   monitor_phone: string;
@@ -59,7 +51,6 @@ export interface MonitorSettings {
 export interface MonitorOverview {
   settings: MonitorSettings;
   numbers: MonitorNumberRow[];
-  targets: MonitorTargetRow[];
   log: MonitorLogRow[];
 }
 
@@ -78,13 +69,11 @@ export const getMonitorOverview = createServerFn({ method: "GET" })
       .maybeSingle();
     if (sErr) wrap(sErr);
 
-    const [numbers, targets, log] = await Promise.all([
+    const [numbers, log] = await Promise.all([
       admin.from("monitor_numbers").select("*").order("created_at", { ascending: true }),
-      admin.from("monitor_targets").select("*").order("created_at", { ascending: true }),
       admin.from("monitor_log").select("*").order("created_at", { ascending: false }).limit(50),
     ]);
     wrap(numbers.error ?? null);
-    wrap(targets.error ?? null);
     wrap(log.error ?? null);
 
     const row = (s ?? {}) as Record<string, unknown>;
@@ -98,7 +87,6 @@ export const getMonitorOverview = createServerFn({ method: "GET" })
         all_interval: Math.max(1, Number(row["monitor_all_interval"] ?? 50) || 50),
       },
       numbers: (numbers.data ?? []) as MonitorNumberRow[],
-      targets: (targets.data ?? []) as MonitorTargetRow[],
       log: (log.data ?? []) as MonitorLogRow[],
     };
   });
@@ -207,50 +195,13 @@ export const deleteMonitorNumber = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Tambah sasaran: nomor pengirim atau worker. */
-export const addMonitorTarget = createServerFn({ method: "POST" })
+/** Hapus seluruh riwayat salinan pantau. */
+export const clearMonitorLog = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { kind: "sender_phone" | "worker"; value?: string; userId?: string; label?: string }) => {
-    if (input?.kind === "sender_phone") {
-      const phone = digits(input?.value);
-      if (phone.length < 8) throw new Error("Nomor pengirim tidak valid.");
-      return { kind: "sender_phone" as const, value: phone, userId: null, label: String(input?.label ?? "").trim() || null };
-    }
-    if (input?.kind === "worker") {
-      if (!input?.userId) throw new Error("Worker belum dipilih.");
-      return { kind: "worker" as const, value: null, userId: String(input.userId), label: String(input?.label ?? "").trim() || null };
-    }
-    throw new Error("Jenis sasaran tidak valid.");
-  })
-  .handler(async ({ data, context }) => {
+  .handler(async ({ context }) => {
     await assertAdminRole(context.userId, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await (supabaseAdmin as any).from("monitor_targets").insert({
-      kind: data.kind,
-      value: data.value,
-      user_id: data.userId,
-      label: data.label,
-    });
-    if (error && /duplicate key/i.test(error.message)) throw new Error("Sasaran ini sudah ada.");
+    const { error } = await (supabaseAdmin as any).from("monitor_log").delete().not("id", "is", null);
     wrap(error);
-    const { clearMonitorCache } = await import("@/lib/monitor-copy.server");
-    clearMonitorCache();
-    return { ok: true };
-  });
-
-/** Hapus sasaran pantau. */
-export const deleteMonitorTarget = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: { id: string }) => {
-    if (!input?.id) throw new Error("Sasaran tidak valid.");
-    return { id: String(input.id) };
-  })
-  .handler(async ({ data, context }) => {
-    await assertAdminRole(context.userId, true);
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await (supabaseAdmin as any).from("monitor_targets").delete().eq("id", data.id);
-    wrap(error);
-    const { clearMonitorCache } = await import("@/lib/monitor-copy.server");
-    clearMonitorCache();
     return { ok: true };
   });

@@ -790,11 +790,6 @@ export const setWithdrawalStatus = createServerFn({ method: "POST" })
       .select("user_id,amount,provider,method,account_name,account_number")
       .maybeSingle();
     if (error) throw new Error(error.message);
-    await (await import("@/lib/activity-log.server")).logActivity(
-      context.userId,
-      data.status === "approved" ? "withdrawal_approved" : "withdrawal_rejected",
-      `Penarikan ${data.id}${data.note ? ` — ${data.note}` : ""}`,
-    );
     if (row?.user_id) {
       const nominal = new Intl.NumberFormat("id-ID").format(Number(row.amount ?? 0));
 
@@ -821,6 +816,12 @@ export const setWithdrawalStatus = createServerFn({ method: "POST" })
         .eq("user_id", row.user_id)
         .maybeSingle();
       const member = fromEmail || tg?.username || "member";
+
+      await (await import("@/lib/activity-log.server")).logActivity(
+        context.userId,
+        data.status === "approved" ? "withdrawal_approved" : "withdrawal_rejected",
+        `${data.status === "approved" ? "WD sukses" : "WD ditolak"} untuk @${member} sebesar Rp ${nominal}${data.note ? ` — ${data.note}` : ""}`,
+      );
 
       const bank = row.provider || row.method || "—";
       const detail =

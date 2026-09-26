@@ -4,7 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Camera, KeyRound, RefreshCw, Search, Smartphone, Trash2, UserRound, Users, Wallet } from "lucide-react";
+import { Camera, CheckCircle2, Copy, KeyRound, RefreshCw, Search, Send, Smartphone, Trash2, UserRound, Users, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,6 +81,13 @@ type MemberSummary = {
   role: AppRole;
 };
 
+type ResetAccount = { id: string; email: string; name: string; username: string };
+type ResetResult = { name: string; username: string; password: string };
+
+function usernameFromEmail(email: string): string {
+  return email.split("@")[0] || email;
+}
+
 function PenggunaPage() {
   const queryClient = useQueryClient();
   const { data: me } = useMyRole();
@@ -93,7 +100,8 @@ function PenggunaPage() {
 
   const [q, setQ] = useState("");
   const [detailUser, setDetailUser] = useState<MemberSummary | null>(null);
-  const [resetTarget, setResetTarget] = useState<{ id: string; email: string } | null>(null);
+  const [resetTarget, setResetTarget] = useState<ResetAccount | null>(null);
+  const [resetResult, setResetResult] = useState<ResetResult | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null);
 
@@ -127,9 +135,14 @@ function PenggunaPage() {
 
   const doReset = useMutation({
     mutationFn: (vars: { userId: string; password: string }) => resetPassword({ data: vars }),
-    onSuccess: () => {
-      toast.success("Kata sandi berhasil disetel ulang");
+    onSuccess: (result, variables) => {
+      const target = resetTarget;
       setResetTarget(null);
+      setResetResult({
+        name: result.name || target?.name || "—",
+        username: result.username || target?.username || "—",
+        password: variables.password,
+      });
       setNewPassword("");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -274,7 +287,12 @@ function PenggunaPage() {
                         disabled={!isSuper}
                         onClick={() => {
                           setNewPassword("");
-                          setResetTarget({ id: m.user_id, email: m.email });
+                          setResetTarget({
+                            id: m.user_id,
+                            email: m.email,
+                            name: m.name,
+                            username: usernameFromEmail(m.email),
+                          });
                         }}
                       >
                         <KeyRound className="mr-1 size-3.5" /> Reset
@@ -330,6 +348,52 @@ function PenggunaPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(resetResult)} onOpenChange={(open) => !open && setResetResult(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mb-2 flex size-11 items-center justify-center rounded-full bg-success/15 text-success">
+              <CheckCircle2 className="size-6" />
+            </div>
+            <DialogTitle>Kata sandi berhasil disetel ulang</DialogTitle>
+            <DialogDescription>
+              Salin data berikut untuk diberikan kepada pengguna. Pop-up ini tidak menyimpan kata sandi.
+            </DialogDescription>
+          </DialogHeader>
+          <dl className="divide-y rounded-lg border">
+            <div className="grid grid-cols-[96px_1fr] gap-3 p-3 text-sm">
+              <dt className="text-muted-foreground">Nama</dt>
+              <dd className="break-words font-semibold">{resetResult?.name}</dd>
+            </div>
+            <div className="grid grid-cols-[96px_1fr] gap-3 p-3 text-sm">
+              <dt className="text-muted-foreground">Username</dt>
+              <dd className="break-all font-mono font-semibold">{resetResult?.username}</dd>
+            </div>
+            <div className="grid grid-cols-[96px_1fr] gap-3 p-3 text-sm">
+              <dt className="text-muted-foreground">Password</dt>
+              <dd className="flex min-w-0 items-center justify-between gap-2">
+                <span className="break-all font-mono font-semibold">{resetResult?.password}</span>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  aria-label="Salin password baru"
+                  onClick={() => {
+                    if (!resetResult?.password) return;
+                    void navigator.clipboard.writeText(resetResult.password);
+                    toast.success("Password disalin");
+                  }}
+                >
+                  <Copy className="size-4" />
+                </Button>
+              </dd>
+            </div>
+          </dl>
+          <DialogFooter>
+            <Button onClick={() => setResetResult(null)}>Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -353,7 +417,12 @@ function PenggunaPage() {
         onRoleChange={(userId, role) => updateRole.mutate({ userId, role })}
         onReset={(m) => {
           setNewPassword("");
-          setResetTarget({ id: m.user_id, email: m.email });
+          setResetTarget({
+            id: m.user_id,
+            email: m.email,
+            name: m.name,
+            username: usernameFromEmail(m.email),
+          });
         }}
         onDelete={(m) => setDeleteTarget({ id: m.user_id, email: m.email })}
         onClose={() => setDetailUser(null)}
@@ -495,6 +564,24 @@ function MemberDetailDialog({
                 <div>
                   <dt className="text-xs text-muted-foreground">Terakhir masuk</dt>
                   <dd className="font-medium">{waktu(summary.last_sign_in_at)}</dd>
+                </div>
+                <div className="col-span-2 rounded-md bg-muted/50 p-2.5">
+                  <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Send className="size-3.5" /> Akun Telegram
+                  </dt>
+                  {detail.telegram ? (
+                    <dd className="mt-1 space-y-0.5">
+                      <p className="font-medium">
+                        {detail.telegram.first_name || "Nama tidak tersedia"}
+                        {detail.telegram.username ? ` · @${detail.telegram.username}` : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        ID {detail.telegram.chat_id} · Ditautkan {waktu(detail.telegram.connected_at)}
+                      </p>
+                    </dd>
+                  ) : (
+                    <dd className="mt-1 text-sm font-medium">Belum tertaut</dd>
+                  )}
                 </div>
                 <div className="col-span-2">
                   <dt className="text-xs text-muted-foreground">Peran</dt>

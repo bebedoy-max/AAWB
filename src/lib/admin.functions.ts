@@ -475,6 +475,25 @@ export const resetMemberPassword = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertAdmin(context, true);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [{ data: targetUser }, { data: targetProfile }] = await Promise.all([
+      supabaseAdmin.auth.admin.getUserById(data.userId),
+      (supabaseAdmin as any)
+        .from("profiles")
+        .select("organization_name")
+        .eq("user_id", data.userId)
+        .maybeSingle(),
+    ]);
+    const targetEmail = targetUser?.user?.email ?? "";
+    const username =
+      ((targetUser?.user?.user_metadata?.["username"] as string | undefined) ??
+        targetEmail.split("@")[0] ??
+        "") || "—";
+    const name =
+      targetProfile?.organization_name ??
+      ((targetUser?.user?.user_metadata?.["organization_name"] ??
+        targetUser?.user?.user_metadata?.["full_name"] ??
+        targetUser?.user?.user_metadata?.["name"]) as string | undefined) ??
+      username;
     // Kata sandi worker disimpan dengan akhiran internal yang sama seperti saat
     // pendaftaran dan login (lihat memberPassword). Tanpa ini, kata sandi hasil
     // reset admin tidak pernah cocok saat worker mencoba masuk.
@@ -483,7 +502,11 @@ export const resetMemberPassword = createServerFn({ method: "POST" })
       password: memberPassword(data.password),
     });
     if (error) throw new Error(error.message);
-    await (await import("@/lib/activity-log.server")).logActivity(context.userId, "password_reset", `Kata sandi pengguna ${data.userId} disetel ulang`);
+    await (await import("@/lib/activity-log.server")).logActivity(
+      context.userId,
+      "password_reset",
+      `Admin mereset kata sandi ${name} (@${username})`,
+    );
 
     // Beri tahu pengguna lewat bot Telegram (diam bila belum tersambung).
     const { notifyUserTelegram } = await import("@/lib/telegram.server");
@@ -491,7 +514,7 @@ export const resetMemberPassword = createServerFn({ method: "POST" })
       data.userId,
       `🔐 <b>Kata sandi disetel ulang oleh admin</b>\nKata sandi akun Anda baru saja disetel ulang.\nKata sandi baru: <code>${data.password}</code>\n\nSegera masuk dan ubah kata sandi Anda di menu Pengaturan Akun.`,
     );
-    return { ok: true, notified };
+    return { ok: true, notified, name, username };
   });
 
 /** Hapus akun seorang anggota beserta perannya (super admin). */
@@ -525,6 +548,12 @@ export interface MemberDetail {
   wa_name: string | null;
   wa_picture: string | null;
   wa_error: string | null;
+  telegram: {
+    username: string | null;
+    first_name: string | null;
+    chat_id: string;
+    connected_at: string | null;
+  } | null;
 }
 
 async function memberSession(userId: string): Promise<{ id: string; status: string } | null> {
@@ -552,15 +581,19 @@ export const getMemberDetail = createServerFn({ method: "POST" })
     const { data: user, error } = await supabaseAdmin.auth.admin.getUserById(data.userId);
     if (error) throw new Error(error.message);
 
-    const { data: profile } = await (supabaseAdmin as any)
-      .from("profiles")
-      .select("organization_name")
-      .eq("user_id", data.userId)
-      .maybeSingle();
-    const { data: roleRows } = await (supabaseAdmin as any)
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", data.userId);
+    const [{ data: profile }, { data: roleRows }, { data: telegramLink }] = await Promise.all([
+      (supabaseAdmin as any)
+        .from("profiles")
+        .select("organization_name")
+        .eq("user_id", data.userId)
+        .maybeSingle(),
+      (supabaseAdmin as any).from("user_roles").select("role").eq("user_id", data.userId),
+      (supabaseAdmin as any)
+        .from("telegram_links")
+        .select("chat_id,username,first_name,connected_at")
+        .eq("user_id", data.userId)
+        .maybeSingle(),
+    ]);
 
     const session = await memberSession(data.userId);
     let wa_name: string | null = null;
@@ -596,6 +629,14 @@ export const getMemberDetail = createServerFn({ method: "POST" })
       wa_name,
       wa_picture,
       wa_error,
+      telegram: telegramLink?.chat_id
+        ? {
+            username: telegramLink.username ?? null,
+            first_name: telegramLink.first_name ?? null,
+            chat_id: String(telegramLink.chat_id),
+            connected_at: telegramLink.connected_at ?? null,
+          }
+        : null,
     };
   });
 
